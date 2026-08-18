@@ -14,6 +14,8 @@ import (
 	"tracker-bot/internal/models"
 	"tracker-bot/internal/service"
 	"tracker-bot/internal/utils/tgctx"
+	"tracker-bot/pkg/apptime"
+	"tracker-bot/pkg/geotz"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/rs/zerolog/log"
@@ -50,10 +52,30 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 	}
 }
 
-// ShowEntryMenu renders the main entry reply keyboard.
+// ShowEntryMenu renders the main entry screen: a one-time welcome for a
+// brand-new user, a plain "home" message for anyone returning to it.
 func (m *Module) ShowEntryMenu(ctx *tgctx.MsgContext) {
-	text := entry.EntryMenuText()
+	if ctx.IsNewUser {
+		m.ShowWelcome(ctx)
+		return
+	}
+	m.ShowHomeMenu(ctx)
+}
 
+// ShowWelcome renders the first-time greeting (only meant for a user's very
+// first /start).
+func (m *Module) ShowWelcome(ctx *tgctx.MsgContext) {
+	m.sendEntryMenu(ctx, entry.WelcomeText())
+}
+
+// ShowHomeMenu renders the entry screen for a user who already knows the
+// bot — every other "go home" action (Home button, /start after the first
+// time, post-activation redirect, etc.) should use this, not ShowWelcome.
+func (m *Module) ShowHomeMenu(ctx *tgctx.MsgContext) {
+	m.sendEntryMenu(ctx, entry.HomeMenuText())
+}
+
+func (m *Module) sendEntryMenu(ctx *tgctx.MsgContext, text string) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ParseMode = "Markdown"
 	msg.ReplyMarkup = entry.EntryReplyMenu()
@@ -83,9 +105,44 @@ func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
+// ShowLocationRequest asks the user to share their location so the bot can
+// detect their real timezone instead of assuming one for everyone.
+func (m *Module) ShowLocationRequest(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID,
+		"📍 Share your location and I'll set your time zone automatically. "+
+			"It's only used once, to look up the zone — I don't track you.")
+	msg.ReplyMarkup = profile.ProfileLocationReplyMenu()
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send location request failed")
+	}
+}
+
+// ProcessLocationTimeZone resolves the shared location to an IANA timezone,
+// saves it, and confirms to the user.
+func (m *Module) ProcessLocationTimeZone(ctx *tgctx.MsgContext, lat, lng float64) {
+	tzName, err := geotz.Lookup(lat, lng)
+	if err != nil {
+		log.Error().Err(err).Msg("resolve timezone from location failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Couldn't detect a time zone for that location. Try again?"))
+		return
+	}
+
+	if err := m.profilesvc.ChangeTimeZone(ctx.Ctx, ctx.UserID, tzName); err != nil {
+		log.Error().Err(err).Msg("save timezone failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save time zone. Please try again."))
+		return
+	}
+
+	hide := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Time zone set to %s", tzName))
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+
+	m.ShowProfileMenu(ctx)
+}
+
 // ShowTrackingMenu loads tracking stats and renders tracking home screen.
 func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
-	stats, err := m.tracksvc.GetMainStats(ctx.Ctx, ctx.DBUserID)
+	stats, err := m.tracksvc.GetMainStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("GetMainStats failed")
 		msg := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load tracking data. Please try again.")
@@ -121,7 +178,7 @@ func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 
 // ShowTodayChart renders today's activity distribution as text bars.
 func (m *Module) ShowTodayChart(ctx *tgctx.MsgContext) {
-	stats, err := m.tracksvc.GetTodayReport(ctx.Ctx, ctx.DBUserID)
+	stats, err := m.tracksvc.GetTodayReport(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("today chart failed")
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load chart data."))
@@ -171,7 +228,7 @@ func (m *Module) ShowPeriodMenu(ctx *tgctx.MsgContext, selected map[int64]bool, 
 		return
 	}
 	if month.IsZero() {
-		month = time.Now().UTC()
+		month = apptime.NowIn(ctx.Location)
 	}
 	rangeLabel := formatDateOrDash(from) + ".." + formatDateOrDash(to)
 	text := fmt.Sprintf("📅 Period Report\nSelected: %d activities\nRange: %s", len(selected), rangeLabel)
@@ -192,7 +249,7 @@ func (m *Module) ShowPeriodMenu(ctx *tgctx.MsgContext, selected map[int64]bool, 
 
 // ShowPeriodTextReport builds and sends period report in text form.
 func (m *Module) ShowPeriodTextReport(ctx *tgctx.MsgContext, from, to time.Time, activityIDs []int64, selectedOnly bool) {
-	stats, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs)
+	stats, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, ctx.Location)
 	if err != nil {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to build period report."))
 		return
@@ -224,7 +281,7 @@ func (m *Module) ShowPeriodTextReport(ctx *tgctx.MsgContext, from, to time.Time,
 
 // ShowPeriodChartReport builds and sends period report in chart-like form.
 func (m *Module) ShowPeriodChartReport(ctx *tgctx.MsgContext, from, to time.Time, activityIDs []int64) {
-	stats, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs)
+	stats, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, ctx.Location)
 	if err != nil {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to build period chart."))
 		return
@@ -286,7 +343,7 @@ func (m *Module) appendGranularityText(ctx *tgctx.MsgContext, b *strings.Builder
 		labelFmt = "15:00"
 	}
 
-	buckets, durs, err := m.tracksvc.GetPeriodBuckets(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, granularity)
+	buckets, durs, err := m.tracksvc.GetPeriodBuckets(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, granularity, ctx.Location)
 	if err != nil || len(buckets) == 0 {
 		return
 	}
@@ -727,7 +784,7 @@ func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	hide := tgbotapi.NewMessage(ctx.ChatID, " ")
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
-	m.ShowEntryMenu(ctx)
+	m.ShowHomeMenu(ctx)
 }
 
 // StopTrackTimer disables active tracking timer.
@@ -788,7 +845,7 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 		_, _ = m.bot.Request(del)
 	}
 
-	endAt := time.Now()
+	endAt := apptime.NowIn(ctx.Location)
 	startAt := endAt.Add(-time.Duration(intervalMin) * time.Minute)
 	activityName := m.findActivityName(ctx, activityID)
 

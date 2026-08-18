@@ -18,7 +18,7 @@ FROM alpine:3.18
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates && adduser -D -H appuser
+RUN apk add --no-cache ca-certificates tzdata && adduser -D -H appuser
 
 COPY --from=builder /app/tracker-bot /app/tracker-bot
 COPY --from=builder /app/migrator /app/migrator

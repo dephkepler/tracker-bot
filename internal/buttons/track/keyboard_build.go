@@ -22,6 +22,9 @@ func TrackEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
 			buttonbuilder.IB(TrackButtonViewReports, TrackCBReportSummary),
 			buttonbuilder.IB(TrackButtonViewArchive, TrackCBArchiveOpen),
 		),
+		buttonbuilder.IR(
+			buttonbuilder.IB(TrackButtonBackHome, "go_home"),
+		),
 	)
 }
 
@@ -45,14 +48,14 @@ func TrackActivityManageReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonActivityActivate), buttonbuilder.RB(TrackButtonActivityArchive)),
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonActivityDelete), buttonbuilder.RB(TrackButtonViewArchive)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBackHome)),
+		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
 	)
 }
 
 func TrackArchiveReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonSelectActivity), buttonbuilder.RB(TrackButtonViewArchive)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBackHome)),
+		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
 	)
 }
 
@@ -66,7 +69,7 @@ func TrackReportsReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 func TrackTimerReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonTimer15), buttonbuilder.RB(TrackButtonTimer30)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBackHome)),
+		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
 	)
 }
 

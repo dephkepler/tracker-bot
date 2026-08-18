@@ -7,11 +7,12 @@ import (
 	"time"
 	"tracker-bot/internal/models"
 	"tracker-bot/internal/repo"
+	"tracker-bot/pkg/apptime"
 )
 
 // TrackerService contains tracking use-cases used by handlers.
 type TrackerService interface {
-	GetMainStats(ctx context.Context, userID int64) (models.MainStats, error)
+	GetMainStats(ctx context.Context, userID int64, loc *time.Location) (models.MainStats, error)
 	CreateActivity(ctx context.Context, userID int64, name, emoji string) (repo.Activity, error)
 	ListActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error)
 	ToggleSelectedActivity(ctx context.Context, userID, activityID int64) error
@@ -21,11 +22,11 @@ type TrackerService interface {
 	ArchiveSelectedActivities(ctx context.Context, userID int64) (int64, error)
 	RestoreArchivedActivity(ctx context.Context, userID, activityID int64) error
 	DeleteArchivedForever(ctx context.Context, userID, activityID int64) error
-	GetTodayReport(ctx context.Context, userID int64) (models.ReportTodayStats, error)
-	GetTodayReportBySelected(ctx context.Context, userID int64) (models.ReportTodayStats, error)
-	GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64) (models.ReportPeriodStats, error)
-	GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64) (map[int]time.Duration, error)
-	GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string) ([]time.Time, []time.Duration, error)
+	GetTodayReport(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error)
+	GetTodayReportBySelected(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error)
+	GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) (models.ReportPeriodStats, error)
+	GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64, loc *time.Location) (map[int]time.Duration, error)
+	GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error)
 }
 
 type trackerService struct {
@@ -39,11 +40,22 @@ func NewTrackerService(repo repo.TrackerRepository) TrackerService {
 	}
 }
 
+// resolveLoc defaults to apptime.Location when the caller has no specific
+// user timezone in scope yet.
+func resolveLoc(loc *time.Location) *time.Location {
+	if loc == nil {
+		return apptime.Location
+	}
+	return loc
+}
+
 // GetMainStats returns tracking home summary.
-func (srv *trackerService) GetMainStats(ctx context.Context, userID int64) (models.MainStats, error) {
+func (srv *trackerService) GetMainStats(ctx context.Context, userID int64, loc *time.Location) (models.MainStats, error) {
 	if userID <= 0 {
 		return models.MainStats{}, fmt.Errorf("main stats: invalid userID")
 	}
+	loc = resolveLoc(loc)
+	tzName := loc.String()
 
 	last, ok, err := srv.repo.GetLastTrackedActiveActivity(ctx, userID)
 	if err != nil {
@@ -53,22 +65,22 @@ func (srv *trackerService) GetMainStats(ctx context.Context, userID int64) (mode
 		return models.MainStats{}, nil
 	}
 
-	total, err := srv.repo.GetTodayDurationByActivity(ctx, userID, last.ID)
+	total, err := srv.repo.GetTodayDurationByActivity(ctx, userID, last.ID, tzName)
 	if err != nil {
 		return models.MainStats{}, err
 	}
 
-	days, err := srv.repo.GetTrackedDaysDescByActivity(ctx, userID, last.ID)
+	days, err := srv.repo.GetTrackedDaysDescByActivity(ctx, userID, last.ID, tzName)
 	if err != nil {
 		return models.MainStats{}, err
 	}
 
-	todayTrackedActivities, err := srv.repo.GetTodayTrackedActivitiesCount(ctx, userID)
+	todayTrackedActivities, err := srv.repo.GetTodayTrackedActivitiesCount(ctx, userID, tzName)
 	if err != nil {
 		return models.MainStats{}, err
 	}
 
-	streak := calcStreakDays(days, time.Now().UTC())
+	streak := calcStreakDays(days, apptime.NowIn(loc), loc)
 	currentName := last.Name
 	if strings.TrimSpace(last.Emoji) != "" {
 		currentName = last.Emoji + " " + last.Name
@@ -179,14 +191,17 @@ func (srv *trackerService) DeleteArchivedForever(ctx context.Context, userID, ac
 	return srv.repo.DeleteArchivedForever(ctx, userID, activityID)
 }
 
-// GetTodayReport aggregates today's tracked durations and sessions.
-func (srv *trackerService) GetTodayReport(ctx context.Context, userID int64) (models.ReportTodayStats, error) {
-	total, sessions, err := srv.repo.GetTodayStats(ctx, userID)
+// GetTodayReport aggregates today's tracked durations and sessions, "today"
+// meaning the user's own local calendar day.
+func (srv *trackerService) GetTodayReport(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error) {
+	tzName := resolveLoc(loc).String()
+
+	total, sessions, err := srv.repo.GetTodayStats(ctx, userID, tzName)
 	if err != nil {
 		return models.ReportTodayStats{}, err
 	}
 
-	acts, durs, cnts, err := srv.repo.GetTodayActivities(ctx, userID)
+	acts, durs, cnts, err := srv.repo.GetTodayActivities(ctx, userID, tzName)
 	if err != nil {
 		return models.ReportTodayStats{}, err
 	}
@@ -210,8 +225,8 @@ func (srv *trackerService) GetTodayReport(ctx context.Context, userID int64) (mo
 }
 
 // GetTodayReportBySelected returns today's report filtered by selected activities.
-func (srv *trackerService) GetTodayReportBySelected(ctx context.Context, userID int64) (models.ReportTodayStats, error) {
-	report, err := srv.GetTodayReport(ctx, userID)
+func (srv *trackerService) GetTodayReportBySelected(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error) {
+	report, err := srv.GetTodayReport(ctx, userID, loc)
 	if err != nil {
 		return models.ReportTodayStats{}, err
 	}
@@ -245,7 +260,9 @@ func (srv *trackerService) GetTodayReportBySelected(ctx context.Context, userID 
 }
 
 // GetPeriodReport aggregates report for date range and optional activity filter.
-func (srv *trackerService) GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64) (models.ReportPeriodStats, error) {
+func (srv *trackerService) GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) (models.ReportPeriodStats, error) {
+	tzName := resolveLoc(loc).String()
+
 	acts, durs, cnts, total, sessions, err := srv.repo.GetPeriodActivities(ctx, userID, from, to, activityIDs)
 	if err != nil {
 		return models.ReportPeriodStats{}, err
@@ -261,7 +278,7 @@ func (srv *trackerService) GetPeriodReport(ctx context.Context, userID int64, fr
 			Sessions:   cnts[i],
 		})
 	}
-	months, monthDurs, err := srv.repo.GetPeriodMonthlyTotals(ctx, userID, from, to, activityIDs)
+	months, monthDurs, err := srv.repo.GetPeriodMonthlyTotals(ctx, userID, from, to, activityIDs, tzName)
 	if err != nil {
 		return models.ReportPeriodStats{}, err
 	}
@@ -284,25 +301,28 @@ func (srv *trackerService) GetPeriodReport(ctx context.Context, userID int64, fr
 }
 
 // GetMonthDailyTotals returns daily totals for given month.
-func (srv *trackerService) GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64) (map[int]time.Duration, error) {
-	return srv.repo.GetMonthDailyTotals(ctx, userID, month, activityIDs)
+func (srv *trackerService) GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64, loc *time.Location) (map[int]time.Duration, error) {
+	loc = resolveLoc(loc)
+	return srv.repo.GetMonthDailyTotals(ctx, userID, month, activityIDs, loc, loc.String())
 }
 
 // GetPeriodBuckets returns bucketed totals (hour/day/month).
-func (srv *trackerService) GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string) ([]time.Time, []time.Duration, error) {
-	return srv.repo.GetPeriodBuckets(ctx, userID, from, to, activityIDs, granularity)
+func (srv *trackerService) GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error) {
+	return srv.repo.GetPeriodBuckets(ctx, userID, from, to, activityIDs, granularity, resolveLoc(loc).String())
 }
 
-func calcStreakDays(days []time.Time, now time.Time) int {
+func calcStreakDays(days []time.Time, now time.Time, loc *time.Location) int {
 	if len(days) == 0 {
 		return 0
 	}
+	loc = resolveLoc(loc)
 	daySet := make(map[string]struct{}, len(days))
 	for _, d := range days {
-		daySet[d.UTC().Format("2006-01-02")] = struct{}{}
+		daySet[d.In(loc).Format("2006-01-02")] = struct{}{}
 	}
 
-	cur := time.Date(now.UTC().Year(), now.UTC().Month(), now.UTC().Day(), 0, 0, 0, 0, time.UTC)
+	local := now.In(loc)
+	cur := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
 	streak := 0
 	for {
 		key := cur.Format("2006-01-02")

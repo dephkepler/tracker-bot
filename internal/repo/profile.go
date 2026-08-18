@@ -65,10 +65,14 @@ func (repo *profileRepository) GetByID(ctx context.Context, id int64) (*models.P
 }
 
 func (repo *profileRepository) Update(ctx context.Context, id int64, stats *models.ProfileStats) error {
+	// id here is the Telegram user id, matching GetByID/Create above. This
+	// used to filter by the internal DB id instead, so ChangeLanguage/
+	// ChangeTimeZone (which call GetByID+Update with the same id) silently
+	// hit "user not found" for every real user.
 	q := `
 		UPDATE users
 		SET language = $2, timezone = $3
-		WHERE id = $1
+		WHERE tg_user_id = $1
 	`
 
 	res, err := repo.db.Exec(ctx, q, id, stats.Language, stats.TimeZone)

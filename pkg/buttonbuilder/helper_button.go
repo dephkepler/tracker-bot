@@ -23,6 +23,14 @@ func RB(text string) tgbotapi.KeyboardButton {
 	return tgbotapi.NewKeyboardButton(text)
 }
 
+// RBLocation creates a reply button that asks Telegram to prompt the user to
+// share their current location when tapped.
+func RBLocation(text string) tgbotapi.KeyboardButton {
+	btn := tgbotapi.NewKeyboardButton(text)
+	btn.RequestLocation = true
+	return btn
+}
+
 // RR creates one reply keyboard row.
 func RR(btns ...tgbotapi.KeyboardButton) []tgbotapi.KeyboardButton {
 	return tgbotapi.NewKeyboardButtonRow(btns...)

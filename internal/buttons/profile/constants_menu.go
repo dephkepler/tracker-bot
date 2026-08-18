@@ -25,6 +25,12 @@ const (
 	ProfileButtonLanguageArabian   = "🇸🇦 العربية"
 )
 
+// Time zone reply menu buttons.
+const (
+	ProfileButtonShareLocation = "📍 Share location"
+	ProfileButtonCancel        = "✖️ Cancel"
+)
+
 // Profile screen labels.
 const (
 	ProfileUIMainTitle    = "👤 Profile"

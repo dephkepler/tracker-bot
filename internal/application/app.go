@@ -54,6 +54,7 @@ func (app *Application) Build(ctx context.Context) error {
 	subscriptionRepo := repo.NewSubscriptionRepository(app.db.Pool())
 	timerRepo := repo.NewTimerRepository(app.db.Pool())
 	sessionRepo := repo.NewSessionRepository(app.db.Pool())
+	uistateRepo := repo.NewUIStateRepository(app.db.Pool())
 
 	//services
 	entrysvc := service.NewEntryService(entryRepo)
@@ -62,10 +63,11 @@ func (app *Application) Build(ctx context.Context) error {
 	timersvc := service.NewTimerService(timerRepo, sessionRepo)
 	learningsvc := service.NewLearningService(learningRepo)
 	subscriptionsvc := service.NewSubscriptionService(subscriptionRepo)
+	uistatesvc := service.NewUIStateService(uistateRepo)
 
 	//handlers and dispatcher
 	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, app.cfg.TestTimerMinutes)
-	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, module, module, module, module, module)
+	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, provilesvc, uistatesvc, module, module, module, module, module)
 	app.timerScheduler = scheduler.NewTimerScheduler(ctx, timersvc, module)
 
 	return nil

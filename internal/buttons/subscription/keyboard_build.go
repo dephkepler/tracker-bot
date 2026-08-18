@@ -18,6 +18,9 @@ func SubscriptionEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
 			buttonbuilder.IB(SubscriptionButtonSupport, SubscriptionCBSupport),
 			buttonbuilder.IB(SubscriptionButtonPaymentChange, SubscriptionCBPaymentChange),
 		),
+		buttonbuilder.IR(
+			buttonbuilder.IB("🏠 Home", "go_home"),
+		),
 	)
 }
 

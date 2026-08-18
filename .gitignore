@@ -27,5 +27,8 @@ config.yaml
 # Local build/test caches
 .gocache/
 
+# Local ops notes with real credentials (repo is public — never commit this)
+/doc/
+
 .DS_Store
 **/.DS_Store

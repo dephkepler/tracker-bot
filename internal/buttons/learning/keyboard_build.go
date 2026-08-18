@@ -21,6 +21,9 @@ func LearningEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
 			buttonbuilder.IB(LearningButtonSummaryLearning, LearningCBSummaryLearning),
 			buttonbuilder.IB(LearningButtonBaseWords, LearningCBBaseWords),
 		),
+		buttonbuilder.IR(
+			buttonbuilder.IB("🏠 Home", "go_home"),
+		),
 	)
 }
 

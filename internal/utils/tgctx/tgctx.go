@@ -1,6 +1,9 @@
 package tgctx
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // MsgContext is Telegram update context for message-based handlers.
 type MsgContext struct {
@@ -9,6 +12,16 @@ type MsgContext struct {
 	ChatID   int64
 	UserID   int64
 	DBUserID int64
+	// IsNewUser is true only in the handleMessage call that first created this
+	// user's row (i.e. their very first /start) — used to show a one-time
+	// welcome instead of the plain "back home" message on every return.
+	IsNewUser bool
+	// Location is this user's resolved timezone (detected via shared
+	// location, see internal/service/profile.go ChangeTimeZone, or
+	// apptime.Location as fallback before they've shared one). Handlers
+	// should use this instead of apptime.Now()/apptime.Location directly
+	// whenever a specific user is in scope.
+	Location *time.Location
 
 	Text      string
 	MessageID int
