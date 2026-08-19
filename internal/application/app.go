@@ -16,11 +16,12 @@ import (
 )
 
 type Application struct {
-	cfg            *config.Config
-	db             *pgclient.Client
-	bot            *tgbotapi.BotAPI
-	dispatcher     *dispatcher.Dispatcher
-	timerScheduler *scheduler.TimerScheduler
+	cfg               *config.Config
+	db                *pgclient.Client
+	bot               *tgbotapi.BotAPI
+	dispatcher        *dispatcher.Dispatcher
+	timerScheduler    *scheduler.TimerScheduler
+	learningScheduler *scheduler.LearningScheduler
 }
 
 func NewApplication(cfg *config.Config) *Application {
@@ -70,16 +71,18 @@ func (app *Application) Build(ctx context.Context) error {
 	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, app.cfg.AdminUsername)
 	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, provilesvc, uistatesvc, module, module, module, module, module)
 	app.timerScheduler = scheduler.NewTimerScheduler(ctx, timersvc, module)
+	app.learningScheduler = scheduler.NewLearningScheduler(ctx, learningsvc, module)
 
 	return nil
 }
 
 // Run starts background jobs and blocks on dispatcher loop.
 func (app *Application) Run() error {
-	if app.dispatcher == nil || app.timerScheduler == nil {
+	if app.dispatcher == nil || app.timerScheduler == nil || app.learningScheduler == nil {
 		return fmt.Errorf("run application: app is not built")
 	}
 	app.timerScheduler.Run()
+	app.learningScheduler.Run()
 	app.dispatcher.Run()
 	return nil
 }

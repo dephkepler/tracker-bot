@@ -93,11 +93,49 @@ type MonthDurationStat struct {
 
 // LearningStats contains values for learning dashboard.
 type LearningStats struct {
-	Language     string
-	TotalWords   int
-	TodayWords   int
-	LearnedWords int
-	NextWordIn   string
+	TotalWords    int
+	DueTodayWords int
+	LearnedWords  int
+	StreakDays    int
+	TimerActive   bool
+	TimerInterval int
+	NextPushIn    string // human-readable, "" when timer isn't active
+}
+
+// LearningCollectionItem is one collection row in list/selection UIs.
+type LearningCollectionItem struct {
+	ID         int64
+	Name       string
+	WordCount  int
+	Active     bool // included in the review rotation
+	IsArchived bool
+}
+
+// LearningWordItem is one word pair row within a collection's word list.
+type LearningWordItem struct {
+	ID           int64
+	Term         string
+	Translation  string
+	Learned      bool
+	NextReviewAt time.Time
+	IntervalDays int
+	Repetitions  int
+}
+
+// LearningDueWord is a word picked for review delivery, with its owning
+// collection name for display.
+type LearningDueWord struct {
+	ID             int64
+	CollectionName string
+	Term           string
+	Translation    string
+}
+
+// LearningDueUser represents one user that should receive a review push now.
+type LearningDueUser struct {
+	DBUserID    int64
+	TgUserID    int64
+	IntervalMin int
 }
 
 // SubscriptionStats contains values for subscription screen.

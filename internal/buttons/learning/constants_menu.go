@@ -1,42 +1,69 @@
 package learning
 
-// Inline callbacks.
+// Inline callbacks. Text is not yet localized (see internal/i18n) — this
+// whole module is planned for i18n Phase 4, once its UI has settled.
 const (
-	LearningCBAddCollection    = "learning:add:collection"
-	LearningCBRandomWords      = "learning:random:words"
-	LearningCBSwitchCollection = "learning:switch:collection"
-	LearningCBSummaryLearning  = "learning:summary:learning"
-	LearningCBBaseWords        = "learning:base:words"
+	LearningCBCreateCollection  = "learning:collection:create"
+	LearningCBWordBase          = "learning:wordbase:open"
+	LearningCBCollectionOpen    = "learning:collection:open:"
+	LearningCBCollectionToggle  = "learning:collection:toggle:"
+	LearningCBCollectionAddMore = "learning:collection:addwords:"
+	LearningCBCollectionArchive = "learning:collection:archive:"
+	LearningCBWordDelete        = "learning:word:delete:"
+	LearningCBArchiveOpen       = "learning:archive:open"
+	LearningCBArchiveRestore    = "learning:archive:restore:"
+	LearningCBArchiveDelete     = "learning:archive:delete:"
+	LearningCBStats             = "learning:stats:open"
+	LearningCBReviewOpen        = "learning:review:open"
+	LearningCBReviewStop        = "learning:review:stop"
+	LearningCBBackMain          = "learning:back:main"
+
+	// Review-card callbacks, sent standalone (scheduler push or on-demand),
+	// not gated by screen — carry the word id in the payload.
+	LearningCBReviewReveal = "learning:review:reveal:"
+	LearningCBReviewKnew   = "learning:review:grade:knew:"
+	LearningCBReviewMissed = "learning:review:grade:missed:"
 )
 
 // Inline menu buttons.
 const (
-	LearningButtonAddCollection    = "➕ Create a collection"
-	LearningButtonRandomWords      = "🎲 Random collection"
-	LearningButtonSwitchCollection = "🔁 Archive of collections"
-	LearningButtonSummaryLearning  = "📈 Statistics"
-	LearningButtonBaseWords        = "🗂 Word base"
+	LearningButtonCreateCollection = "➕ Create a collection"
+	LearningButtonStartReviews     = "🎲 Start reviews"
+	LearningButtonStopReviews      = "⏹ Stop reviews"
+	LearningButtonArchive          = "🔁 Archive of collections"
+	LearningButtonStatistics       = "📈 Statistics"
+	LearningButtonWordBase         = "🗂 Word base"
+	LearningButtonHome             = "🏠 Home"
+	LearningButtonBack             = "◀ Back"
 )
 
-// "Add collection" reply menu buttons.
+// Word-base / collection-detail buttons.
 const (
-	LearningButtonHelp = "ℹ️ Help"
-	LearningButtonHome = "🏠 Home"
+	LearningButtonAddWords     = "➕ Add words"
+	LearningButtonArchiveThis  = "📦 Archive collection"
+	LearningButtonToggleOnFmt  = "🟢 %s — %d words"
+	LearningButtonToggleOffFmt = "⚪ %s — %d words"
 )
 
-// "Add words" reply menu buttons.
+// Archive-screen buttons.
 const (
-	LearningButtonAddWord  = "➕ Add a word"
-	LearningButtonComplete = "✅ Finish"
-	LearningButtonBackHome = "🏠 Home"
+	LearningButtonRestore       = "♻️ Restore"
+	LearningButtonDeleteForever = "🗑 Delete forever"
 )
 
-// Learning screen labels.
+// "Waiting for input" reply-keyboard buttons.
 const (
-	LearningUIMainTitle        = "🧠 Learning"
-	LearningUIMainLanguage     = "🌐 Language:"
-	LearningUIMainTotalWords   = "📊 Total Words:"
-	LearningUIMainTodayWords   = "📘 Today Words:"
-	LearningUIMainLearnedWords = "✅ Learned Words:"
-	LearningUIMainNextWordIn   = "🕐 Next Word In:"
+	LearningButtonDone   = "✅ Done"
+	LearningButtonCancel = "❌ Cancel"
 )
+
+// Review-card buttons (push message / on-demand review).
+const (
+	LearningButtonShowAnswer = "👁 Show answer"
+	LearningButtonKnewIt     = "✅ I knew it"
+	LearningButtonMissedIt   = "🔁 Didn't know"
+)
+
+// BuiltInPushIntervals are the always-available review-push interval
+// choices (minutes), shown in the reply-keyboard picker.
+var BuiltInPushIntervals = []int{30, 60, 120}

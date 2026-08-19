@@ -34,6 +34,13 @@ type userSession struct {
 	waitingPeriodRange        bool
 	waitingCustomTimerMinutes bool
 
+	waitingLearningCollectionName bool
+	waitingLearningWords          bool
+	// learningCollectionID is the collection currently being edited — set
+	// when creating a collection or opening "Add words" on an existing one,
+	// used while waitingLearningWords is true.
+	learningCollectionID int64
+
 	reportSelected map[int64]bool
 	reportFrom     time.Time
 	reportTo       time.Time

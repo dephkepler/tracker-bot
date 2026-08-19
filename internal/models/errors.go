@@ -16,6 +16,13 @@ var (
 	ErrCustomTimerInvalidInterval = errors.New("custom timer interval must be between 1 and 360 minutes")
 	ErrCustomTimerLimitReached    = errors.New("custom timer limit reached")
 	ErrCustomTimerNotFound        = errors.New("custom timer not found")
+
+	// Learning domain errors.
+	ErrLearningCollectionExists   = errors.New("collection already exists")
+	ErrLearningCollectionNotFound = errors.New("collection not found")
+	ErrLearningNoWordsParsed      = errors.New("no valid \"word - translation\" lines found")
+	ErrLearningWordNotFound       = errors.New("word not found")
+	ErrLearningInvalidInterval    = errors.New("learning push interval must be between 1 and 1440 minutes")
 )
 
 // MaxCustomTimersPerUser caps how many custom intervals one user can keep at

@@ -1120,7 +1120,7 @@ func percentOf(part, total time.Duration) string {
 
 // ShowLearningMenu loads learning stats and renders learning screen.
 func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
-	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.UserID)
+	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("GetLearningStats failed")
 		msg := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load learning data. Please try again.")
@@ -1132,10 +1132,297 @@ func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = learning.LearningEntryInlineMenu()
+	msg.ReplyMarkup = learning.LearningEntryInlineMenu(stats.TimerActive)
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send learning menu failed")
+	}
+}
+
+// PromptCreateCollection asks the user to type a name for a new collection.
+func (m *Module) PromptCreateCollection(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, "✏️ Send a name for the new collection:")
+	msg.ReplyMarkup = learning.LearningWaitingReplyMenu()
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessCreateCollectionName validates and creates a collection from typed
+// text, then immediately prompts for words. done is true once the "waiting
+// for a name" state should be cleared (on both success and unrecoverable
+// input, matching ProcessCreateActivity's contract).
+func (m *Module) ProcessCreateCollectionName(ctx *tgctx.MsgContext) (collectionID int64, done bool) {
+	name := strings.TrimSpace(ctx.Text)
+	if len(name) < 2 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be at least 2 characters. Try again:"))
+		return 0, false
+	}
+
+	id, err := m.learningsvc.CreateCollection(ctx.Ctx, ctx.DBUserID, name)
+	if err != nil {
+		if errors.Is(err, models.ErrLearningCollectionExists) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ You already have a collection with that name. Try another:"))
+			return 0, false
+		}
+		log.Error().Err(err).Msg("create collection failed")
+		hide := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to create collection. Please try again later.")
+		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		_, _ = m.bot.Send(hide)
+		return 0, true
+	}
+
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("📚 Collection *%s* created!", name)))
+	m.PromptAddWords(ctx, id, true)
+	return id, true
+}
+
+// PromptAddWords asks the user to paste word lines for a collection. First
+// is true right after collection creation (slightly different copy).
+func (m *Module) PromptAddWords(ctx *tgctx.MsgContext, collectionID int64, first bool) {
+	text := "➕ Now send words as \"word - translation\", one per line. You can paste several at once. Tap ✅ Done when finished."
+	if !first {
+		text = "➕ Send more words as \"word - translation\", one per line. Tap ✅ Done when finished."
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg.ReplyMarkup = learning.LearningAddWordsReplyMenu()
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessAddWords parses pasted "word - translation" lines and appends them
+// to a collection. The caller keeps the "waiting for words" state active
+// afterward — the user may paste more, and only exits via the "Done" button.
+func (m *Module) ProcessAddWords(ctx *tgctx.MsgContext, collectionID int64) {
+	added, skipped, err := m.learningsvc.AddWordsFromText(ctx.Ctx, ctx.DBUserID, collectionID, ctx.Text)
+	if err != nil {
+		if errors.Is(err, models.ErrLearningNoWordsParsed) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Couldn't find any \"word - translation\" lines. Try again, e.g.:\napple - яблоко"))
+			return
+		}
+		log.Error().Err(err).Msg("add words failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save words. Please try again."))
+		return
+	}
+
+	text := fmt.Sprintf("✅ Added %d word(s).", added)
+	if skipped > 0 {
+		text += fmt.Sprintf(" (%d line(s) skipped — couldn't parse.)", skipped)
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
+}
+
+// ShowWordBase lists a user's active collections; edit renders it by
+// replacing an existing inline message instead of sending a new one, used
+// when reached from another inline screen.
+func (m *Module) ShowWordBase(ctx *tgctx.MsgContext, edit bool) {
+	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list learning collections failed")
+		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load collections.", nil)
+		return
+	}
+	if len(items) == 0 {
+		m.sendOrEditLearning(ctx, edit, "🗂 No collections yet. Create one from the Learning menu.", nil)
+		return
+	}
+	menu := learning.LearningWordBaseInlineMenu(items)
+	m.sendOrEditLearning(ctx, edit, learning.LearningWordBaseTitle(len(items)), &menu)
+}
+
+// ShowCollectionDetail renders one collection's words and actions.
+func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64, edit bool) {
+	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)
+	if err != nil {
+		m.sendOrEditLearning(ctx, edit, "⚠️ Collection not found.", nil)
+		return
+	}
+	words, err := m.learningsvc.ListWords(ctx.Ctx, ctx.DBUserID, collectionID)
+	if err != nil {
+		log.Error().Err(err).Msg("list words failed")
+		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load words.", nil)
+		return
+	}
+
+	active := true
+	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
+	if err == nil {
+		for _, it := range items {
+			if it.ID == collectionID {
+				active = it.Active
+			}
+		}
+	}
+
+	menu := learning.LearningCollectionDetailInlineMenu(collectionID, active, words)
+	m.sendOrEditLearning(ctx, edit, learning.LearningCollectionDetailTitle(name, len(words)), &menu)
+}
+
+// HandleCollectionToggle flips whether a collection is included in review
+// pushes and re-renders its detail view.
+func (m *Module) HandleCollectionToggle(ctx *tgctx.MsgContext, collectionID int64) {
+	if err := m.learningsvc.ToggleCollectionActive(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
+		log.Error().Err(err).Msg("toggle collection active failed")
+	}
+	m.ShowCollectionDetail(ctx, collectionID, true)
+}
+
+// HandleWordDelete removes one word and re-renders its collection's detail view.
+func (m *Module) HandleWordDelete(ctx *tgctx.MsgContext, wordID, collectionID int64) {
+	if err := m.learningsvc.DeleteWord(ctx.Ctx, ctx.DBUserID, wordID); err != nil {
+		log.Error().Err(err).Msg("delete word failed")
+	}
+	m.ShowCollectionDetail(ctx, collectionID, true)
+}
+
+// HandleCollectionArchive archives a collection and returns to the word base.
+func (m *Module) HandleCollectionArchive(ctx *tgctx.MsgContext, collectionID int64) {
+	if err := m.learningsvc.ArchiveCollection(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
+		log.Error().Err(err).Msg("archive collection failed")
+	}
+	m.ShowWordBase(ctx, true)
+}
+
+// ShowLearningArchiveMenu lists archived collections.
+func (m *Module) ShowLearningArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
+	items, err := m.learningsvc.ListArchivedCollections(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list archived collections failed")
+		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load archive.", nil)
+		return
+	}
+	if len(items) == 0 {
+		m.sendOrEditLearning(ctx, edit, "🔁 No archived collections.", nil)
+		return
+	}
+	menu := learning.LearningArchiveInlineMenu(items)
+	m.sendOrEditLearning(ctx, edit, learning.LearningArchiveTitle(len(items)), &menu)
+}
+
+// RestoreArchivedCollection moves a collection back to the active list.
+func (m *Module) RestoreArchivedCollection(ctx *tgctx.MsgContext, collectionID int64) {
+	if err := m.learningsvc.RestoreCollection(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
+		log.Error().Err(err).Msg("restore collection failed")
+	}
+	m.ShowLearningArchiveMenu(ctx, true)
+}
+
+// DeleteArchivedCollectionForever permanently removes an archived collection.
+func (m *Module) DeleteArchivedCollectionForever(ctx *tgctx.MsgContext, collectionID int64) {
+	if err := m.learningsvc.DeleteCollectionForever(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
+		log.Error().Err(err).Msg("delete collection forever failed")
+	}
+	m.ShowLearningArchiveMenu(ctx, true)
+}
+
+// sendOrEditLearning sends a fresh message or edits the current inline
+// message with Markdown text and an optional inline keyboard — shared by
+// every Learning sub-screen.
+func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
+	if edit && ctx.MessageID > 0 {
+		if menu != nil {
+			out := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
+			out.ParseMode = "Markdown"
+			_, _ = m.bot.Send(out)
+			return
+		}
+		out := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
+		out.ParseMode = "Markdown"
+		_, _ = m.bot.Send(out)
+		return
+	}
+	out := tgbotapi.NewMessage(ctx.ChatID, text)
+	out.ParseMode = "Markdown"
+	if menu != nil {
+		out.ReplyMarkup = *menu
+	}
+	_, _ = m.bot.Send(out)
+}
+
+// ShowReviewIntervalPicker shows the review-push interval picker.
+func (m *Module) ShowReviewIntervalPicker(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, "🎲 How often should the bot send you a word to review?")
+	msg.ReplyMarkup = learning.LearningPushIntervalReplyMenu(learning.BuiltInPushIntervals)
+	_, _ = m.bot.Send(msg)
+}
+
+// ActivateReviews enables periodic review pushes at the given interval.
+func (m *Module) ActivateReviews(ctx *tgctx.MsgContext, intervalMin int) {
+	if err := m.learningsvc.Activate(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil {
+		log.Error().Err(err).Msg("activate learning reviews failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to activate reviews. Please try again."))
+		return
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🎲 Reviews activated — a word every %d min.", intervalMin)))
+	hide := tgbotapi.NewMessage(ctx.ChatID, " ")
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+	m.ShowLearningMenu(ctx)
+}
+
+// StopReviews disables periodic review pushes.
+func (m *Module) StopReviews(ctx *tgctx.MsgContext) {
+	if err := m.learningsvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
+		log.Error().Err(err).Msg("stop learning reviews failed")
+	}
+	m.ShowLearningMenu(ctx)
+}
+
+// SendLearningPromptMessage sends one review card (term only) for the most
+// overdue due word, if any. Called off the scheduler, not a live user
+// request — mirrors SendPromptMessage's language lookup.
+func (m *Module) SendLearningPromptMessage(ctx context.Context, chatID int64, userID int64) error {
+	due, err := m.learningsvc.PickDueWord(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if due == nil {
+		return nil
+	}
+
+	msg := tgbotapi.NewMessage(chatID, learning.LearningReviewCardText(due.CollectionName, due.Term))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = learning.LearningReviewRevealInlineMenu(due.ID)
+	_, err = m.bot.Send(msg)
+	return err
+}
+
+// ShowReviewReveal reveals a review card's translation and grading buttons.
+func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
+	collectionName, term, translation, err := m.learningsvc.PeekWord(ctx.Ctx, ctx.DBUserID, wordID)
+	if err != nil {
+		log.Error().Err(err).Msg("peek word failed")
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageTextAndMarkup(
+		ctx.ChatID,
+		ctx.MessageID,
+		learning.LearningReviewRevealedText(collectionName, term, translation),
+		learning.LearningReviewGradeInlineMenu(wordID),
+	)
+	edit.ParseMode = "Markdown"
+	if _, err := m.bot.Send(edit); err != nil {
+		log.Error().Err(err).Msg("reveal review card failed")
+	}
+}
+
+// RecordReviewGrade applies the user's answer to a word's SRS schedule and
+// replaces the review card with a confirmation.
+func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, correct bool) {
+	_, term, _, err := m.learningsvc.PeekWord(ctx.Ctx, ctx.DBUserID, wordID)
+	if err != nil {
+		log.Error().Err(err).Msg("peek word before grading failed")
+		return
+	}
+
+	nextIntervalDays, learned, err := m.learningsvc.GradeAnswer(ctx.Ctx, ctx.DBUserID, wordID, correct)
+	if err != nil {
+		log.Error().Err(err).Msg("grade answer failed")
+		return
+	}
+
+	edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, learning.LearningReviewGradedText(term, correct, nextIntervalDays, learned))
+	edit.ParseMode = "Markdown"
+	if _, err := m.bot.Send(edit); err != nil {
+		log.Error().Err(err).Msg("record review grade failed")
 	}
 }
 

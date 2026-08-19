@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	adminbtn "tracker-bot/internal/buttons/admin"
+	learningbtn "tracker-bot/internal/buttons/learning"
 	profilebtn "tracker-bot/internal/buttons/profile"
 	trackbtn "tracker-bot/internal/buttons/track"
 	"tracker-bot/internal/i18n"
@@ -52,6 +53,11 @@ const (
 	screenTrackArchive   = "track_archive"
 	screenCreateActivity = "create_activity"
 	screenTrackReports   = "track_reports"
+
+	screenLearningMain     = "learning_main"
+	screenLearningWordBase = "learning_word_base"
+	screenLearningArchive  = "learning_archive"
+	screenLearningTimer    = "learning_timer"
 )
 
 func New(
@@ -262,6 +268,9 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonTrack {
 		d.setScreen(mctx.UserID, screenTrackMain)
 	}
+	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonLearning {
+		d.setScreen(mctx.UserID, screenLearningMain)
+	}
 	if d.reply != nil && d.reply.HandleReplyButtons(mctx) {
 		return
 	}
@@ -326,6 +335,11 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 	if strings.HasPrefix(q.Data, "track:") || strings.HasPrefix(q.Data, "act_toggle_:") ||
 		q.Data == "back_to_main" || q.Data == "noop" {
 		d.handleTrackCallback(mctx, q.Data)
+		return
+	}
+
+	if strings.HasPrefix(q.Data, "learning:") {
+		d.handleLearningCallback(mctx, q.Data)
 		return
 	}
 
@@ -402,6 +416,42 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		}
 		return true
 	}
+	if sess.waitingLearningCollectionName {
+		if ctx.Text == learningbtn.LearningButtonCancel {
+			sess.waitingLearningCollectionName = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Cancelled.")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.setScreen(ctx.UserID, screenLearningMain)
+			d.learning.ShowLearningMenu(ctx)
+			return true
+		}
+		id, done := d.learning.ProcessCreateCollectionName(ctx)
+		if done {
+			sess.waitingLearningCollectionName = false
+			if id > 0 {
+				sess.waitingLearningWords = true
+				sess.learningCollectionID = id
+				d.setScreen(ctx.UserID, screenLearningWordBase)
+			} else {
+				d.setScreen(ctx.UserID, screenLearningMain)
+				d.learning.ShowLearningMenu(ctx)
+			}
+		}
+		return true
+	}
+	if sess.waitingLearningWords {
+		if ctx.Text == learningbtn.LearningButtonDone {
+			sess.waitingLearningWords = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, "✅ Done adding words.")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.learning.ShowCollectionDetail(ctx, sess.learningCollectionID, false)
+			return true
+		}
+		d.learning.ProcessAddWords(ctx, sess.learningCollectionID)
+		return true
+	}
 	if sess.waitingPeriodRange {
 		from, to, err := parseDateRange(ctx.Text)
 		if err != nil {
@@ -474,6 +524,24 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Language, ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
 			d.track.DeleteCustomTimer(ctx, minutes)
 			d.setScreen(ctx.UserID, screenTrackTimer)
+			return
+		}
+	}
+
+	// Learning review-push interval picker (plain reply buttons, not yet
+	// localized — see internal/buttons/learning).
+	if d.isScreen(ctx.UserID, screenLearningTimer) {
+		if minutes, ok := learningbtn.ParsePushIntervalButtonMinutes(ctx.Text); ok {
+			d.setScreen(ctx.UserID, screenLearningMain)
+			d.learning.ActivateReviews(ctx, minutes)
+			return
+		}
+		if ctx.Text == learningbtn.LearningButtonBack {
+			d.setScreen(ctx.UserID, screenLearningMain)
+			hide := tgbotapi.NewMessage(ctx.ChatID, " ")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.learning.ShowLearningMenu(ctx)
 			return
 		}
 	}
@@ -765,6 +833,99 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 			return
 		}
 		d.track.HandleTrackToggleCallback(ctx)
+	}
+}
+
+// handleLearningCallback routes learning-related inline callbacks.
+func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) {
+	sess := d.sessions.get(ctx.UserID)
+
+	switch {
+	case data == learningbtn.LearningCBBackMain:
+		d.setScreen(ctx.UserID, screenLearningMain)
+		d.learning.ShowLearningMenu(ctx)
+	case data == learningbtn.LearningCBCreateCollection:
+		sess.waitingLearningCollectionName = true
+		d.learning.PromptCreateCollection(ctx)
+	case data == learningbtn.LearningCBWordBase:
+		d.setScreen(ctx.UserID, screenLearningWordBase)
+		d.learning.ShowWordBase(ctx, true)
+	case strings.HasPrefix(data, learningbtn.LearningCBCollectionOpen):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBCollectionOpen)
+		if !ok {
+			return
+		}
+		d.setScreen(ctx.UserID, screenLearningWordBase)
+		sess.learningCollectionID = id
+		d.learning.ShowCollectionDetail(ctx, id, true)
+	case strings.HasPrefix(data, learningbtn.LearningCBCollectionToggle):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBCollectionToggle)
+		if !ok {
+			return
+		}
+		d.learning.HandleCollectionToggle(ctx, id)
+	case strings.HasPrefix(data, learningbtn.LearningCBCollectionAddMore):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBCollectionAddMore)
+		if !ok {
+			return
+		}
+		sess.waitingLearningWords = true
+		sess.learningCollectionID = id
+		d.learning.PromptAddWords(ctx, id, false)
+	case strings.HasPrefix(data, learningbtn.LearningCBCollectionArchive):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBCollectionArchive)
+		if !ok {
+			return
+		}
+		d.learning.HandleCollectionArchive(ctx, id)
+	case strings.HasPrefix(data, learningbtn.LearningCBWordDelete):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBWordDelete)
+		if !ok {
+			return
+		}
+		d.learning.HandleWordDelete(ctx, id, sess.learningCollectionID)
+	case data == learningbtn.LearningCBArchiveOpen:
+		d.setScreen(ctx.UserID, screenLearningArchive)
+		d.learning.ShowLearningArchiveMenu(ctx, true)
+	case strings.HasPrefix(data, learningbtn.LearningCBArchiveRestore):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBArchiveRestore)
+		if !ok {
+			return
+		}
+		d.learning.RestoreArchivedCollection(ctx, id)
+	case strings.HasPrefix(data, learningbtn.LearningCBArchiveDelete):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBArchiveDelete)
+		if !ok {
+			return
+		}
+		d.learning.DeleteArchivedCollectionForever(ctx, id)
+	case data == learningbtn.LearningCBStats:
+		// Statistics live on the main screen for now — re-render it in
+		// place rather than a separate screen.
+		d.learning.ShowLearningMenu(ctx)
+	case data == learningbtn.LearningCBReviewOpen:
+		d.setScreen(ctx.UserID, screenLearningTimer)
+		d.learning.ShowReviewIntervalPicker(ctx)
+	case data == learningbtn.LearningCBReviewStop:
+		d.learning.StopReviews(ctx)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewReveal):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewReveal)
+		if !ok {
+			return
+		}
+		d.learning.ShowReviewReveal(ctx, id)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewKnew):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewKnew)
+		if !ok {
+			return
+		}
+		d.learning.RecordReviewGrade(ctx, id, true)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewMissed):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewMissed)
+		if !ok {
+			return
+		}
+		d.learning.RecordReviewGrade(ctx, id, false)
 	}
 }
 
