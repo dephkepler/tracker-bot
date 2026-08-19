@@ -111,11 +111,50 @@ func (m *Module) sendEntryMenu(ctx *tgctx.MsgContext, text string) {
 // Silently does nothing for a non-admin caller — this is the actual access
 // check (see IsAdmin), the button/command being hidden from other users is
 // only a UI nicety on top of it.
-func (m *Module) ShowAdminMenu(ctx *tgctx.MsgContext, offset int) {
+func (m *Module) ShowAdminMenu(ctx *tgctx.MsgContext) {
 	if !m.IsAdmin(ctx) {
 		return
 	}
 
+	total, err := m.entrysvc.CountUsers(ctx.Ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("count users failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load users."))
+		return
+	}
+
+	msg := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("👑 Admin\n\nTotal users: %d", total))
+	msg.ReplyMarkup = admin.MenuReplyMenu()
+	_, _ = m.bot.Send(msg)
+}
+
+// ShowAdminUsersMenu renders the paginated users list as a fresh message:
+// a reply-keyboard carrier (Back/Home) plus the inline listing, mirroring
+// the dual-message pattern used elsewhere (e.g. ShowTrackActivitySelectionMenu).
+// Silently does nothing for a non-admin caller.
+func (m *Module) ShowAdminUsersMenu(ctx *tgctx.MsgContext, offset int) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	reply := tgbotapi.NewMessage(ctx.ChatID, "👥")
+	reply.ReplyMarkup = admin.UsersReplyMenu()
+	_, _ = m.bot.Send(reply)
+
+	m.sendOrEditAdminUsers(ctx, offset, false)
+}
+
+// ShowAdminUsersMenuInPlace re-renders the users list by editing the
+// existing inline message (used for Prev/Next paging, so clicking through
+// pages doesn't spam a new reply-keyboard message each time). Silently does
+// nothing for a non-admin caller.
+func (m *Module) ShowAdminUsersMenuInPlace(ctx *tgctx.MsgContext, offset int) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	m.sendOrEditAdminUsers(ctx, offset, true)
+}
+
+func (m *Module) sendOrEditAdminUsers(ctx *tgctx.MsgContext, offset int, inPlace bool) {
 	total, err := m.entrysvc.CountUsers(ctx.Ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("count users failed")
@@ -137,9 +176,19 @@ func (m *Module) ShowAdminMenu(ctx *tgctx.MsgContext, offset int) {
 		return
 	}
 
-	text := fmt.Sprintf("👑 Admin — Users\n\nTotal: %d", total)
+	text := fmt.Sprintf("👥 Users\n\nTotal: %d", total)
+	markup := admin.UsersInlineMenu(users, offset, adminUsersPageSize, total)
+
+	if inPlace && ctx.MessageID > 0 {
+		edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, markup)
+		if _, err := m.bot.Send(edit); err != nil {
+			log.Error().Err(err).Msg("edit admin users list failed")
+		}
+		return
+	}
+
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
-	msg.ReplyMarkup = admin.UsersInlineMenu(users, offset, adminUsersPageSize, total)
+	msg.ReplyMarkup = markup
 	_, _ = m.bot.Send(msg)
 }
 

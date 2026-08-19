@@ -25,6 +25,34 @@ const (
 	LabelHome = "🏠 Home"
 )
 
+// Reply buttons. ReplyButtonBack/ReplyButtonHome intentionally reuse the
+// exact same text as track.TrackButtonBack/TrackButtonBackHome so the
+// existing dispatcher cases for those two buttons keep handling them —
+// screen-specific behavior is added there by extending the isScreen switch,
+// not by duplicating a case for an identical button string.
+const (
+	ReplyButtonUsers = "👥 Users"
+	ReplyButtonBack  = "◀ Back"
+	ReplyButtonHome  = "🏠 Home"
+)
+
+// MenuReplyMenu is the admin landing screen: pick "Users" to see the
+// listing, or leave via Back/Home.
+func MenuReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+	return buttonbuilder.RK(
+		buttonbuilder.RR(buttonbuilder.RB(ReplyButtonUsers)),
+		buttonbuilder.RR(buttonbuilder.RB(ReplyButtonBack), buttonbuilder.RB(ReplyButtonHome)),
+	)
+}
+
+// UsersReplyMenu is shown while browsing the paginated users list — Back
+// returns to the admin landing screen (not Home).
+func UsersReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+	return buttonbuilder.RK(
+		buttonbuilder.RR(buttonbuilder.RB(ReplyButtonBack), buttonbuilder.RB(ReplyButtonHome)),
+	)
+}
+
 // UsersInlineMenu renders one row per user (display-only, "noop" — this is
 // a listing, not a picker) plus Prev/Next paging and a way back home.
 func UsersInlineMenu(users []models.AdminUserRow, offset, limit, total int) tgbotapi.InlineKeyboardMarkup {

@@ -48,6 +48,7 @@ const (
 	screenTrackTimer     = "track_timer"
 	screenTrackTimerDel  = "track_timer_delete"
 	screenAdmin          = "admin"
+	screenAdminUsers     = "admin_users"
 	screenTrackArchive   = "track_archive"
 	screenCreateActivity = "create_activity"
 	screenTrackReports   = "track_reports"
@@ -326,13 +327,13 @@ func (d *Dispatcher) handleAdminCallback(ctx *tgctx.MsgContext, data string) {
 	switch {
 	case data == adminbtn.CBOpen:
 		d.setScreen(ctx.UserID, screenAdmin)
-		d.entry.ShowAdminMenu(ctx, 0)
+		d.entry.ShowAdminMenu(ctx)
 	case strings.HasPrefix(data, adminbtn.CBUsersPage):
 		offset, ok := parseCallbackID(data, adminbtn.CBUsersPage)
 		if !ok {
 			return
 		}
-		d.entry.ShowAdminMenu(ctx, int(offset))
+		d.entry.ShowAdminUsersMenuInPlace(ctx, int(offset))
 	}
 }
 
@@ -406,7 +407,7 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 			return
 		}
 		d.setScreen(ctx.UserID, screenAdmin)
-		d.entry.ShowAdminMenu(ctx, 0)
+		d.entry.ShowAdminMenu(ctx)
 		return
 
 	default:
@@ -489,6 +490,12 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		case d.isScreen(ctx.UserID, screenTrackTimerDel):
 			d.setScreen(ctx.UserID, screenTrackTimer)
 			d.track.ShowTrackTimerMenu(ctx)
+		case d.isScreen(ctx.UserID, screenAdminUsers):
+			d.setScreen(ctx.UserID, screenAdmin)
+			d.entry.ShowAdminMenu(ctx)
+		case d.isScreen(ctx.UserID, screenAdmin):
+			d.setScreen(ctx.UserID, screenHome)
+			d.entry.ShowHomeMenu(ctx)
 		case d.isScreen(ctx.UserID, screenTrackManage, screenTrackArchive, screenTrackTimer):
 			d.setScreen(ctx.UserID, screenTrackMain)
 			d.track.ShowTrackingMenu(ctx)
@@ -519,7 +526,15 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 			return
 		}
 		d.setScreen(ctx.UserID, screenAdmin)
-		d.entry.ShowAdminMenu(ctx, 0)
+		d.entry.ShowAdminMenu(ctx)
+		return
+	case adminbtn.ReplyButtonUsers:
+		if !d.entry.IsAdmin(ctx) || !d.isScreen(ctx.UserID, screenAdmin) {
+			d.replyUseButtons(ctx.ChatID)
+			return
+		}
+		d.setScreen(ctx.UserID, screenAdminUsers)
+		d.entry.ShowAdminUsersMenu(ctx, 0)
 		return
 	}
 
@@ -708,7 +723,9 @@ func (d *Dispatcher) isTrackButtonText(text string) bool {
 		trackbtn.TrackButtonViewArchive,
 		trackbtn.TrackButtonPeriod,
 		trackbtn.TrackButtonTimerCreate,
-		trackbtn.TrackButtonTimerDelete:
+		trackbtn.TrackButtonTimerDelete,
+		entrybtn.EntryButtonAdmin,
+		adminbtn.ReplyButtonUsers:
 		return true
 	}
 	if _, ok := trackbtn.ParseTimerButtonMinutes(text, trackbtn.TrackTimerActivatePrefix); ok {
