@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 	"tracker-bot/internal/models"
 	"tracker-bot/internal/repo"
@@ -16,22 +17,37 @@ type TimerService interface {
 	MarkPromptSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error
 	RecordPromptAnswer(ctx context.Context, userID, activityID int64) error
 	RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int) error
+
+	// AddCustomInterval saves a user-defined timer interval (in addition to
+	// the built-in 15/30 min choices) so it shows up in the picker next to
+	// them. Adding an interval that already exists is a no-op.
+	AddCustomInterval(ctx context.Context, userID int64, intervalMin int) error
+	// ListCustomIntervals returns the user's custom intervals, ascending.
+	ListCustomIntervals(ctx context.Context, userID int64) ([]int, error)
+	// RemoveCustomInterval deletes one previously added custom interval.
+	RemoveCustomInterval(ctx context.Context, userID int64, intervalMin int) error
 }
 
 type timerService struct {
-	timerRepo   repo.TimerRepository
-	sessionRepo repo.SessionRepository
+	timerRepo       repo.TimerRepository
+	sessionRepo     repo.SessionRepository
+	customTimerRepo repo.CustomTimerRepository
 }
 
 // NewTimerService creates timer service.
-func NewTimerService(timerRepo repo.TimerRepository, sessionRepo repo.SessionRepository) TimerService {
+func NewTimerService(timerRepo repo.TimerRepository, sessionRepo repo.SessionRepository, customTimerRepo repo.CustomTimerRepository) TimerService {
 	return &timerService{
-		timerRepo:   timerRepo,
-		sessionRepo: sessionRepo,
+		timerRepo:       timerRepo,
+		sessionRepo:     sessionRepo,
+		customTimerRepo: customTimerRepo,
 	}
 }
 
-// Activate enables timer and schedules next prompt.
+// Activate enables timer and schedules next prompt. If a timer is already
+// running with the same interval, the existing schedule is kept as-is
+// instead of being restarted — this lets a newly selected activity join the
+// already-running countdown (e.g. adding a 4th activity mid-day) rather than
+// pushing every previously scheduled prompt back by a full interval.
 func (s *timerService) Activate(ctx context.Context, userID int64, intervalMin int) error {
 	if userID <= 0 {
 		return fmt.Errorf("activate timer: invalid userID")
@@ -39,7 +55,18 @@ func (s *timerService) Activate(ctx context.Context, userID int64, intervalMin i
 	if intervalMin <= 0 {
 		return fmt.Errorf("activate timer: invalid interval")
 	}
-	nextPingAt := time.Now().UTC().Add(time.Duration(intervalMin) * time.Minute)
+
+	now := time.Now().UTC()
+	nextPingAt := now.Add(time.Duration(intervalMin) * time.Minute)
+
+	curInterval, curNextPingAt, active, err := s.timerRepo.GetSettings(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("activate timer: %w", err)
+	}
+	if active && curInterval == intervalMin && curNextPingAt.After(now) {
+		nextPingAt = curNextPingAt
+	}
+
 	return s.timerRepo.UpsertInterval(ctx, userID, intervalMin, nextPingAt)
 }
 
@@ -80,4 +107,45 @@ func (s *timerService) RecordPromptAnswerWithInterval(ctx context.Context, userI
 		return fmt.Errorf("invalid interval")
 	}
 	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt")
+}
+
+// AddCustomInterval validates and stores a new custom timer interval.
+func (s *timerService) AddCustomInterval(ctx context.Context, userID int64, intervalMin int) error {
+	if userID <= 0 {
+		return fmt.Errorf("add custom interval: invalid userID")
+	}
+	if intervalMin < models.MinCustomTimerMinutes || intervalMin > models.MaxCustomTimerMinutes {
+		return models.ErrCustomTimerInvalidInterval
+	}
+
+	count, err := s.customTimerRepo.Count(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("add custom interval: %w", err)
+	}
+	if count >= models.MaxCustomTimersPerUser {
+		return models.ErrCustomTimerLimitReached
+	}
+
+	return s.customTimerRepo.Create(ctx, userID, intervalMin)
+}
+
+// ListCustomIntervals returns the user's custom intervals, ascending.
+func (s *timerService) ListCustomIntervals(ctx context.Context, userID int64) ([]int, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("list custom intervals: invalid userID")
+	}
+	items, err := s.customTimerRepo.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	sort.Ints(items)
+	return items, nil
+}
+
+// RemoveCustomInterval deletes one previously added custom interval.
+func (s *timerService) RemoveCustomInterval(ctx context.Context, userID int64, intervalMin int) error {
+	if userID <= 0 || intervalMin <= 0 {
+		return fmt.Errorf("remove custom interval: invalid args")
+	}
+	return s.customTimerRepo.Delete(ctx, userID, intervalMin)
 }

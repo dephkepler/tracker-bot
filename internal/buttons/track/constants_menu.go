@@ -37,6 +37,9 @@ const (
 	TrackCBReportsCalCancel       = "track:report:cal:cancel"
 	TrackCBReportsCalThisMonth    = "track:report:cal:this_month"
 	TrackCBReportsCalThisYear     = "track:report:cal:this_year"
+	TrackCBTimerActivate          = "track:timer:activate:"
+	TrackCBTimerCreate            = "track:timer:create"
+	TrackCBTimerDelete            = "track:timer:delete:"
 )
 
 // ---------------------------------------------------------------------
@@ -106,13 +109,15 @@ const (
 	TrackButtonActivityDelete   = "🗑 Delete"
 )
 
-// Timer reply menu buttons
+// Timer picker (inline menu)
 const (
-	TrackButtonTimer15     = "⏱ 15 min"
-	TrackButtonTimer30     = "⏱ 30 min"
-	TrackButtonTimer60     = "⏱ 60 min"
 	TrackButtonTimerCreate = "➕ Custom Timer"
+	TrackLabelDeleteTimer  = "🗑"
 )
+
+// BuiltInTimerIntervals are the always-available timer choices shown before
+// any user-defined custom intervals.
+var BuiltInTimerIntervals = []int{15, 30}
 
 // ---------------------------------------------------------------------
 // Track UI texts (titles/labels shown inside messages)
@@ -141,4 +146,6 @@ const (
 const (
 	TrackMsgActivityListTitle     = "📂 Select Activity"
 	TrackMsgActivityListConfirmed = "📂 Activated Activities:"
+	TrackMsgTimerPickerTitle      = "⏱ Select tracking interval:"
+	TrackMsgCustomTimerPrompt     = "Enter custom interval in minutes (1-360):"
 )

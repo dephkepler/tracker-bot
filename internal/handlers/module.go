@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -35,11 +36,10 @@ type Module struct {
 	learningsvc     service.LearningService
 	subscriptionsvc service.SubscriptionService
 	entrysvc        service.EntryService
-	testTimerMin    int
 }
 
 // New creates handler module with all service dependencies.
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, testTimerMin int) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -48,7 +48,6 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		learningsvc:     learningsvc,
 		subscriptionsvc: subscriptionsvc,
 		entrysvc:        entrysvc,
-		testTimerMin:    testTimerMin,
 	}
 }
 
@@ -750,19 +749,92 @@ func (m *Module) findArchivedActivityName(ctx *tgctx.MsgContext, activityID int6
 	return fmt.Sprintf("#%d", activityID)
 }
 
-// ShowTrackTimerMenu renders timer interval selector.
+// ShowTrackTimerMenu renders timer interval selector: built-in 15/30 min
+// choices plus any custom intervals the user has added.
 func (m *Module) ShowTrackTimerMenu(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, "Select tracking interval:")
-	msg.ReplyMarkup = track.TrackTimerReplyMenu()
+	reply := tgbotapi.NewMessage(ctx.ChatID, "🗂")
+	reply.ReplyMarkup = track.TrackTimerReplyMenu()
+	_, _ = m.bot.Send(reply)
+
+	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list custom timers failed")
+		custom = nil
+	}
+
+	msg := tgbotapi.NewMessage(ctx.ChatID, track.TrackMsgTimerPickerTitle)
+	msg.ReplyMarkup = track.TrackTimerInlineMenu(track.BuiltInTimerIntervals, custom)
 	_, _ = m.bot.Send(msg)
+}
+
+// PromptCreateCustomTimer asks user to type a custom interval in minutes.
+func (m *Module) PromptCreateCustomTimer(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, track.TrackMsgCustomTimerPrompt)
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessCreateCustomTimer validates and saves a custom interval typed by
+// the user, then re-renders the timer picker with it included. Returns true
+// once the "waiting for input" state should be cleared.
+func (m *Module) ProcessCreateCustomTimer(ctx *tgctx.MsgContext) bool {
+	minutes, err := strconv.Atoi(strings.TrimSpace(ctx.Text))
+	if err != nil {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Enter a whole number of minutes, e.g. 45."))
+		return false
+	}
+
+	if err := m.timersvc.AddCustomInterval(ctx.Ctx, ctx.DBUserID, minutes); err != nil {
+		switch {
+		case errors.Is(err, models.ErrCustomTimerInvalidInterval):
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf(
+				"Interval must be between %d and %d minutes.",
+				models.MinCustomTimerMinutes, models.MaxCustomTimerMinutes,
+			)))
+		case errors.Is(err, models.ErrCustomTimerLimitReached):
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf(
+				"You can keep up to %d custom timers. Delete one before adding a new one.",
+				models.MaxCustomTimersPerUser,
+			)))
+		default:
+			log.Error().Err(err).Msg("add custom timer failed")
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save custom timer."))
+		}
+		return false
+	}
+
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Custom timer added: %d min", minutes)))
+	m.ShowTrackTimerMenu(ctx)
+	return true
+}
+
+// DeleteCustomTimer removes a custom interval and re-renders the picker
+// in place.
+func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
+	if err := m.timersvc.RemoveCustomInterval(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil && !errors.Is(err, models.ErrCustomTimerNotFound) {
+		log.Error().Err(err).Msg("delete custom timer failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to delete custom timer."))
+		return
+	}
+
+	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list custom timers failed")
+		custom = nil
+	}
+
+	edit := tgbotapi.NewEditMessageTextAndMarkup(
+		ctx.ChatID,
+		ctx.MessageID,
+		track.TrackMsgTimerPickerTitle,
+		track.TrackTimerInlineMenu(track.BuiltInTimerIntervals, custom),
+	)
+	if _, err := m.bot.Send(edit); err != nil {
+		log.Error().Err(err).Msg("edit timer picker failed")
+	}
 }
 
 // ActivateTrackTimer enables periodic prompts for selected activities.
 func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
-	if m.testTimerMin > 0 {
-		intervalMin = m.testTimerMin
-	}
-
 	items, err := m.tracksvc.ListSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("load selected activities failed")

@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 	"tracker-bot/internal/models"
@@ -16,6 +17,7 @@ type TimerRepository interface {
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error)
 	SetNextPing(ctx context.Context, userID int64, nextPingAt time.Time) error
 	GetInterval(ctx context.Context, userID int64) (int, error)
+	GetSettings(ctx context.Context, userID int64) (intervalMin int, nextPingAt time.Time, enabled bool, err error)
 	Disable(ctx context.Context, userID int64) error
 }
 
@@ -108,6 +110,29 @@ func (r *timerRepository) GetInterval(ctx context.Context, userID int64) (int, e
 		return 0, err
 	}
 	return interval, nil
+}
+
+// GetSettings returns the raw persisted timer row for user, if any.
+// enabled is false and err is nil when the user has no timer row yet.
+func (r *timerRepository) GetSettings(ctx context.Context, userID int64) (int, time.Time, bool, error) {
+	q := `
+	SELECT interval_min, next_ping_at, enabled
+	FROM user_timer_settings
+	WHERE user_id = $1;
+	`
+	var (
+		intervalMin int
+		nextPingAt  time.Time
+		enabled     bool
+	)
+	err := r.db.QueryRow(ctx, q, userID).Scan(&intervalMin, &nextPingAt, &enabled)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, time.Time{}, false, nil
+		}
+		return 0, time.Time{}, false, fmt.Errorf("get settings: %w", err)
+	}
+	return intervalMin, nextPingAt, enabled, nil
 }
 
 // Disable turns off timer for user.

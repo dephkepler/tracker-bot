@@ -68,9 +68,30 @@ func TrackReportsReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 
 func TrackTimerReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonTimer15), buttonbuilder.RB(TrackButtonTimer30)),
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
 	)
+}
+
+// TrackTimerInlineMenu renders the timer picker: built-in intervals first,
+// then any custom intervals the user added, each with its own delete
+// button, then the "add custom" action.
+func TrackTimerInlineMenu(builtIn, custom []int) tgbotapi.InlineKeyboardMarkup {
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(builtIn)+len(custom)+2)
+	for _, m := range builtIn {
+		rows = append(rows, buttonbuilder.IR(
+			buttonbuilder.IB(fmt.Sprintf("⏱ %d min", m), fmt.Sprintf("%s%d", TrackCBTimerActivate, m)),
+		))
+	}
+	for _, m := range custom {
+		rows = append(rows, buttonbuilder.IR(
+			buttonbuilder.IB(fmt.Sprintf("⏱ %d min", m), fmt.Sprintf("%s%d", TrackCBTimerActivate, m)),
+			buttonbuilder.IB(TrackLabelDeleteTimer, fmt.Sprintf("%s%d", TrackCBTimerDelete, m)),
+		))
+	}
+	rows = append(rows, buttonbuilder.IR(
+		buttonbuilder.IB(TrackButtonTimerCreate, TrackCBTimerCreate),
+	))
+	return buttonbuilder.IK(rows...)
 }
 
 func TrackActivitiesInlineMenu(items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {

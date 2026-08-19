@@ -8,9 +8,8 @@ import (
 )
 
 type Config struct {
-	Telegram         Telegram
-	PostreSQL        PgConfig
-	TestTimerMinutes int `env:"TEST_TIMER_MINUTES" env-default:"0"`
+	Telegram  Telegram
+	PostreSQL PgConfig
 }
 type PgConfig struct {
 	Host    string `env:"HOST_DB"`

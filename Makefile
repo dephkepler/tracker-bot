@@ -1,4 +1,4 @@
-.PHONY: help deps fmt test build run \
+.PHONY: help deps fmt test test-integration build run \
 	up down rebuild logs ps \
 	migrate seed-stats clean
 
@@ -31,8 +31,12 @@ deps: ## Download and tidy Go modules
 fmt: ## Format Go files
 	$(GO) fmt ./...
 
-test: ## Run tests
+test: ## Run unit tests (fast, no DB required)
 	GOCACHE=$(GOCACHE_DIR) $(GO) test ./...
+
+test-integration: ## Run integration tests against the local docker-compose DB (needs `make up && make migrate` first)
+	GOCACHE=$(GOCACHE_DIR) TEST_DB_HOST=$(DB_HOST) TEST_DB_PORT=$(DB_PORT) TEST_DB_USER=$(DB_USER) TEST_DB_PASS=$(DB_PASS) TEST_DB_NAME=$(DB_NAME) \
+		$(GO) test -tags=integration ./...
 
 build: ## Build tracker bot binary
 	mkdir -p bin

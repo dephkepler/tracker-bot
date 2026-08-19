@@ -25,9 +25,10 @@ type userSession struct {
 	tz       string // IANA zone name, "" until the user shares a location
 	tzLoaded bool   // true once loaded from the users table (or set explicitly)
 
-	waitingActivityName bool
-	waitingLocation     bool
-	waitingPeriodRange  bool
+	waitingActivityName       bool
+	waitingLocation           bool
+	waitingPeriodRange        bool
+	waitingCustomTimerMinutes bool
 
 	reportSelected map[int64]bool
 	reportFrom     time.Time

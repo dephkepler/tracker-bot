@@ -38,6 +38,12 @@ type TrackActivityItem struct {
 	Selected bool
 }
 
+// CustomTimerOption is one user-defined timer interval shown next to the
+// built-in 15/30 min choices in the timer picker.
+type CustomTimerOption struct {
+	IntervalMin int
+}
+
 // TimerDueUser represents one user that should receive timer prompt now.
 type TimerDueUser struct {
 	DBUserID    int64

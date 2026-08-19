@@ -322,6 +322,16 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		}
 		return true
 	}
+	if sess.waitingCustomTimerMinutes {
+		if d.isTrackButtonText(ctx.Text) {
+			_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Use buttons from menu. Enter minutes as a plain number."))
+			return true
+		}
+		if d.track.ProcessCreateCustomTimer(ctx) {
+			sess.waitingCustomTimerMinutes = false
+		}
+		return true
+	}
 	if sess.waitingPeriodRange {
 		from, to, err := parseDateRange(ctx.Text)
 		if err != nil {
@@ -422,22 +432,6 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 	case trackbtn.TrackButtonSelectActivity:
 		d.setScreen(ctx.UserID, screenTrackManage)
 		d.track.ShowTrackActivitySelectionMenu(ctx)
-		return
-	case trackbtn.TrackButtonTimer15:
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.replyUseButtons(ctx.ChatID)
-			return
-		}
-		d.track.ActivateTrackTimer(ctx, 15)
-		d.setScreen(ctx.UserID, screenHome)
-		return
-	case trackbtn.TrackButtonTimer30:
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.replyUseButtons(ctx.ChatID)
-			return
-		}
-		d.track.ActivateTrackTimer(ctx, 30)
-		d.setScreen(ctx.UserID, screenHome)
 		return
 	case trackbtn.TrackButtonBackHome:
 		d.setScreen(ctx.UserID, screenHome)
@@ -612,6 +606,34 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 			return
 		}
 		d.track.HandleTrackToggleCallback(ctx)
+	case strings.HasPrefix(data, trackbtn.TrackCBTimerActivate):
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.closeInlineMenu(ctx, "Timer menu is closed. Open it again from Track.")
+			return
+		}
+		minutes, ok := parseCallbackID(data, trackbtn.TrackCBTimerActivate)
+		if !ok || minutes <= 0 {
+			return
+		}
+		d.track.ActivateTrackTimer(ctx, int(minutes))
+		d.setScreen(ctx.UserID, screenHome)
+	case data == trackbtn.TrackCBTimerCreate:
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.closeInlineMenu(ctx, "Timer menu is closed. Open it again from Track.")
+			return
+		}
+		sess.waitingCustomTimerMinutes = true
+		d.track.PromptCreateCustomTimer(ctx)
+	case strings.HasPrefix(data, trackbtn.TrackCBTimerDelete):
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.closeInlineMenu(ctx, "Timer menu is closed. Open it again from Track.")
+			return
+		}
+		minutes, ok := parseCallbackID(data, trackbtn.TrackCBTimerDelete)
+		if !ok || minutes <= 0 {
+			return
+		}
+		d.track.DeleteCustomTimer(ctx, int(minutes))
 	}
 }
 
@@ -626,8 +648,6 @@ func (d *Dispatcher) isTrackButtonText(text string) bool {
 	case trackbtn.TrackButtonActivityActivate,
 		trackbtn.TrackButtonActivityArchive,
 		trackbtn.TrackButtonActivityDelete,
-		trackbtn.TrackButtonTimer15,
-		trackbtn.TrackButtonTimer30,
 		trackbtn.TrackButtonBack,
 		trackbtn.TrackButtonBackHome,
 		trackbtn.TrackButtonViewArchive,

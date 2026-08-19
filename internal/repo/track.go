@@ -9,8 +9,8 @@ import (
 	errlocal "tracker-bot/internal/models"
 	"tracker-bot/pkg/apptime"
 
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

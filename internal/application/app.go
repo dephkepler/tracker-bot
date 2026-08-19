@@ -53,6 +53,7 @@ func (app *Application) Build(ctx context.Context) error {
 	learningRepo := repo.NewLearningRepository(app.db.Pool())
 	subscriptionRepo := repo.NewSubscriptionRepository(app.db.Pool())
 	timerRepo := repo.NewTimerRepository(app.db.Pool())
+	customTimerRepo := repo.NewCustomTimerRepository(app.db.Pool())
 	sessionRepo := repo.NewSessionRepository(app.db.Pool())
 	uistateRepo := repo.NewUIStateRepository(app.db.Pool())
 
@@ -60,13 +61,13 @@ func (app *Application) Build(ctx context.Context) error {
 	entrysvc := service.NewEntryService(entryRepo)
 	provilesvc := service.NewProfileService(profileRepo)
 	tracksvc := service.NewTrackerService(trackRepo)
-	timersvc := service.NewTimerService(timerRepo, sessionRepo)
+	timersvc := service.NewTimerService(timerRepo, sessionRepo, customTimerRepo)
 	learningsvc := service.NewLearningService(learningRepo)
 	subscriptionsvc := service.NewSubscriptionService(subscriptionRepo)
 	uistatesvc := service.NewUIStateService(uistateRepo)
 
 	//handlers and dispatcher
-	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, app.cfg.TestTimerMinutes)
+	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc)
 	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, provilesvc, uistatesvc, module, module, module, module, module)
 	app.timerScheduler = scheduler.NewTimerScheduler(ctx, timersvc, module)
 
