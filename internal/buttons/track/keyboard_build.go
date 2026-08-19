@@ -60,12 +60,12 @@ func TrackArchiveReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 }
 
 // TrackReportsReplyMenu renders the reports screen's reply keyboard.
-// Reports itself isn't localized yet (Phase 3, still English) — only the
-// Back/Home row uses lang here, since those are the same universal nav
-// buttons used everywhere else in the app.
 func TrackReportsReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonToday), buttonbuilder.RB(TrackButtonPeriod)),
+		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonToday)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonCalendar)),
+		),
 		buttonbuilder.RR(
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
@@ -272,35 +272,34 @@ func TrackArchiveSuccessInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup
 }
 
 // ---------------------------------------------------------------------
-// Reports (Today/Calendar/Period) — not yet localized (Phase 3), still
-// plain English literals below, same as before Phase 2.
+// Reports (Today/Calendar/Period)
 
-func TrackReportsHubInlineMenu() tgbotapi.InlineKeyboardMarkup {
+func TrackReportsHubInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackButtonToday, TrackCBReportsToday),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonToday), TrackCBReportsToday),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackButtonPeriod, TrackCBReportsPeriodOpen),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonCalendar), TrackCBReportsPeriodOpen),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelBack, "back_to_main"),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelBack), "back_to_main"),
 		),
 	)
 }
 
-func TrackReportTodayInlineMenu() tgbotapi.InlineKeyboardMarkup {
+func TrackReportTodayInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelSelectActivities, TrackCBReportsTodayBySelected),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelSelectActivities), TrackCBReportsTodayBySelected),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelBackToReports, TrackCBReportsBackHub),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelBackToReports), TrackCBReportsBackHub),
 		),
 	)
 }
 
-func TrackTodaySelectActivitiesInlineMenu(items []models.TrackActivityItem, selected map[int64]bool) tgbotapi.InlineKeyboardMarkup {
+func TrackTodaySelectActivitiesInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, selected map[int64]bool) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+2)
 	for _, item := range items {
 		if strings.TrimSpace(item.Name) == "" {
@@ -319,18 +318,18 @@ func TrackTodaySelectActivitiesInlineMenu(items []models.TrackActivityItem, sele
 		))
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelBuildChart, TrackCBReportsTodaySelBuild),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelBuildChart), TrackCBReportsTodaySelBuild),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelBack, TrackCBReportsToday),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelBack), TrackCBReportsToday),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func TrackReportPeriodInlineMenu(items []models.TrackActivityItem, selected map[int64]bool, rangeLabel string) tgbotapi.InlineKeyboardMarkup {
+func TrackReportPeriodInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, selected map[int64]bool, rangeLabel string) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+5)
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelSelectedActivities, "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelSelectedActivities), "noop"),
 	))
 	for _, item := range items {
 		if strings.TrimSpace(item.Name) == "" {
@@ -349,19 +348,31 @@ func TrackReportPeriodInlineMenu(items []models.TrackActivityItem, selected map[
 		))
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelRangePrefix+rangeLabel, TrackCBReportsPeriodSetRange),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelRangePrefix, rangeLabel), TrackCBReportsPeriodSetRange),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelTextReport, TrackCBReportsPeriodText),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelChartReport, TrackCBReportsPeriodChart),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelTextReport), TrackCBReportsPeriodText),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelChartReport), TrackCBReportsPeriodChart),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelBackToReports, TrackCBReportsBackHub),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelBackToReports), TrackCBReportsBackHub),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func TrackReportPeriodCalendarInlineMenu(month time.Time, from, to time.Time) tgbotapi.InlineKeyboardMarkup {
+// monthNameKeys indexes 1-12 (time.Month) to the matching i18n key.
+var monthNameKeys = [...]string{
+	i18n.KeyTrackCalendarMonth01, i18n.KeyTrackCalendarMonth02, i18n.KeyTrackCalendarMonth03,
+	i18n.KeyTrackCalendarMonth04, i18n.KeyTrackCalendarMonth05, i18n.KeyTrackCalendarMonth06,
+	i18n.KeyTrackCalendarMonth07, i18n.KeyTrackCalendarMonth08, i18n.KeyTrackCalendarMonth09,
+	i18n.KeyTrackCalendarMonth10, i18n.KeyTrackCalendarMonth11, i18n.KeyTrackCalendarMonth12,
+}
+
+func monthName(lang i18n.Lang, m time.Month) string {
+	return i18n.T(lang, monthNameKeys[m-1])
+}
+
+func TrackReportPeriodCalendarInlineMenu(lang i18n.Lang, month time.Time, from, to time.Time) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, 14)
 	first := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
 	last := first.AddDate(0, 1, -1)
@@ -369,22 +380,22 @@ func TrackReportPeriodCalendarInlineMenu(month time.Time, from, to time.Time) tg
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("«Y", TrackCBReportsCalPrevYear),
-		tgbotapi.NewInlineKeyboardButtonData(first.Format("January 2006"), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%s %d", monthName(lang, first.Month()), first.Year()), "noop"),
 		tgbotapi.NewInlineKeyboardButtonData("Y»", TrackCBReportsCalNextYear),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("◀", TrackCBReportsCalPrev),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelMonth, "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarMonth), "noop"),
 		tgbotapi.NewInlineKeyboardButtonData("▶", TrackCBReportsCalNext),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelMon, "noop"),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelTue, "noop"),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelWed, "noop"),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelThu, "noop"),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelFri, "noop"),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelSat, "noop"),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelSun, "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarMon), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarTue), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarWed), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarThu), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarFri), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarSat), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarSun), "noop"),
 	))
 
 	day := 1
@@ -414,15 +425,15 @@ func TrackReportPeriodCalendarInlineMenu(month time.Time, from, to time.Time) tg
 			break
 		}
 	}
-	confirmLabel := TrackLabelSelectEndDate
+	confirmLabel := i18n.T(lang, i18n.KeyTrackLabelSelectEndDate)
 	confirmCB := "noop"
 	if !from.IsZero() && !to.IsZero() {
-		confirmLabel = TrackLabelConfirmRange
+		confirmLabel = i18n.T(lang, i18n.KeyTrackLabelConfirmRange)
 		confirmCB = TrackCBReportsCalDone
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData(confirmLabel, confirmCB),
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelCancel, TrackCBReportsCalCancel),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarCancel), TrackCBReportsCalCancel),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }

@@ -82,6 +82,9 @@ var catalogTrack = map[string]entry{
 	KeyTrackCreatePrompt: {
 		RU: "📌 *Новая активность*\n\nВведи название активности:", EN: "📌 *Create New Activity*\n\nEnter activity name:", DE: "📌 *Neue Aktivität erstellen*\n\nGib den Namen der Aktivität ein:", UK: "📌 *Нова активність*\n\nВведи назву активності:", AR: "📌 *إنشاء نشاط جديد*\n\nأدخل اسم النشاط:",
 	},
+	KeyTrackCreatePromptBlocked: {
+		RU: "Используй кнопки меню. Введи название активности обычным текстом.", EN: "Use buttons from menu. Enter activity name as plain text.", DE: "Benutze die Menü-Buttons. Gib den Aktivitätsnamen als reinen Text ein.", UK: "Використовуй кнопки меню. Введи назву активності звичайним текстом.", AR: "استخدم أزرار القائمة. أدخل اسم النشاط كنص عادي.",
+	},
 	KeyTrackCreateEmptyName: {
 		RU: "Название активности не может быть пустым.", EN: "Activity name cannot be empty.", DE: "Der Aktivitätsname darf nicht leer sein.", UK: "Назва активності не може бути порожньою.", AR: "لا يمكن أن يكون اسم النشاط فارغًا.",
 	},
@@ -95,6 +98,9 @@ var catalogTrack = map[string]entry{
 		RU: "Создано: %s", EN: "Created: %s", DE: "Erstellt: %s", UK: "Створено: %s", AR: "تم الإنشاء: %s",
 	},
 
+	KeyTrackManageMenuClosed: {
+		RU: "Меню активностей закрыто. Открой Активности заново из Трекера.", EN: "Activities menu is closed. Open Activities again from Track.", DE: "Das Aktivitätenmenü ist geschlossen. Öffne Aktivitäten erneut über Tracker.", UK: "Меню активностей закрито. Відкрий Активності знову з Трекера.", AR: "قائمة الأنشطة مغلقة. افتح الأنشطة مرة أخرى من التتبع.",
+	},
 	KeyTrackManageLoadFailed: {
 		RU: "⚠️ Не удалось загрузить активности.", EN: "⚠️ Failed to load activities.", DE: "⚠️ Aktivitäten konnten nicht geladen werden.", UK: "⚠️ Не вдалося завантажити активності.", AR: "⚠️ تعذّر تحميل الأنشطة.",
 	},
@@ -162,6 +168,9 @@ var catalogTrack = map[string]entry{
 	},
 	KeyTrackTimerCustomPrompt: {
 		RU: "Введи свой интервал в минутах (1-360):", EN: "Enter custom interval in minutes (1-360):", DE: "Gib ein eigenes Intervall in Minuten ein (1-360):", UK: "Введи свій інтервал у хвилинах (1-360):", AR: "أدخل فاصلاً مخصصًا بالدقائق (1-360):",
+	},
+	KeyTrackTimerPromptBlocked: {
+		RU: "Используй кнопки меню. Введи количество минут обычным текстом.", EN: "Use buttons from menu. Enter minutes as a plain number.", DE: "Benutze die Menü-Buttons. Gib die Minutenzahl als reinen Text ein.", UK: "Використовуй кнопки меню. Введи кількість хвилин звичайним текстом.", AR: "استخدم أزرار القائمة. أدخل عدد الدقائق كنص عادي.",
 	},
 	KeyTrackTimerNoneToDelete: {
 		RU: "Пока нет своих таймеров для удаления.", EN: "No custom timers to delete yet.", DE: "Noch keine eigenen Timer zum Löschen.", UK: "Поки немає власних таймерів для видалення.", AR: "لا توجد مؤقتات مخصصة لحذفها بعد.",

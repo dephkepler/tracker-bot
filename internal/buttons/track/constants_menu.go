@@ -42,48 +42,9 @@ const (
 // ---------------------------------------------------------------------
 // Buttons (Inline + Reply)
 //
-// Button/label TEXT for the main screen, activity management, timer, and
-// archive has moved to internal/i18n (see i18n.KeyTrack*) — those screens
-// are translated (Phase 2). Reports (Today/Calendar/Period) hasn't been
-// converted yet (Phase 3), so its constants below are still plain English
-// literals, same as before.
-
-// Report reply menu buttons — Reports is not yet localized (Phase 3).
-const (
-	TrackButtonToday        = "📊 Today"
-	TrackButtonPeriod       = "📅 Calendar"
-	TrackButtonReportPeriod = "📅 Period"
-	TrackButtonReportWeek   = "🗓 Week"
-	TrackButtonReportExport = "📤 Export"
-	TrackButtonReportDelete = "🗑 Delete"
-)
-
-// Shared inline labels used only by the not-yet-localized Reports screens.
-// TrackLabelBack has an equivalent translated key for Phase-2 screens
-// (i18n.KeyTrackLabelBack, same "↩️ Back" text) — this literal constant
-// stays only for the Reports functions below that haven't been converted
-// to take a lang param yet.
-const (
-	TrackLabelBack               = "↩️ Back"
-	TrackLabelBackToReports      = "↩️ Back to Reports"
-	TrackLabelSelectedActivities = "Selected activities"
-	TrackLabelTextReport         = "📄 Text report"
-	TrackLabelChartReport        = "📉 Chart report"
-	TrackLabelSelectActivities   = "🧩 Select activities"
-	TrackLabelBuildChart         = "✅ Build chart"
-	TrackLabelRangePrefix        = "🗓 Range: "
-	TrackLabelConfirmRange       = "✅ Confirm range"
-	TrackLabelSelectEndDate      = "Select end date"
-	TrackLabelCancel             = "Cancel"
-	TrackLabelMonth              = "Month"
-	TrackLabelMon                = "Mo"
-	TrackLabelTue                = "Tu"
-	TrackLabelWed                = "We"
-	TrackLabelThu                = "Th"
-	TrackLabelFri                = "Fr"
-	TrackLabelSat                = "Sa"
-	TrackLabelSun                = "Su"
-)
+// All button/label TEXT (main screen, activity management, timer, archive,
+// reports) has moved to internal/i18n (see i18n.KeyTrack*). Only
+// non-translatable technical constants remain here.
 
 // TrackLabelArchiveItemPrefix is a plain emoji marker (no translatable
 // text), used as-is in every language.
