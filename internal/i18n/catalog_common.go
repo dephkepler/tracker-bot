@@ -40,6 +40,13 @@ var catalogCommon = map[string]entry{
 		UK: "👑 Адмін",
 		AR: "👑 المشرف",
 	},
+	KeyCommonChallenges: {
+		RU: "🎯 Челленджи",
+		EN: "🎯 Challenges",
+		DE: "🎯 Challenges",
+		UK: "🎯 Челенджі",
+		AR: "🎯 التحديات",
+	},
 	KeyCommonUnknownCommand: {
 		RU: "Неизвестная команда.",
 		EN: "Unknown command.",

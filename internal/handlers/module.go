@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 	"tracker-bot/internal/buttons/admin"
+	"tracker-bot/internal/buttons/challenge"
 	"tracker-bot/internal/buttons/entry"
 	"tracker-bot/internal/buttons/learning"
 	"tracker-bot/internal/buttons/profile"
@@ -39,6 +40,7 @@ type Module struct {
 	subscriptionsvc service.SubscriptionService
 	entrysvc        service.EntryService
 	adminsvc        service.AdminService
+	challengesvc    service.ChallengeService
 	// adminUsername is the Telegram @handle (no leading "@") allowed to see
 	// the admin screen — see IsAdmin. Empty disables the admin feature
 	// entirely rather than matching everyone.
@@ -50,7 +52,7 @@ type Module struct {
 const adminUsersPageSize = 15
 
 // New creates handler module with all service dependencies.
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, adminUsername string) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, adminUsername string) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -60,6 +62,7 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		subscriptionsvc: subscriptionsvc,
 		entrysvc:        entrysvc,
 		adminsvc:        adminsvc,
+		challengesvc:    challengesvc,
 		adminUsername:   strings.TrimPrefix(strings.TrimSpace(adminUsername), "@"),
 	}
 }
@@ -1920,4 +1923,260 @@ func countSelectedActivities(items []models.TrackActivityItem) int {
 		}
 	}
 	return count
+}
+
+// ---------------------------------------------------------------------
+// Challenges: a user-defined day-range plan with one square per day.
+
+// ShowChallengesMenu lists a user's active challenges.
+func (m *Module) ShowChallengesMenu(ctx *tgctx.MsgContext) {
+	items, err := m.challengesvc.ListChallenges(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list challenges failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load challenges."))
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.ListTitle(len(items)))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = challenge.ListInlineMenu(items)
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send challenges menu failed")
+	}
+}
+
+// PromptCreateChallenge asks for a new challenge's name.
+func (m *Module) PromptCreateChallenge(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.CreatePromptNameText)
+	msg.ReplyMarkup = challenge.WaitingReplyMenu()
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessCreateChallengeName validates a typed name. ok is false when the
+// caller should keep waiting for a better name.
+func (m *Module) ProcessCreateChallengeName(ctx *tgctx.MsgContext) (name string, ok bool) {
+	name = strings.TrimSpace(ctx.Text)
+	if strings.Contains(name, "\n") || len(name) < 2 || len(name) > 60 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be a single line, 2-60 characters. Try again:"))
+		return "", false
+	}
+	hide := tgbotapi.NewMessage(ctx.ChatID, challenge.CreatePromptRangeText)
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+	return name, true
+}
+
+// ShowCreateChallengeCalendar renders the date-range picker for a new challenge.
+func (m *Module) ShowCreateChallengeCalendar(ctx *tgctx.MsgContext, month, from, to time.Time) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, "📅 Pick start and end date:")
+	msg.ReplyMarkup = challenge.CalendarInlineMenu(month, from, to)
+	_, _ = m.bot.Send(msg)
+}
+
+// ShowCreateChallengeCalendarInPlace re-renders the picker by editing the
+// current message (month nav, day taps).
+func (m *Module) ShowCreateChallengeCalendarInPlace(ctx *tgctx.MsgContext, month, from, to time.Time) {
+	if ctx.MessageID == 0 {
+		return
+	}
+	edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, "📅 Pick start and end date:", challenge.CalendarInlineMenu(month, from, to))
+	if _, err := m.bot.Send(edit); err != nil {
+		log.Error().Err(err).Msg("edit create-challenge calendar failed")
+	}
+}
+
+// CreateChallenge validates and creates a challenge, confirms, and shows
+// the challenges list. ok is false on validation failure (message already sent).
+func (m *Module) CreateChallenge(ctx *tgctx.MsgContext, name string, from, to time.Time) bool {
+	id, err := m.challengesvc.CreateChallenge(ctx.Ctx, ctx.DBUserID, name, from, to, ctx.Location)
+	if err != nil {
+		var msg string
+		switch {
+		case errors.Is(err, models.ErrChallengeExists):
+			msg = "⚠️ You already have a challenge with that name."
+		case errors.Is(err, models.ErrChallengeInvalidRange):
+			msg = "⚠️ Challenge must be 1-100 days, end date on or after start date."
+		case errors.Is(err, models.ErrChallengeInvalidName):
+			msg = "⚠️ Invalid name."
+		default:
+			log.Error().Err(err).Msg("create challenge failed")
+			msg = "⚠️ Failed to create challenge. Please try again."
+		}
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, msg))
+		m.ShowChallengesMenu(ctx)
+		return false
+	}
+	totalDays := int(to.Sub(from).Hours()/24) + 1
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, challenge.CreatedText(name, totalDays)))
+	_ = id
+	m.ShowChallengesMenu(ctx)
+	return true
+}
+
+// ShowChallengeGrid renders one challenge's day-grid.
+func (m *Module) ShowChallengeGrid(ctx *tgctx.MsgContext, challengeID int64, edit bool) {
+	item, err := m.challengesvc.GetChallenge(ctx.Ctx, ctx.DBUserID, challengeID)
+	if err != nil {
+		m.sendOrEditChallenge(ctx, edit, "⚠️ Challenge not found.", nil)
+		return
+	}
+	days, err := m.challengesvc.ListDays(ctx.Ctx, ctx.DBUserID, challengeID)
+	if err != nil {
+		log.Error().Err(err).Msg("list challenge days failed")
+		m.sendOrEditChallenge(ctx, edit, "⚠️ Failed to load challenge.", nil)
+		return
+	}
+	today := apptime.NowIn(ctx.Location)
+	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	menu := challenge.GridInlineMenu(challengeID, days, todayMidnight)
+	m.sendOrEditChallenge(ctx, edit, challenge.GridTitle(item), &menu)
+}
+
+// ShowChallengeDayConfirm renders the "mark this day" screen.
+func (m *Module) ShowChallengeDayConfirm(ctx *tgctx.MsgContext, challengeID int64, day time.Time) {
+	item, err := m.challengesvc.GetChallenge(ctx.Ctx, ctx.DBUserID, challengeID)
+	if err != nil {
+		m.sendOrEditChallenge(ctx, true, "⚠️ Challenge not found.", nil)
+		return
+	}
+	status, err := m.challengesvc.GetDayStatus(ctx.Ctx, ctx.DBUserID, challengeID, day)
+	if err != nil {
+		m.sendOrEditChallenge(ctx, true, "⚠️ Day not found.", nil)
+		return
+	}
+	menu := challenge.DayConfirmInlineMenu(challengeID, day)
+	m.sendOrEditChallenge(ctx, true, challenge.DayConfirmTitle(item.Name, day, status), &menu)
+}
+
+// MarkChallengeDay marks one day done/skipped and returns to the grid.
+func (m *Module) MarkChallengeDay(ctx *tgctx.MsgContext, challengeID int64, day time.Time, done bool) {
+	if err := m.challengesvc.MarkDay(ctx.Ctx, ctx.DBUserID, challengeID, day, done); err != nil {
+		log.Error().Err(err).Msg("mark challenge day failed")
+	}
+	m.ShowChallengeGrid(ctx, challengeID, true)
+}
+
+// ArchiveChallenge archives one challenge and returns to the list.
+func (m *Module) ArchiveChallenge(ctx *tgctx.MsgContext, challengeID int64) {
+	if err := m.challengesvc.ArchiveChallenge(ctx.Ctx, ctx.DBUserID, challengeID); err != nil {
+		log.Error().Err(err).Msg("archive challenge failed")
+	}
+	m.ShowChallengesMenu(ctx)
+}
+
+// ShowChallengeArchive lists archived challenges.
+func (m *Module) ShowChallengeArchive(ctx *tgctx.MsgContext, edit bool) {
+	items, err := m.challengesvc.ListArchivedChallenges(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list archived challenges failed")
+		m.sendOrEditChallenge(ctx, edit, "⚠️ Failed to load archive.", nil)
+		return
+	}
+	if len(items) == 0 {
+		m.sendOrEditChallenge(ctx, edit, "🔁 No archived challenges.", nil)
+		return
+	}
+	menu := challenge.ArchiveInlineMenu(items)
+	m.sendOrEditChallenge(ctx, edit, challenge.ArchiveTitle(len(items)), &menu)
+}
+
+// RestoreChallenge moves an archived challenge back to active.
+func (m *Module) RestoreChallenge(ctx *tgctx.MsgContext, challengeID int64) {
+	if err := m.challengesvc.RestoreChallenge(ctx.Ctx, ctx.DBUserID, challengeID, ctx.Location); err != nil {
+		log.Error().Err(err).Msg("restore challenge failed")
+	}
+	m.ShowChallengeArchive(ctx, true)
+}
+
+// DeleteChallengeForever permanently removes an archived challenge.
+func (m *Module) DeleteChallengeForever(ctx *tgctx.MsgContext, challengeID int64) {
+	if err := m.challengesvc.DeleteChallengeForever(ctx.Ctx, ctx.DBUserID, challengeID); err != nil {
+		log.Error().Err(err).Msg("delete challenge forever failed")
+	}
+	m.ShowChallengeArchive(ctx, true)
+}
+
+// sendOrEditChallenge sends a fresh message or edits the current inline
+// message — shared by the Challenge screens.
+func (m *Module) sendOrEditChallenge(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
+	if edit && ctx.MessageID > 0 {
+		var out tgbotapi.Chattable
+		if menu != nil {
+			e := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
+			e.ParseMode = "Markdown"
+			out = e
+		} else {
+			e := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
+			e.ParseMode = "Markdown"
+			out = e
+		}
+		if _, err := m.bot.Send(out); err != nil {
+			log.Error().Err(err).Msg("edit challenge screen failed, sending fresh message instead")
+			m.sendOrEditChallenge(ctx, false, text, menu)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg.ParseMode = "Markdown"
+	if menu != nil {
+		msg.ReplyMarkup = *menu
+	}
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send challenge screen failed")
+	}
+}
+
+// SendChallengePush sends the daily evening "did you do it?" push for one
+// challenge, run off the scheduler (not a live user request), then
+// reschedules tomorrow's push using the user's own timezone. Skips
+// sending (without error, but still reschedules) if the user already
+// marked today via the grid.
+func (m *Module) SendChallengePush(ctx context.Context, chatID, dbUserID, challengeID int64, challengeName string, startDate, endDate time.Time) error {
+	loc := apptime.Location
+	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err == nil && stats.TimeZone != nil {
+		loc = apptime.Resolve(*stats.TimeZone)
+	}
+	now := apptime.NowIn(loc)
+	todayMidnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	defer func() {
+		if err := m.challengesvc.AdvancePush(ctx, challengeID, now, endDate, loc); err != nil {
+			log.Error().Err(err).Int64("challenge_id", challengeID).Msg("advance challenge push schedule failed")
+		}
+	}()
+
+	status, err := m.challengesvc.GetDayStatus(ctx, dbUserID, challengeID, todayMidnight)
+	if err != nil {
+		return err
+	}
+	if status != models.ChallengeDayPending {
+		return nil // already marked via the grid earlier today
+	}
+
+	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
+	dayNum := int(todayMidnight.Sub(startDate).Hours()/24) + 1
+
+	msg := tgbotapi.NewMessage(chatID, challenge.PushText(challengeName, dayNum, totalDays))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = challenge.PushInlineMenu(challengeID)
+	_, err = m.bot.Send(msg)
+	return err
+}
+
+// RecordChallengePushAnswer marks today done/skipped from a tap on the
+// evening push message.
+func (m *Module) RecordChallengePushAnswer(ctx *tgctx.MsgContext, challengeID int64, done bool) {
+	today := apptime.NowIn(ctx.Location)
+	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	if err := m.challengesvc.MarkDay(ctx.Ctx, ctx.DBUserID, challengeID, todayMidnight, done); err != nil {
+		log.Error().Err(err).Msg("record challenge push answer failed")
+		return
+	}
+	result := "❌ Marked as skipped."
+	if done {
+		result = "✅ Marked as done — nice work!"
+	}
+	if ctx.MessageID > 0 {
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, result)
+		_, _ = m.bot.Send(edit)
+	}
 }

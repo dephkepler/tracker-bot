@@ -16,12 +16,13 @@ import (
 )
 
 type Application struct {
-	cfg               *config.Config
-	db                *pgclient.Client
-	bot               *tgbotapi.BotAPI
-	dispatcher        *dispatcher.Dispatcher
-	timerScheduler    *scheduler.TimerScheduler
-	learningScheduler *scheduler.LearningScheduler
+	cfg                *config.Config
+	db                 *pgclient.Client
+	bot                *tgbotapi.BotAPI
+	dispatcher         *dispatcher.Dispatcher
+	timerScheduler     *scheduler.TimerScheduler
+	learningScheduler  *scheduler.LearningScheduler
+	challengeScheduler *scheduler.ChallengeScheduler
 }
 
 func NewApplication(cfg *config.Config) *Application {
@@ -58,6 +59,7 @@ func (app *Application) Build(ctx context.Context) error {
 	sessionRepo := repo.NewSessionRepository(app.db.Pool())
 	uistateRepo := repo.NewUIStateRepository(app.db.Pool())
 	adminRepo := repo.NewAdminRepository(app.db.Pool())
+	challengeRepo := repo.NewChallengeRepository(app.db.Pool())
 
 	//services
 	entrysvc := service.NewEntryService(entryRepo)
@@ -68,23 +70,26 @@ func (app *Application) Build(ctx context.Context) error {
 	subscriptionsvc := service.NewSubscriptionService(subscriptionRepo)
 	uistatesvc := service.NewUIStateService(uistateRepo)
 	adminsvc := service.NewAdminService(adminRepo)
+	challengesvc := service.NewChallengeService(challengeRepo)
 
 	//handlers and dispatcher
-	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, adminsvc, app.cfg.AdminUsername)
+	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, adminsvc, challengesvc, app.cfg.AdminUsername)
 	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, provilesvc, uistatesvc, module, module, module, module, module)
 	app.timerScheduler = scheduler.NewTimerScheduler(ctx, timersvc, module)
 	app.learningScheduler = scheduler.NewLearningScheduler(ctx, learningsvc, module)
+	app.challengeScheduler = scheduler.NewChallengeScheduler(ctx, challengesvc, module)
 
 	return nil
 }
 
 // Run starts background jobs and blocks on dispatcher loop.
 func (app *Application) Run() error {
-	if app.dispatcher == nil || app.timerScheduler == nil || app.learningScheduler == nil {
+	if app.dispatcher == nil || app.timerScheduler == nil || app.learningScheduler == nil || app.challengeScheduler == nil {
 		return fmt.Errorf("run application: app is not built")
 	}
 	app.timerScheduler.Run()
 	app.learningScheduler.Run()
+	app.challengeScheduler.Run()
 	app.dispatcher.Run()
 	return nil
 }

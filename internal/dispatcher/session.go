@@ -47,6 +47,17 @@ type userSession struct {
 	// confirm-step prompt and the admin tapping Send/Cancel on it.
 	pendingBroadcastText string
 
+	waitingChallengeName bool
+	// pendingChallengeName holds the typed name between the name prompt and
+	// the date-range calendar's confirm step.
+	pendingChallengeName string
+	// challengeID is the challenge currently open (grid view) — set when a
+	// challenge is opened, used to resolve taps that only carry a day.
+	challengeID       int64
+	challengeCalMonth time.Time
+	challengeCalFrom  time.Time
+	challengeCalTo    time.Time
+
 	reportSelected map[int64]bool
 	reportFrom     time.Time
 	reportTo       time.Time

@@ -1,7 +1,7 @@
 package profile
 
 import (
-	"tracker-bot/internal/buttons/admin"
+	"tracker-bot/internal/buttons/challenge"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/pkg/buttonbuilder"
 
@@ -11,11 +11,15 @@ import (
 // Inline button menus
 
 // ProfileEntryInlineMenu renders the profile screen's inline menu in lang.
-// isAdmin adds a row that opens the admin screen — pass
-// handlers.Module.IsAdmin(ctx), never hardcode true. Labels here are inline
-// (callback_data-routed, not text-matched), so translating them carries no
-// routing risk — unlike reply-keyboard buttons.
+// Labels here are inline (callback_data-routed, not text-matched), so
+// translating them carries no routing risk — unlike reply-keyboard buttons.
+//
+// No Home/Admin row here: both are already one tap away via the bottom
+// reply keyboard (Home always visible, Admin its own reply button for
+// admins), so this space is used for "🎯 Challenges" instead — see
+// internal/buttons/challenge.
 func ProfileEntryInlineMenu(lang i18n.Lang, isAdmin bool) tgbotapi.InlineKeyboardMarkup {
+	_ = isAdmin // kept for signature stability; Admin no longer shown here.
 	rows := [][]tgbotapi.InlineKeyboardButton{
 		buttonbuilder.IR(
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyProfileLabelLanguage), ProfileCBEditLanguage),
@@ -25,11 +29,10 @@ func ProfileEntryInlineMenu(lang i18n.Lang, isAdmin bool) tgbotapi.InlineKeyboar
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyProfileButtonContact), ProfileCBEditContact),
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyProfileButtonRefresh), ProfileCBRefresh),
 		),
+		buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonChallenges), challenge.CBBackList),
+		),
 	}
-	if isAdmin {
-		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonAdmin), admin.CBOpen)))
-	}
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonHome), "go_home")))
 	return buttonbuilder.IK(rows...)
 }
 

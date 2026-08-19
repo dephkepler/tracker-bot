@@ -202,6 +202,44 @@ type LearningStatsDetail struct {
 	ReviewsCorrect int
 }
 
+// ChallengeDayStatus is one day's mark within a challenge.
+type ChallengeDayStatus string
+
+const (
+	ChallengeDayPending ChallengeDayStatus = "pending"
+	ChallengeDayDone    ChallengeDayStatus = "done"
+	ChallengeDaySkipped ChallengeDayStatus = "skipped"
+)
+
+// ChallengeItem is one challenge row in list/selection UIs.
+type ChallengeItem struct {
+	ID          int64
+	Name        string
+	StartDate   time.Time
+	EndDate     time.Time
+	IsArchived  bool
+	TotalDays   int
+	DoneDays    int
+	SkippedDays int
+}
+
+// ChallengeDay is one square in a challenge's grid.
+type ChallengeDay struct {
+	Date   time.Time
+	Status ChallengeDayStatus
+}
+
+// ChallengeDueUser represents one user whose challenge is due for its
+// daily evening push.
+type ChallengeDueUser struct {
+	ChallengeID   int64
+	DBUserID      int64
+	TgUserID      int64
+	ChallengeName string
+	StartDate     time.Time
+	EndDate       time.Time
+}
+
 // SubscriptionStats contains values for subscription screen.
 type SubscriptionStats struct {
 	ActivePlan string

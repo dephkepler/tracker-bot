@@ -24,6 +24,13 @@ var (
 	ErrLearningWordNotFound       = errors.New("word not found")
 	ErrLearningInvalidInterval    = errors.New("learning push interval must be between 1 and 1440 minutes")
 	ErrLearningInvalidName        = errors.New("collection name must be 2-60 characters, single line")
+
+	// Challenge domain errors.
+	ErrChallengeExists       = errors.New("challenge already exists")
+	ErrChallengeNotFound     = errors.New("challenge not found")
+	ErrChallengeInvalidName  = errors.New("challenge name must be 2-60 characters, single line")
+	ErrChallengeInvalidRange = errors.New("challenge must be 1-100 days, end date on or after start date")
+	ErrChallengeDayNotFound  = errors.New("challenge day not found")
 )
 
 // MaxCustomTimersPerUser caps how many custom intervals one user can keep at

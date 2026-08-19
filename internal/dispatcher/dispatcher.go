@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 	adminbtn "tracker-bot/internal/buttons/admin"
+	challengebtn "tracker-bot/internal/buttons/challenge"
 	learningbtn "tracker-bot/internal/buttons/learning"
 	profilebtn "tracker-bot/internal/buttons/profile"
 	trackbtn "tracker-bot/internal/buttons/track"
@@ -59,6 +60,12 @@ const (
 	screenLearningArchive    = "learning_archive"
 	screenLearningTimer      = "learning_timer"
 	screenLearningReviewPick = "learning_review_pick"
+
+	screenChallengeList     = "challenge_list"
+	screenChallengeCreate   = "challenge_create"
+	screenChallengeCalendar = "challenge_calendar"
+	screenChallengeGrid     = "challenge_grid"
+	screenChallengeArchive  = "challenge_archive"
 )
 
 func New(
@@ -344,6 +351,11 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 		return
 	}
 
+	if strings.HasPrefix(q.Data, "challenge:") {
+		d.handleChallengeCallback(mctx, q.Data)
+		return
+	}
+
 	if strings.HasPrefix(q.Data, "admin:") {
 		if !d.entry.IsAdmin(mctx) {
 			return
@@ -461,6 +473,28 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 			// Language just changed — force the next message to re-read it
 			// from DB instead of using the now-stale cached value.
 			sess.langLoaded = false
+		}
+		return true
+	}
+	if sess.waitingChallengeName {
+		if ctx.Text == challengebtn.ReplyCancel {
+			sess.waitingChallengeName = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Cancelled.")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.setScreen(ctx.UserID, screenChallengeList)
+			d.entry.ShowChallengesMenu(ctx)
+			return true
+		}
+		name, ok := d.entry.ProcessCreateChallengeName(ctx)
+		if ok {
+			sess.waitingChallengeName = false
+			sess.pendingChallengeName = name
+			sess.challengeCalMonth = apptime.NowIn(d.userLocation(ctx.UserID))
+			sess.challengeCalFrom = time.Time{}
+			sess.challengeCalTo = time.Time{}
+			d.setScreen(ctx.UserID, screenChallengeCalendar)
+			d.entry.ShowCreateChallengeCalendar(ctx, sess.challengeCalMonth, sess.challengeCalFrom, sess.challengeCalTo)
 		}
 		return true
 	}
@@ -1036,6 +1070,143 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 		}
 		d.learning.RecordReviewGrade(ctx, id, false)
 	}
+}
+
+// handleChallengeCallback routes challenge-related inline callbacks.
+func (d *Dispatcher) handleChallengeCallback(ctx *tgctx.MsgContext, data string) {
+	sess := d.sessions.get(ctx.UserID)
+
+	switch {
+	case data == challengebtn.CBBackList:
+		d.setScreen(ctx.UserID, screenChallengeList)
+		d.entry.ShowChallengesMenu(ctx)
+	case data == challengebtn.CBCreate:
+		sess.waitingChallengeName = true
+		d.setScreen(ctx.UserID, screenChallengeCreate)
+		d.entry.PromptCreateChallenge(ctx)
+	case strings.HasPrefix(data, challengebtn.CBOpen):
+		id, ok := parseCallbackID(data, challengebtn.CBOpen)
+		if !ok {
+			return
+		}
+		d.setScreen(ctx.UserID, screenChallengeGrid)
+		sess.challengeID = id
+		d.entry.ShowChallengeGrid(ctx, id, true)
+	case strings.HasPrefix(data, challengebtn.CBArchiveThis):
+		id, ok := parseCallbackID(data, challengebtn.CBArchiveThis)
+		if !ok {
+			return
+		}
+		d.setScreen(ctx.UserID, screenChallengeList)
+		d.entry.ArchiveChallenge(ctx, id)
+	case data == challengebtn.CBArchiveOpen:
+		d.setScreen(ctx.UserID, screenChallengeArchive)
+		d.entry.ShowChallengeArchive(ctx, true)
+	case strings.HasPrefix(data, challengebtn.CBArchiveRestore):
+		id, ok := parseCallbackID(data, challengebtn.CBArchiveRestore)
+		if !ok {
+			return
+		}
+		d.entry.RestoreChallenge(ctx, id)
+	case strings.HasPrefix(data, challengebtn.CBArchiveDelete):
+		id, ok := parseCallbackID(data, challengebtn.CBArchiveDelete)
+		if !ok {
+			return
+		}
+		d.entry.DeleteChallengeForever(ctx, id)
+	case strings.HasPrefix(data, challengebtn.CBDayOpen):
+		id, day, ok := parseChallengeDayPayload(data, challengebtn.CBDayOpen, time.UTC)
+		if !ok {
+			return
+		}
+		d.entry.ShowChallengeDayConfirm(ctx, id, day)
+	case strings.HasPrefix(data, challengebtn.CBDayDone):
+		id, day, ok := parseChallengeDayPayload(data, challengebtn.CBDayDone, time.UTC)
+		if !ok {
+			return
+		}
+		d.entry.MarkChallengeDay(ctx, id, day, true)
+	case strings.HasPrefix(data, challengebtn.CBDaySkip):
+		id, day, ok := parseChallengeDayPayload(data, challengebtn.CBDaySkip, time.UTC)
+		if !ok {
+			return
+		}
+		d.entry.MarkChallengeDay(ctx, id, day, false)
+	case data == challengebtn.CBCalPrev:
+		sess.challengeCalMonth = sess.challengeCalMonth.AddDate(0, -1, 0)
+		d.entry.ShowCreateChallengeCalendarInPlace(ctx, sess.challengeCalMonth, sess.challengeCalFrom, sess.challengeCalTo)
+	case data == challengebtn.CBCalNext:
+		sess.challengeCalMonth = sess.challengeCalMonth.AddDate(0, 1, 0)
+		d.entry.ShowCreateChallengeCalendarInPlace(ctx, sess.challengeCalMonth, sess.challengeCalFrom, sess.challengeCalTo)
+	case data == challengebtn.CBCalPrevYear:
+		sess.challengeCalMonth = sess.challengeCalMonth.AddDate(-1, 0, 0)
+		d.entry.ShowCreateChallengeCalendarInPlace(ctx, sess.challengeCalMonth, sess.challengeCalFrom, sess.challengeCalTo)
+	case data == challengebtn.CBCalNextYear:
+		sess.challengeCalMonth = sess.challengeCalMonth.AddDate(1, 0, 0)
+		d.entry.ShowCreateChallengeCalendarInPlace(ctx, sess.challengeCalMonth, sess.challengeCalFrom, sess.challengeCalTo)
+	case strings.HasPrefix(data, challengebtn.CBCalPick):
+		raw := strings.TrimPrefix(data, challengebtn.CBCalPick)
+		day, err := apptime.ParseDay(raw, time.UTC)
+		if err != nil {
+			return
+		}
+		if sess.challengeCalFrom.IsZero() || !sess.challengeCalTo.IsZero() {
+			sess.challengeCalFrom = day
+			sess.challengeCalTo = time.Time{}
+		} else {
+			sess.challengeCalTo = day
+			if sess.challengeCalTo.Before(sess.challengeCalFrom) {
+				sess.challengeCalFrom, sess.challengeCalTo = sess.challengeCalTo, sess.challengeCalFrom
+			}
+		}
+		d.entry.ShowCreateChallengeCalendarInPlace(ctx, sess.challengeCalMonth, sess.challengeCalFrom, sess.challengeCalTo)
+	case data == challengebtn.CBCalDone:
+		if sess.challengeCalFrom.IsZero() || sess.challengeCalTo.IsZero() {
+			return
+		}
+		name := sess.pendingChallengeName
+		from, to := sess.challengeCalFrom, sess.challengeCalTo
+		sess.pendingChallengeName = ""
+		sess.challengeCalFrom, sess.challengeCalTo, sess.challengeCalMonth = time.Time{}, time.Time{}, time.Time{}
+		d.setScreen(ctx.UserID, screenChallengeList)
+		d.entry.CreateChallenge(ctx, name, from, to)
+	case data == challengebtn.CBCalCancel:
+		sess.pendingChallengeName = ""
+		sess.challengeCalFrom, sess.challengeCalTo, sess.challengeCalMonth = time.Time{}, time.Time{}, time.Time{}
+		d.setScreen(ctx.UserID, screenChallengeList)
+		d.entry.ShowChallengesMenu(ctx)
+	case strings.HasPrefix(data, challengebtn.CBPushDone):
+		id, ok := parseCallbackID(data, challengebtn.CBPushDone)
+		if !ok {
+			return
+		}
+		d.entry.RecordChallengePushAnswer(ctx, id, true)
+	case strings.HasPrefix(data, challengebtn.CBPushSkip):
+		id, ok := parseCallbackID(data, challengebtn.CBPushSkip)
+		if !ok {
+			return
+		}
+		d.entry.RecordChallengePushAnswer(ctx, id, false)
+	}
+}
+
+// parseChallengeDayPayload splits a "<prefix><challengeID>:<2006-01-02>"
+// callback payload into its parts.
+func parseChallengeDayPayload(data, prefix string, loc *time.Location) (challengeID int64, day time.Time, ok bool) {
+	raw := strings.TrimPrefix(data, prefix)
+	parts := strings.SplitN(raw, ":", 2)
+	if len(parts) != 2 {
+		return 0, time.Time{}, false
+	}
+	id, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, time.Time{}, false
+	}
+	day, err = apptime.ParseDay(parts[1], loc)
+	if err != nil {
+		return 0, time.Time{}, false
+	}
+	return id, day, true
 }
 
 // replyUseButtons sends a guard message when user is out of current flow.
