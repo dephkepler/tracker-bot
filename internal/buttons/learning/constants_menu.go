@@ -8,6 +8,7 @@ const (
 	LearningCBCollectionOpen    = "learning:collection:open:"
 	LearningCBCollectionToggle  = "learning:collection:toggle:"
 	LearningCBCollectionAddMore = "learning:collection:addwords:"
+	LearningCBCollectionRename  = "learning:collection:rename:"
 	LearningCBCollectionArchive = "learning:collection:archive:"
 	LearningCBWordDelete        = "learning:word:delete:"
 	LearningCBArchiveOpen       = "learning:archive:open"
@@ -35,6 +36,7 @@ const (
 const (
 	LearningButtonCreateCollection = "➕ Create a collection"
 	LearningButtonStartReviews     = "🎲 Start reviews"
+	LearningButtonManageReviews    = "🔧 Manage reviews"
 	LearningButtonStopReviews      = "⏹ Stop reviews"
 	LearningButtonArchive          = "🔁 Archive of collections"
 	LearningButtonStatistics       = "📈 Statistics"
@@ -47,6 +49,7 @@ const (
 // Word-base / collection-detail buttons.
 const (
 	LearningButtonAddWords     = "➕ Add words"
+	LearningButtonRename       = "✏️ Rename"
 	LearningButtonArchiveThis  = "📦 Archive collection"
 	LearningButtonToggleOnFmt  = "🟢 %s — %d words"
 	LearningButtonToggleOffFmt = "⚪ %s — %d words"

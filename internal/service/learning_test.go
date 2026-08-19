@@ -98,6 +98,20 @@ func (f *fakeLearningRepo) GetCollectionName(_ context.Context, userID, collecti
 	return c.name, nil
 }
 
+func (f *fakeLearningRepo) RenameCollection(_ context.Context, userID, collectionID int64, newName string) error {
+	c, ok := f.collections[collectionID]
+	if !ok || c.userID != userID {
+		return models.ErrLearningCollectionNotFound
+	}
+	for _, other := range f.collections {
+		if other.id != collectionID && other.userID == userID && other.name == newName {
+			return models.ErrLearningCollectionExists
+		}
+	}
+	c.name = newName
+	return nil
+}
+
 func (f *fakeLearningRepo) ToggleCollectionActive(_ context.Context, userID, collectionID int64) error {
 	c, ok := f.collections[collectionID]
 	if !ok || c.userID != userID {
@@ -294,6 +308,42 @@ func (f *fakeLearningRepo) ListReviewDates(_ context.Context, userID int64, sinc
 	return out, nil
 }
 
+func (f *fakeLearningRepo) GetCollectionStats(_ context.Context, userID int64) ([]models.LearningCollectionStat, error) {
+	out := make([]models.LearningCollectionStat, 0)
+	for _, c := range f.collections {
+		if c.userID != userID || c.archived {
+			continue
+		}
+		var s models.LearningCollectionStat
+		s.Name = c.name
+		now := time.Now().UTC()
+		for _, w := range f.words {
+			if w.collectionID != c.id {
+				continue
+			}
+			s.TotalWords++
+			if w.learned {
+				s.LearnedWords++
+			} else if !w.nextReviewAt.After(now) {
+				s.DueWords++
+			}
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+func (f *fakeLearningRepo) GetAccuracy(_ context.Context, userID int64) (int, int, error) {
+	correct, total := 0, 0
+	for uid, dates := range f.reviewDates {
+		if uid != userID {
+			continue
+		}
+		total += len(dates)
+	}
+	return correct, total, nil
+}
+
 func newTestLearningService() (*fakeLearningRepo, LearningService) {
 	repo := newFakeLearningRepo()
 	return repo, NewLearningService(repo)
@@ -427,6 +477,71 @@ func TestLearningService_AddWordsFromText_NoValidLines(t *testing.T) {
 	_, _, err := svc.AddWordsFromText(ctx, 1, id, "nothing here\nor here")
 	if !errors.Is(err, models.ErrLearningNoWordsParsed) {
 		t.Fatalf("got %v, want ErrLearningNoWordsParsed", err)
+	}
+}
+
+// --- RenameCollection --------------------------------------------------
+
+func TestLearningService_RenameCollection_Success(t *testing.T) {
+	repo, svc := newTestLearningService()
+	ctx := context.Background()
+	id, _ := svc.CreateCollection(ctx, 1, "Animals")
+
+	if err := svc.RenameCollection(ctx, 1, id, "  Pets  "); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if got := repo.collections[id].name; got != "Pets" {
+		t.Fatalf("collection name = %q, want %q (trimmed)", got, "Pets")
+	}
+}
+
+func TestLearningService_RenameCollection_RejectsBadInput(t *testing.T) {
+	_, svc := newTestLearningService()
+	ctx := context.Background()
+	id, _ := svc.CreateCollection(ctx, 1, "Animals")
+
+	cases := []string{"", "a", "multi\nline", string(make([]byte, 61))}
+	for _, name := range cases {
+		if err := svc.RenameCollection(ctx, 1, id, name); !errors.Is(err, models.ErrLearningInvalidName) {
+			t.Errorf("rename to %q: got %v, want ErrLearningInvalidName", name, err)
+		}
+	}
+}
+
+func TestLearningService_RenameCollection_DuplicateName(t *testing.T) {
+	_, svc := newTestLearningService()
+	ctx := context.Background()
+	_, _ = svc.CreateCollection(ctx, 1, "Animals")
+	id2, _ := svc.CreateCollection(ctx, 1, "Fruits")
+
+	if err := svc.RenameCollection(ctx, 1, id2, "Animals"); !errors.Is(err, models.ErrLearningCollectionExists) {
+		t.Fatalf("rename to existing name: got %v, want ErrLearningCollectionExists", err)
+	}
+}
+
+// --- GetStatsDetail ------------------------------------------------------
+
+func TestLearningService_GetStatsDetail_AggregatesEverything(t *testing.T) {
+	repo, svc := newTestLearningService()
+	ctx := context.Background()
+	id, _ := svc.CreateCollection(ctx, 1, "Animals")
+	if _, _, err := svc.AddWordsFromText(ctx, 1, id, "cat - кот\ndog - собака"); err != nil {
+		t.Fatalf("add words: %v", err)
+	}
+	repo.reviewDates[1] = []time.Time{time.Now().UTC()}
+
+	detail, err := svc.GetStatsDetail(ctx, 1)
+	if err != nil {
+		t.Fatalf("get stats detail: %v", err)
+	}
+	if detail.Overall.TotalWords != 2 {
+		t.Fatalf("Overall.TotalWords = %d, want 2", detail.Overall.TotalWords)
+	}
+	if len(detail.Collections) != 1 || detail.Collections[0].TotalWords != 2 {
+		t.Fatalf("Collections = %+v, want one entry with TotalWords=2", detail.Collections)
+	}
+	if detail.ReviewsTotal != 1 {
+		t.Fatalf("ReviewsTotal = %d, want 1", detail.ReviewsTotal)
 	}
 }
 

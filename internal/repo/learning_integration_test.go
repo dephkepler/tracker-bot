@@ -38,6 +38,23 @@ func TestLearningRepository_CollectionLifecycle(t *testing.T) {
 		t.Fatalf("create duplicate: got %v, want ErrLearningCollectionExists", err)
 	}
 
+	second, err := repo.CreateCollection(ctx, userID, "Fruits")
+	if err != nil {
+		t.Fatalf("create second collection: %v", err)
+	}
+	if err := repo.RenameCollection(ctx, userID, id, "Pets"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if got, err := repo.GetCollectionName(ctx, userID, id); err != nil || got != "Pets" {
+		t.Fatalf("get collection name after rename = (%q, %v), want (Pets, nil)", got, err)
+	}
+	if err := repo.RenameCollection(ctx, userID, second, "Pets"); !errors.Is(err, errlocal.ErrLearningCollectionExists) {
+		t.Fatalf("rename to existing name: got %v, want ErrLearningCollectionExists", err)
+	}
+	if err := repo.DeleteCollectionForever(ctx, userID, second); err != nil {
+		t.Fatalf("cleanup second collection: %v", err)
+	}
+
 	items, err := repo.ListCollections(ctx, userID, false)
 	if err != nil {
 		t.Fatalf("list active: %v", err)
@@ -202,5 +219,49 @@ func TestLearningRepository_PushSettings(t *testing.T) {
 
 	if err := repo.UpsertPushInterval(ctx, userID, 5000, next); !errors.Is(err, errlocal.ErrLearningInvalidInterval) {
 		t.Fatalf("upsert out-of-range interval: got %v, want ErrLearningInvalidInterval", err)
+	}
+}
+
+// TestLearningRepository_StatsDetail checks the per-collection breakdown
+// and accuracy queries behind the "📈 Statistics" screen.
+func TestLearningRepository_StatsDetail(t *testing.T) {
+	pool := testPool(t)
+	repo := NewLearningRepository(pool)
+	ctx := context.Background()
+	userID := testUser(t, pool)
+
+	collID, err := repo.CreateCollection(ctx, userID, "Animals")
+	if err != nil {
+		t.Fatalf("create collection: %v", err)
+	}
+	if _, err := repo.AddWords(ctx, collID, wordPairs("cat", "кот", "dog", "собака")); err != nil {
+		t.Fatalf("add words: %v", err)
+	}
+
+	stats, err := repo.GetCollectionStats(ctx, userID)
+	if err != nil {
+		t.Fatalf("get collection stats: %v", err)
+	}
+	if len(stats) != 1 || stats[0].Name != "Animals" || stats[0].TotalWords != 2 || stats[0].DueWords != 2 {
+		t.Fatalf("collection stats = %+v, want one Animals row with TotalWords=2 DueWords=2", stats)
+	}
+
+	words, err := repo.ListWords(ctx, userID, collID)
+	if err != nil || len(words) != 2 {
+		t.Fatalf("list words: %v, %+v", err, words)
+	}
+	if err := repo.RecordReview(ctx, words[0].ID, userID, true, time.Now().UTC()); err != nil {
+		t.Fatalf("record review (correct): %v", err)
+	}
+	if err := repo.RecordReview(ctx, words[1].ID, userID, false, time.Now().UTC()); err != nil {
+		t.Fatalf("record review (incorrect): %v", err)
+	}
+
+	correct, total, err := repo.GetAccuracy(ctx, userID)
+	if err != nil {
+		t.Fatalf("get accuracy: %v", err)
+	}
+	if correct != 1 || total != 2 {
+		t.Fatalf("accuracy = (%d, %d), want (1, 2)", correct, total)
 	}
 }

@@ -18,6 +18,7 @@ type LearningService interface {
 	ListCollections(ctx context.Context, userID int64) ([]models.LearningCollectionItem, error)
 	ListArchivedCollections(ctx context.Context, userID int64) ([]models.LearningCollectionItem, error)
 	CollectionName(ctx context.Context, userID, collectionID int64) (string, error)
+	RenameCollection(ctx context.Context, userID, collectionID int64, newName string) error
 	ToggleCollectionActive(ctx context.Context, userID, collectionID int64) error
 	ArchiveCollection(ctx context.Context, userID, collectionID int64) error
 	RestoreCollection(ctx context.Context, userID, collectionID int64) error
@@ -45,6 +46,9 @@ type LearningService interface {
 	MarkPushSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error
 
 	GetLearningStats(ctx context.Context, userID int64) (models.LearningStats, error)
+	// GetStatsDetail returns the full breakdown behind the "📈 Statistics"
+	// screen: overall numbers, per-collection counts, and answer accuracy.
+	GetStatsDetail(ctx context.Context, userID int64) (models.LearningStatsDetail, error)
 }
 
 type learningService struct {
@@ -82,6 +86,15 @@ func (srv *learningService) ListArchivedCollections(ctx context.Context, userID 
 // CollectionName resolves a collection's display name.
 func (srv *learningService) CollectionName(ctx context.Context, userID, collectionID int64) (string, error) {
 	return srv.repo.GetCollectionName(ctx, userID, collectionID)
+}
+
+// RenameCollection validates and applies a new name for a collection.
+func (srv *learningService) RenameCollection(ctx context.Context, userID, collectionID int64, newName string) error {
+	newName = strings.TrimSpace(newName)
+	if strings.Contains(newName, "\n") || len(newName) < 2 || len(newName) > 60 {
+		return models.ErrLearningInvalidName
+	}
+	return srv.repo.RenameCollection(ctx, userID, collectionID, newName)
 }
 
 // ToggleCollectionActive flips whether a collection participates in review
@@ -337,6 +350,32 @@ func (srv *learningService) GetLearningStats(ctx context.Context, userID int64) 
 		stats.NextPushIn = fmt.Sprintf("%d min", int(remaining.Minutes()))
 	}
 	return stats, nil
+}
+
+// GetStatsDetail builds the full "📈 Statistics" breakdown: overall numbers
+// plus a per-collection table and answer accuracy.
+func (srv *learningService) GetStatsDetail(ctx context.Context, userID int64) (models.LearningStatsDetail, error) {
+	overall, err := srv.GetLearningStats(ctx, userID)
+	if err != nil {
+		return models.LearningStatsDetail{}, err
+	}
+
+	collections, err := srv.repo.GetCollectionStats(ctx, userID)
+	if err != nil {
+		return models.LearningStatsDetail{}, err
+	}
+
+	correct, total, err := srv.repo.GetAccuracy(ctx, userID)
+	if err != nil {
+		return models.LearningStatsDetail{}, err
+	}
+
+	return models.LearningStatsDetail{
+		Overall:        overall,
+		Collections:    collections,
+		ReviewsTotal:   total,
+		ReviewsCorrect: correct,
+	}, nil
 }
 
 // computeStreak counts consecutive UTC calendar days (ending today or

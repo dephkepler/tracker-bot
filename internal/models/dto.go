@@ -176,6 +176,23 @@ type LearningDueUser struct {
 	IntervalMin int
 }
 
+// LearningCollectionStat is one collection's row in the detailed
+// statistics breakdown.
+type LearningCollectionStat struct {
+	Name         string
+	TotalWords   int
+	DueWords     int
+	LearnedWords int
+}
+
+// LearningStatsDetail is the "📈 Statistics" screen's full view model.
+type LearningStatsDetail struct {
+	Overall        LearningStats
+	Collections    []LearningCollectionStat
+	ReviewsTotal   int
+	ReviewsCorrect int
+}
+
 // SubscriptionStats contains values for subscription screen.
 type SubscriptionStats struct {
 	ActivePlan string

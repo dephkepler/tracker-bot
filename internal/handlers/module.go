@@ -1321,6 +1321,18 @@ func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
+// ShowLearningStatsDetail renders the full "📈 Statistics" breakdown.
+func (m *Module) ShowLearningStatsDetail(ctx *tgctx.MsgContext, edit bool) {
+	detail, err := m.learningsvc.GetStatsDetail(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("get learning stats detail failed")
+		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load statistics.", nil)
+		return
+	}
+	menu := learning.LearningBackToMainInlineMenu()
+	m.sendOrEditLearning(ctx, edit, learning.LearningStatsDetailText(detail), &menu)
+}
+
 // PromptCreateCollection asks the user to type a name for a new collection.
 func (m *Module) PromptCreateCollection(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, "✏️ Send a short one-line name for the new collection (e.g. \"Travel words\"). You'll paste the actual word list on the next step.")
@@ -1422,8 +1434,10 @@ func (m *Module) ShowWordBase(ctx *tgctx.MsgContext, edit bool) {
 }
 
 // ShowReviewCollectionPicker lets the user choose which collections feed
-// the review rotation before picking a push interval (see
-// ShowReviewIntervalPicker) — reached by tapping "Start reviews".
+// the review rotation — reached from "Start reviews"/"Manage reviews" on
+// the main menu. Toggling here applies immediately regardless of whether
+// reviews are already running (see ShowReviewIntervalPicker for the
+// separate "not running yet" activation step).
 func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1443,8 +1457,13 @@ func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 		}
 	}
 
-	menu := learning.LearningReviewPickInlineMenu(items)
-	m.sendOrEditLearning(ctx, edit, learning.LearningReviewPickTitle(active), &menu)
+	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("get learning stats for review picker failed")
+	}
+
+	menu := learning.LearningReviewPickInlineMenu(items, stats.TimerActive)
+	m.sendOrEditLearning(ctx, edit, learning.LearningReviewPickTitle(active, stats.TimerActive, stats.TimerInterval), &menu)
 }
 
 // HandleReviewPickToggle flips a collection's review-rotation flag and
@@ -1471,8 +1490,8 @@ func (m *Module) HandleReviewContinue(ctx *tgctx.MsgContext) (ok bool) {
 			return true
 		}
 	}
-	menu := learning.LearningReviewPickInlineMenu(items)
-	m.sendOrEditLearning(ctx, true, "⚠️ Select at least one collection first.\n\n"+learning.LearningReviewPickTitle(0), &menu)
+	menu := learning.LearningReviewPickInlineMenu(items, false)
+	m.sendOrEditLearning(ctx, true, "⚠️ Select at least one collection first.\n\n"+learning.LearningReviewPickTitle(0, false, 0), &menu)
 	return false
 }
 
@@ -1502,6 +1521,49 @@ func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64,
 
 	menu := learning.LearningCollectionDetailInlineMenu(collectionID, active, words)
 	m.sendOrEditLearning(ctx, edit, learning.LearningCollectionDetailTitle(name, len(words)), &menu)
+}
+
+// PromptRenameCollection asks the user to type a new name for a collection.
+func (m *Module) PromptRenameCollection(ctx *tgctx.MsgContext, collectionID int64) {
+	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)
+	if err != nil {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Collection not found."))
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, learning.LearningRenamePromptText(name))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = learning.LearningWaitingReplyMenu()
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessRenameCollection validates and applies a new collection name.
+// done is true once the "waiting for a new name" state should be cleared.
+func (m *Module) ProcessRenameCollection(ctx *tgctx.MsgContext, collectionID int64) (done bool) {
+	name := strings.TrimSpace(ctx.Text)
+	if strings.Contains(name, "\n") || len(name) < 2 || len(name) > 60 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be a single line, 2-60 characters. Try again:"))
+		return false
+	}
+
+	if err := m.learningsvc.RenameCollection(ctx.Ctx, ctx.DBUserID, collectionID, name); err != nil {
+		if errors.Is(err, models.ErrLearningCollectionExists) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ You already have a collection with that name. Try another:"))
+			return false
+		}
+		log.Error().Err(err).Msg("rename collection failed")
+		hide := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to rename collection. Please try again later.")
+		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		_, _ = m.bot.Send(hide)
+		m.ShowCollectionDetail(ctx, collectionID, false)
+		return true
+	}
+
+	hide := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Renamed to *%s*.", name))
+	hide.ParseMode = "Markdown"
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+	m.ShowCollectionDetail(ctx, collectionID, false)
+	return true
 }
 
 // HandleCollectionToggle flips whether a collection is included in review

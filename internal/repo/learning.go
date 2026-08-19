@@ -19,6 +19,7 @@ type LearningRepository interface {
 	CreateCollection(ctx context.Context, userID int64, name string) (int64, error)
 	ListCollections(ctx context.Context, userID int64, archived bool) ([]models.LearningCollectionItem, error)
 	GetCollectionName(ctx context.Context, userID, collectionID int64) (string, error)
+	RenameCollection(ctx context.Context, userID, collectionID int64, newName string) error
 	ToggleCollectionActive(ctx context.Context, userID, collectionID int64) error
 	ArchiveCollection(ctx context.Context, userID, collectionID int64) error
 	RestoreCollection(ctx context.Context, userID, collectionID int64) error
@@ -45,6 +46,8 @@ type LearningRepository interface {
 	// Stats.
 	CountWords(ctx context.Context, userID int64) (total, dueToday, learned int, err error)
 	ListReviewDates(ctx context.Context, userID int64, since time.Time) ([]time.Time, error)
+	GetCollectionStats(ctx context.Context, userID int64) ([]models.LearningCollectionStat, error)
+	GetAccuracy(ctx context.Context, userID int64) (correct, total int, err error)
 }
 
 type learningRepository struct {
@@ -118,6 +121,24 @@ func (r *learningRepository) GetCollectionName(ctx context.Context, userID, coll
 		return "", fmt.Errorf("get collection name: %w", err)
 	}
 	return name, nil
+}
+
+// RenameCollection updates a collection's display name, scoped to its
+// owner.
+func (r *learningRepository) RenameCollection(ctx context.Context, userID, collectionID int64, newName string) error {
+	q := `UPDATE learning_collections SET name = $3 WHERE id = $1 AND user_id = $2;`
+	tag, err := r.db.Exec(ctx, q, collectionID, userID, newName)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return models.ErrLearningCollectionExists
+		}
+		return fmt.Errorf("rename collection: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return models.ErrLearningCollectionNotFound
+	}
+	return nil
 }
 
 // ToggleCollectionActive flips is_active, scoped to the owning user.
@@ -460,4 +481,53 @@ func (r *learningRepository) ListReviewDates(ctx context.Context, userID int64, 
 		return nil, fmt.Errorf("list review dates rows: %w", err)
 	}
 	return out, nil
+}
+
+// GetCollectionStats returns per-collection word/due/learned counts for the
+// detailed "📈 Statistics" screen.
+func (r *learningRepository) GetCollectionStats(ctx context.Context, userID int64) ([]models.LearningCollectionStat, error) {
+	q := `
+	SELECT c.name,
+		COUNT(w.id) FILTER (WHERE TRUE),
+		COUNT(w.id) FILTER (WHERE w.learned = FALSE AND w.next_review_at <= now()),
+		COUNT(w.id) FILTER (WHERE w.learned = TRUE)
+	FROM learning_collections c
+	LEFT JOIN learning_words w ON w.collection_id = c.id
+	WHERE c.user_id = $1 AND c.is_archived = FALSE
+	GROUP BY c.id
+	ORDER BY c.created_at;
+	`
+	rows, err := r.db.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get collection stats query: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]models.LearningCollectionStat, 0)
+	for rows.Next() {
+		var s models.LearningCollectionStat
+		if err := rows.Scan(&s.Name, &s.TotalWords, &s.DueWords, &s.LearnedWords); err != nil {
+			return nil, fmt.Errorf("get collection stats scan: %w", err)
+		}
+		out = append(out, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get collection stats rows: %w", err)
+	}
+	return out, nil
+}
+
+// GetAccuracy returns how many of the user's recorded reviews were
+// answered correctly, out of the total.
+func (r *learningRepository) GetAccuracy(ctx context.Context, userID int64) (int, int, error) {
+	q := `
+	SELECT COUNT(*) FILTER (WHERE correct), COUNT(*)
+	FROM learning_reviews
+	WHERE user_id = $1;
+	`
+	var correct, total int
+	if err := r.db.QueryRow(ctx, q, userID).Scan(&correct, &total); err != nil {
+		return 0, 0, fmt.Errorf("get accuracy: %w", err)
+	}
+	return correct, total, nil
 }

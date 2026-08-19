@@ -12,12 +12,17 @@ import (
 
 // Inline button menus
 
-// LearningEntryInlineMenu renders the main Learning screen's actions.
+// LearningEntryInlineMenu renders the main Learning screen's actions. The
+// review button always opens the same collection picker (see
+// LearningReviewPickInlineMenu) — its label just hints whether reviews are
+// already running, so changing what's in rotation never requires stopping
+// the schedule first.
 func LearningEntryInlineMenu(reviewsActive bool) tgbotapi.InlineKeyboardMarkup {
-	reviewBtn := buttonbuilder.IB(LearningButtonStartReviews, LearningCBReviewOpen)
+	reviewLabel := LearningButtonStartReviews
 	if reviewsActive {
-		reviewBtn = buttonbuilder.IB(LearningButtonStopReviews, LearningCBReviewStop)
+		reviewLabel = LearningButtonManageReviews
 	}
+	reviewBtn := buttonbuilder.IB(reviewLabel, LearningCBReviewOpen)
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
 			buttonbuilder.IB(LearningButtonCreateCollection, LearningCBCreateCollection),
@@ -33,6 +38,14 @@ func LearningEntryInlineMenu(reviewsActive bool) tgbotapi.InlineKeyboardMarkup {
 		buttonbuilder.IR(
 			buttonbuilder.IB("🏠 Home", "go_home"),
 		),
+	)
+}
+
+// LearningBackToMainInlineMenu is a single "back to the Learning menu" row,
+// used by read-only screens (e.g. Statistics) that have no other action.
+func LearningBackToMainInlineMenu() tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(buttonbuilder.IB(LearningButtonBack, LearningCBBackMain)),
 	)
 }
 
@@ -54,11 +67,13 @@ func LearningWordBaseInlineMenu(items []models.LearningCollectionItem) tgbotapi.
 }
 
 // LearningReviewPickInlineMenu lets the user choose which collections feed
-// the review rotation before picking a push interval — each row toggles
-// the same is_active flag as LearningWordBaseInlineMenu, just scoped to
-// this screen so the toggle re-renders the picker instead of navigating
-// into a collection's detail view.
-func LearningReviewPickInlineMenu(items []models.LearningCollectionItem) tgbotapi.InlineKeyboardMarkup {
+// the review rotation — each row toggles the same is_active flag as
+// LearningWordBaseInlineMenu, just scoped to this screen so the toggle
+// re-renders the picker instead of navigating into a collection's detail
+// view. Toggling here takes effect immediately, whether reviews are
+// running or not — when active, the bottom row offers Stop instead of
+// Continue, since there's no separate "apply" step.
+func LearningReviewPickInlineMenu(items []models.LearningCollectionItem, active bool) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+2)
 	for _, item := range items {
 		label := fmt.Sprintf(LearningButtonToggleOffFmt, item.Name, item.WordCount)
@@ -69,7 +84,11 @@ func LearningReviewPickInlineMenu(items []models.LearningCollectionItem) tgbotap
 			buttonbuilder.IB(label, fmt.Sprintf("%s%d", LearningCBReviewPickToggle, item.ID)),
 		))
 	}
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonContinue, LearningCBReviewContinue)))
+	if active {
+		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonStopReviews, LearningCBReviewStop)))
+	} else {
+		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonContinue, LearningCBReviewContinue)))
+	}
 	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonBack, LearningCBBackMain)))
 	return buttonbuilder.IK(rows...)
 }
@@ -98,6 +117,9 @@ func LearningCollectionDetailInlineMenu(collectionID int64, active bool, words [
 	))
 	rows = append(rows, buttonbuilder.IR(
 		buttonbuilder.IB(LearningButtonAddWords, fmt.Sprintf("%s%d", LearningCBCollectionAddMore, collectionID)),
+		buttonbuilder.IB(LearningButtonRename, fmt.Sprintf("%s%d", LearningCBCollectionRename, collectionID)),
+	))
+	rows = append(rows, buttonbuilder.IR(
 		buttonbuilder.IB(LearningButtonArchiveThis, fmt.Sprintf("%s%d", LearningCBCollectionArchive, collectionID)),
 	))
 	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonBack, LearningCBWordBase)))

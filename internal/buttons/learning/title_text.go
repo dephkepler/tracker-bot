@@ -23,11 +23,46 @@ func LearningMenuText(stats models.LearningStats) string {
 }
 
 // LearningReviewPickTitle renders the review collection-picker's header.
-func LearningReviewPickTitle(activeCount int) string {
+// When reviews are already running, toggling here applies immediately —
+// no need to stop and restart the schedule to change what's in rotation.
+func LearningReviewPickTitle(activeCount int, reviewsActive bool, intervalMin int) string {
+	if reviewsActive {
+		return fmt.Sprintf("🔧 *Manage reviews*\n\nRunning every *%d* min. %d collection(s) selected — tap to include/exclude, changes apply immediately.", intervalMin, activeCount)
+	}
 	if activeCount == 0 {
 		return "🎲 *Pick collections for reviews*\n\nTap to include/exclude — none selected yet. Select at least one, then tap Continue."
 	}
 	return fmt.Sprintf("🎲 *Pick collections for reviews*\n\n%d selected. Tap to include/exclude, then Continue.", activeCount)
+}
+
+// LearningStatsDetailText renders the full "📈 Statistics" breakdown: overall
+// numbers, per-collection counts, and answer accuracy.
+func LearningStatsDetailText(d models.LearningStatsDetail) string {
+	var b strings.Builder
+	b.WriteString("📈 *Statistics*\n\n")
+	fmt.Fprintf(&b, "📊 Total words: *%d*\n", d.Overall.TotalWords)
+	fmt.Fprintf(&b, "📘 Due today: *%d*\n", d.Overall.DueTodayWords)
+	fmt.Fprintf(&b, "✅ Learned: *%d*\n", d.Overall.LearnedWords)
+	fmt.Fprintf(&b, "🔥 Streak: *%d* day(s)\n", d.Overall.StreakDays)
+	if d.ReviewsTotal > 0 {
+		accuracy := float64(d.ReviewsCorrect) / float64(d.ReviewsTotal) * 100
+		fmt.Fprintf(&b, "🎯 Accuracy: *%.0f%%* (%d/%d reviews)\n", accuracy, d.ReviewsCorrect, d.ReviewsTotal)
+	} else {
+		b.WriteString("🎯 Accuracy: no reviews answered yet\n")
+	}
+
+	if len(d.Collections) > 0 {
+		b.WriteString("\n*By collection:*\n")
+		for _, c := range d.Collections {
+			fmt.Fprintf(&b, "• %s — %d words, %d due, %d learned\n", c.Name, c.TotalWords, c.DueWords, c.LearnedWords)
+		}
+	}
+	return b.String()
+}
+
+// LearningRenamePromptText asks the user to type a new name for a collection.
+func LearningRenamePromptText(currentName string) string {
+	return fmt.Sprintf("✏️ Send a new name for *%s* (2-60 characters, single line):", currentName)
 }
 
 // LearningWordBaseTitle renders the word-base screen's header.

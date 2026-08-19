@@ -500,6 +500,20 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		d.learning.ProcessAddWords(ctx, sess.learningCollectionID)
 		return true
 	}
+	if sess.waitingLearningRenameCollection {
+		if ctx.Text == learningbtn.LearningButtonCancel {
+			sess.waitingLearningRenameCollection = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Cancelled.")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.learning.ShowCollectionDetail(ctx, sess.learningCollectionID, false)
+			return true
+		}
+		if d.learning.ProcessRenameCollection(ctx, sess.learningCollectionID) {
+			sess.waitingLearningRenameCollection = false
+		}
+		return true
+	}
 	if sess.waitingPeriodRange {
 		from, to, err := parseDateRange(ctx.Text)
 		if err != nil {
@@ -935,6 +949,14 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 		sess.waitingLearningWords = true
 		sess.learningCollectionID = id
 		d.learning.PromptAddWords(ctx, id, false)
+	case strings.HasPrefix(data, learningbtn.LearningCBCollectionRename):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBCollectionRename)
+		if !ok {
+			return
+		}
+		sess.waitingLearningRenameCollection = true
+		sess.learningCollectionID = id
+		d.learning.PromptRenameCollection(ctx, id)
 	case strings.HasPrefix(data, learningbtn.LearningCBCollectionArchive):
 		id, ok := parseCallbackID(data, learningbtn.LearningCBCollectionArchive)
 		if !ok {
@@ -963,9 +985,7 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 		}
 		d.learning.DeleteArchivedCollectionForever(ctx, id)
 	case data == learningbtn.LearningCBStats:
-		// Statistics live on the main screen for now — re-render it in
-		// place rather than a separate screen.
-		d.learning.ShowLearningMenu(ctx)
+		d.learning.ShowLearningStatsDetail(ctx, true)
 	case data == learningbtn.LearningCBReviewOpen:
 		d.setScreen(ctx.UserID, screenLearningReviewPick)
 		d.learning.ShowReviewCollectionPicker(ctx, true)
