@@ -19,6 +19,11 @@ type EntryService interface {
 	// ListUsersPage returns one page of registered users, newest first
 	// (admin listing).
 	ListUsersPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error)
+	// ListAllTelegramIDs returns every registered user's Telegram id
+	// (admin broadcast).
+	ListAllTelegramIDs(ctx context.Context) ([]int64, error)
+	// DeleteUser permanently removes a user and everything owned by them.
+	DeleteUser(ctx context.Context, dbUserID int64) error
 }
 
 type entryService struct {
@@ -80,4 +85,17 @@ func (s *entryService) ListUsersPage(ctx context.Context, limit, offset int) ([]
 		offset = 0
 	}
 	return s.repo.ListPage(ctx, limit, offset)
+}
+
+// ListAllTelegramIDs returns every registered user's Telegram id.
+func (s *entryService) ListAllTelegramIDs(ctx context.Context) ([]int64, error) {
+	return s.repo.ListAllTelegramIDs(ctx)
+}
+
+// DeleteUser permanently removes a user and everything owned by them.
+func (s *entryService) DeleteUser(ctx context.Context, dbUserID int64) error {
+	if dbUserID <= 0 {
+		return models.ErrUserNotFound
+	}
+	return s.repo.Delete(ctx, dbUserID)
 }

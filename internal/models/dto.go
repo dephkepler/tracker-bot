@@ -52,6 +52,33 @@ type AdminUserRow struct {
 	CreatedAt time.Time
 }
 
+// AdminOverviewStats aggregates bot-wide usage numbers for the admin
+// "📊 Overview" screen.
+type AdminOverviewStats struct {
+	TotalUsers         int
+	ActiveTrackTimers  int
+	ActiveReviewPushes int
+	TotalActivities    int
+	TotalCollections   int
+	TotalLearningWords int
+}
+
+// AdminUserDetail is the admin's per-user drill-down view — profile fields
+// plus cross-domain usage counts.
+type AdminUserDetail struct {
+	DBID             int64
+	TgUserID         int64
+	UserName         *string
+	Language         *string
+	TimeZone         *string
+	CreatedAt        time.Time
+	ActivitiesCount  int
+	CollectionsCount int
+	LearningWords    int
+	TrackTimerActive bool
+	ReviewsActive    bool
+}
+
 // TimerDueUser represents one user that should receive timer prompt now.
 type TimerDueUser struct {
 	DBUserID    int64

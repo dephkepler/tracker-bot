@@ -41,6 +41,11 @@ type userSession struct {
 	// used while waitingLearningWords is true.
 	learningCollectionID int64
 
+	waitingAdminBroadcastText bool
+	// pendingBroadcastText holds the typed broadcast message between the
+	// confirm-step prompt and the admin tapping Send/Cancel on it.
+	pendingBroadcastText string
+
 	reportSelected map[int64]bool
 	reportFrom     time.Time
 	reportTo       time.Time

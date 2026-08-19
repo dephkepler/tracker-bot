@@ -38,6 +38,7 @@ type Module struct {
 	learningsvc     service.LearningService
 	subscriptionsvc service.SubscriptionService
 	entrysvc        service.EntryService
+	adminsvc        service.AdminService
 	// adminUsername is the Telegram @handle (no leading "@") allowed to see
 	// the admin screen — see IsAdmin. Empty disables the admin feature
 	// entirely rather than matching everyone.
@@ -49,7 +50,7 @@ type Module struct {
 const adminUsersPageSize = 15
 
 // New creates handler module with all service dependencies.
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminUsername string) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, adminUsername string) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -58,6 +59,7 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		learningsvc:     learningsvc,
 		subscriptionsvc: subscriptionsvc,
 		entrysvc:        entrysvc,
+		adminsvc:        adminsvc,
 		adminUsername:   strings.TrimPrefix(strings.TrimSpace(adminUsername), "@"),
 	}
 }
@@ -191,6 +193,152 @@ func (m *Module) sendOrEditAdminUsers(ctx *tgctx.MsgContext, offset int, inPlace
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ReplyMarkup = markup
 	_, _ = m.bot.Send(msg)
+}
+
+// ShowAdminOverview renders bot-wide usage stats. Silently does nothing for
+// a non-admin caller.
+func (m *Module) ShowAdminOverview(ctx *tgctx.MsgContext) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	stats, err := m.adminsvc.GetOverviewStats(ctx.Ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("get overview stats failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load overview."))
+		return
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, admin.OverviewStatsText(stats)))
+}
+
+// ShowAdminUserDetail renders one user's drill-down view. Silently does
+// nothing for a non-admin caller.
+func (m *Module) ShowAdminUserDetail(ctx *tgctx.MsgContext, dbID int64, edit bool) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	detail, err := m.adminsvc.GetUserDetail(ctx.Ctx, dbID)
+	if err != nil {
+		log.Error().Err(err).Msg("get user detail failed")
+		m.sendOrEditAdmin(ctx, edit, "⚠️ User not found.", nil)
+		return
+	}
+	menu := admin.UserDetailInlineMenu(dbID, dbID == ctx.DBUserID)
+	m.sendOrEditAdmin(ctx, edit, admin.UserDetailText(detail), &menu)
+}
+
+// ShowAdminUserDeleteConfirm renders the "are you sure" step before
+// deleting a user. Silently does nothing for a non-admin caller.
+func (m *Module) ShowAdminUserDeleteConfirm(ctx *tgctx.MsgContext, dbID int64) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	if dbID == ctx.DBUserID {
+		m.sendOrEditAdmin(ctx, true, "⚠️ You can't delete your own admin account.", nil)
+		return
+	}
+	detail, err := m.adminsvc.GetUserDetail(ctx.Ctx, dbID)
+	if err != nil {
+		log.Error().Err(err).Msg("get user detail before delete failed")
+		m.sendOrEditAdmin(ctx, true, "⚠️ User not found.", nil)
+		return
+	}
+	menu := admin.UserDeleteConfirmInlineMenu(dbID)
+	m.sendOrEditAdmin(ctx, true, admin.UserDeleteConfirmText(detail), &menu)
+}
+
+// DeleteAdminUser permanently removes a user. Silently does nothing for a
+// non-admin caller.
+func (m *Module) DeleteAdminUser(ctx *tgctx.MsgContext, dbID int64) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	if dbID == ctx.DBUserID {
+		m.sendOrEditAdmin(ctx, true, "⚠️ You can't delete your own admin account.", nil)
+		return
+	}
+	if err := m.entrysvc.DeleteUser(ctx.Ctx, dbID); err != nil {
+		log.Error().Err(err).Msg("delete user failed")
+		m.sendOrEditAdmin(ctx, true, "⚠️ Failed to delete user.", nil)
+		return
+	}
+	menu := admin.BackToUsersInlineMenu()
+	m.sendOrEditAdmin(ctx, true, admin.UserDeletedText(dbID), &menu)
+}
+
+// sendOrEditAdmin sends a fresh message or edits the current inline message
+// — shared by the admin drill-down/overview screens.
+func (m *Module) sendOrEditAdmin(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
+	if edit && ctx.MessageID > 0 {
+		if menu != nil {
+			out := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
+			_, _ = m.bot.Send(out)
+			return
+		}
+		out := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
+		_, _ = m.bot.Send(out)
+		return
+	}
+	out := tgbotapi.NewMessage(ctx.ChatID, text)
+	if menu != nil {
+		out.ReplyMarkup = *menu
+	}
+	_, _ = m.bot.Send(out)
+}
+
+// PromptAdminBroadcast asks the admin to type the message to send to every
+// user. Silently does nothing for a non-admin caller.
+func (m *Module) PromptAdminBroadcast(ctx *tgctx.MsgContext) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, admin.BroadcastPromptText)
+	msg.ReplyMarkup = admin.BroadcastWaitingReplyMenu()
+	_, _ = m.bot.Send(msg)
+}
+
+// ShowAdminBroadcastConfirm previews the pending broadcast and its
+// recipient count before sending. Returns false (and sends nothing useful)
+// if the recipient list couldn't be loaded.
+func (m *Module) ShowAdminBroadcastConfirm(ctx *tgctx.MsgContext, text string) bool {
+	ids, err := m.entrysvc.ListAllTelegramIDs(ctx.Ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("list telegram ids for broadcast confirm failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to prepare broadcast. Please try again."))
+		return false
+	}
+	hide := tgbotapi.NewMessage(ctx.ChatID, admin.BroadcastConfirmText(text, len(ids)))
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+	msg := tgbotapi.NewMessage(ctx.ChatID, "👆")
+	msg.ReplyMarkup = admin.BroadcastConfirmInlineMenu()
+	_, _ = m.bot.Send(msg)
+	return true
+}
+
+// SendAdminBroadcast sends the pending text to every registered user,
+// tolerating individual send failures (e.g. a user blocked the bot).
+func (m *Module) SendAdminBroadcast(ctx *tgctx.MsgContext, text string) {
+	ids, err := m.entrysvc.ListAllTelegramIDs(ctx.Ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("list telegram ids for broadcast failed")
+		m.sendOrEditAdmin(ctx, true, "⚠️ Failed to load recipients.", nil)
+		return
+	}
+
+	sent, failed := 0, 0
+	for _, tgID := range ids {
+		if _, err := m.bot.Send(tgbotapi.NewMessage(tgID, text)); err != nil {
+			failed++
+			continue
+		}
+		sent++
+	}
+	m.sendOrEditAdmin(ctx, true, admin.BroadcastResultText(sent, failed), nil)
+}
+
+// CancelAdminBroadcast abandons a pending broadcast.
+func (m *Module) CancelAdminBroadcast(ctx *tgctx.MsgContext) {
+	m.sendOrEditAdmin(ctx, true, "❌ Broadcast cancelled.", nil)
 }
 
 // ShowProfileMenu loads profile stats and renders profile screen.

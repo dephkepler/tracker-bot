@@ -371,12 +371,59 @@ func (d *Dispatcher) handleAdminCallback(ctx *tgctx.MsgContext, data string) {
 			return
 		}
 		d.entry.ShowAdminUsersMenuInPlace(ctx, int(offset))
+	case strings.HasPrefix(data, adminbtn.CBUserDeleteAsk):
+		id, ok := parseCallbackID(data, adminbtn.CBUserDeleteAsk)
+		if !ok {
+			return
+		}
+		d.entry.ShowAdminUserDeleteConfirm(ctx, id)
+	case strings.HasPrefix(data, adminbtn.CBUserDeleteConfirm):
+		id, ok := parseCallbackID(data, adminbtn.CBUserDeleteConfirm)
+		if !ok {
+			return
+		}
+		d.entry.DeleteAdminUser(ctx, id)
+	case strings.HasPrefix(data, adminbtn.CBUserDetail):
+		id, ok := parseCallbackID(data, adminbtn.CBUserDetail)
+		if !ok {
+			return
+		}
+		d.entry.ShowAdminUserDetail(ctx, id, true)
+	case data == adminbtn.CBBroadcastConfirm:
+		sess := d.sessions.get(ctx.UserID)
+		text := sess.pendingBroadcastText
+		sess.pendingBroadcastText = ""
+		d.entry.SendAdminBroadcast(ctx, text)
+	case data == adminbtn.CBBroadcastCancel:
+		d.sessions.get(ctx.UserID).pendingBroadcastText = ""
+		d.entry.CancelAdminBroadcast(ctx)
 	}
 }
 
 // handleUserState handles temporary per-user states (FSM-like flow).
 func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 	sess := d.sessions.get(ctx.UserID)
+
+	if sess.waitingAdminBroadcastText {
+		if ctx.Text == adminbtn.LabelCancel {
+			sess.waitingAdminBroadcastText = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Broadcast cancelled.")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.entry.ShowAdminMenu(ctx)
+			return true
+		}
+		text := strings.TrimSpace(ctx.Text)
+		if text == "" {
+			_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Message can't be empty. Try again:"))
+			return true
+		}
+		if d.entry.ShowAdminBroadcastConfirm(ctx, text) {
+			sess.waitingAdminBroadcastText = false
+			sess.pendingBroadcastText = text
+		}
+		return true
+	}
 
 	if sess.waitingActivityName {
 		if d.isTrackButtonText(ctx) {
@@ -565,6 +612,21 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 		d.setScreen(ctx.UserID, screenAdminUsers)
 		d.entry.ShowAdminUsersMenu(ctx, 0)
+		return
+	case adminbtn.ReplyButtonOverview:
+		if !d.entry.IsAdmin(ctx) || !d.isScreen(ctx.UserID, screenAdmin) {
+			d.replyUseButtons(ctx)
+			return
+		}
+		d.entry.ShowAdminOverview(ctx)
+		return
+	case adminbtn.ReplyButtonBroadcast:
+		if !d.entry.IsAdmin(ctx) || !d.isScreen(ctx.UserID, screenAdmin) {
+			d.replyUseButtons(ctx)
+			return
+		}
+		d.sessions.get(ctx.UserID).waitingAdminBroadcastText = true
+		d.entry.PromptAdminBroadcast(ctx)
 		return
 	}
 

@@ -19,10 +19,37 @@ const CBOpen = "admin:open"
 // "<CBUsersPage><offset>".
 const CBUsersPage = "admin:users:page:"
 
+// CBUserDetail opens one user's drill-down view: "<CBUserDetail><dbID>".
+const CBUserDetail = "admin:user:detail:"
+
+// CBUserDeleteAsk shows the delete confirmation step for one user.
+// CBUserDeleteConfirm actually performs the deletion.
+const (
+	CBUserDeleteAsk     = "admin:user:delete:ask:"
+	CBUserDeleteConfirm = "admin:user:delete:confirm:"
+)
+
+// CBOverview refreshes/opens the bot-wide overview stats.
+const CBOverview = "admin:overview:open"
+
+// CBBroadcastConfirm/CBBroadcastCancel act on the pending broadcast text
+// held in the dispatcher session (see userSession.pendingBroadcastText).
+const (
+	CBBroadcastConfirm = "admin:broadcast:confirm"
+	CBBroadcastCancel  = "admin:broadcast:cancel"
+)
+
 const (
 	LabelPrev = "◀ Prev"
 	LabelNext = "Next ▶"
 	LabelHome = "🏠 Home"
+	LabelBack = "◀ Back"
+
+	LabelDelete        = "🗑 Delete user"
+	LabelConfirmDelete = "⚠️ Confirm delete"
+	LabelCancel        = "❌ Cancel"
+
+	LabelSend = "✅ Send"
 )
 
 // Reply buttons. ReplyButtonBack/ReplyButtonHome intentionally reuse the
@@ -31,17 +58,29 @@ const (
 // screen-specific behavior is added there by extending the isScreen switch,
 // not by duplicating a case for an identical button string.
 const (
-	ReplyButtonUsers = "👥 Users"
-	ReplyButtonBack  = "◀ Back"
-	ReplyButtonHome  = "🏠 Home"
+	ReplyButtonUsers     = "👥 Users"
+	ReplyButtonBroadcast = "📢 Broadcast"
+	ReplyButtonOverview  = "📊 Overview"
+	ReplyButtonBack      = "◀ Back"
+	ReplyButtonHome      = "🏠 Home"
 )
 
 // MenuReplyMenu is the admin landing screen: pick "Users" to see the
-// listing, or leave via Back/Home.
+// listing, "Broadcast" to message everyone, "Overview" for bot-wide stats,
+// or leave via Back/Home.
 func MenuReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(ReplyButtonUsers)),
+		buttonbuilder.RR(buttonbuilder.RB(ReplyButtonBroadcast), buttonbuilder.RB(ReplyButtonOverview)),
 		buttonbuilder.RR(buttonbuilder.RB(ReplyButtonBack), buttonbuilder.RB(ReplyButtonHome)),
+	)
+}
+
+// BroadcastWaitingReplyMenu is shown while the bot is waiting for the
+// broadcast message text.
+func BroadcastWaitingReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+	return buttonbuilder.RK(
+		buttonbuilder.RR(buttonbuilder.RB(LabelCancel)),
 	)
 }
 
@@ -53,13 +92,14 @@ func UsersReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	)
 }
 
-// UsersInlineMenu renders one row per user (display-only, "noop" — this is
-// a listing, not a picker) plus Prev/Next paging and a way back home.
+// UsersInlineMenu renders one row per user — tap opens that user's
+// drill-down view (see UserDetailInlineMenu) — plus Prev/Next paging and a
+// way back home.
 func UsersInlineMenu(users []models.AdminUserRow, offset, limit, total int) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(users)+2)
 	for _, u := range users {
 		label := fmt.Sprintf("#%d %s — %s", u.DBID, usernameLabel(u.UserName), u.CreatedAt.Format("2006-01-02"))
-		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(label, "noop")))
+		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(label, fmt.Sprintf("%s%d", CBUserDetail, u.DBID))))
 	}
 
 	nav := make([]tgbotapi.InlineKeyboardButton, 0, 2)
@@ -86,4 +126,46 @@ func usernameLabel(userName *string) string {
 		return "(no username)"
 	}
 	return "@" + *userName
+}
+
+// UserDetailInlineMenu shows a delete action (omitted entirely when viewing
+// the admin's own account — see isSelf) plus a way back to the list.
+func UserDetailInlineMenu(dbID int64, isSelf bool) tgbotapi.InlineKeyboardMarkup {
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, 2)
+	if !isSelf {
+		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LabelDelete, fmt.Sprintf("%s%d", CBUserDeleteAsk, dbID))))
+	}
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LabelBack, CBUsersPage+"0")))
+	return buttonbuilder.IK(rows...)
+}
+
+// BackToUsersInlineMenu is a single "back to the users list" row, used
+// after an action that leaves nothing else useful to show (e.g. a
+// completed delete).
+func BackToUsersInlineMenu() tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(buttonbuilder.IB(LabelBack, CBUsersPage+"0")),
+	)
+}
+
+// UserDeleteConfirmInlineMenu is the "are you sure" step before an
+// irreversible delete.
+func UserDeleteConfirmInlineMenu(dbID int64) tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(
+			buttonbuilder.IB(LabelConfirmDelete, fmt.Sprintf("%s%d", CBUserDeleteConfirm, dbID)),
+			buttonbuilder.IB(LabelCancel, fmt.Sprintf("%s%d", CBUserDetail, dbID)),
+		),
+	)
+}
+
+// BroadcastConfirmInlineMenu is the "are you sure" step before sending a
+// message to every registered user.
+func BroadcastConfirmInlineMenu() tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(
+			buttonbuilder.IB(LabelSend, CBBroadcastConfirm),
+			buttonbuilder.IB(LabelCancel, CBBroadcastCancel),
+		),
+	)
 }

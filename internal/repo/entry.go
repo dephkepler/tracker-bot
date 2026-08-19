@@ -15,6 +15,13 @@ type EntryRepository interface {
 	Create(ctx context.Context, stats *models.UserInput) (int64, error)
 	CountAll(ctx context.Context) (int, error)
 	ListPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error)
+	// ListAllTelegramIDs returns every registered user's Telegram id —
+	// used for admin broadcast.
+	ListAllTelegramIDs(ctx context.Context) ([]int64, error)
+	// Delete permanently removes a user and everything owned by them
+	// (activities, sessions, timer settings, learning data, ...) via the
+	// existing ON DELETE CASCADE foreign keys.
+	Delete(ctx context.Context, dbUserID int64) error
 }
 type entryRepository struct {
 	db *pgxpool.Pool
@@ -105,6 +112,40 @@ func (r *entryRepository) ListPage(ctx context.Context, limit, offset int) ([]mo
 		return nil, err
 	}
 	return out, nil
+}
+
+// ListAllTelegramIDs returns every registered user's Telegram id.
+func (r *entryRepository) ListAllTelegramIDs(ctx context.Context) ([]int64, error) {
+	rows, err := r.db.Query(ctx, `SELECT tg_user_id FROM users;`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Delete permanently removes a user by database id.
+func (r *entryRepository) Delete(ctx context.Context, dbUserID int64) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM users WHERE id = $1;`, dbUserID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return models.ErrUserNotFound
+	}
+	return nil
 }
 
 func (r *entryRepository) Create(ctx context.Context, user *models.UserInput) (int64, error) {

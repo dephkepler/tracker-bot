@@ -36,7 +36,7 @@ func TestModule_IsAdmin(t *testing.T) {
 // a "@alaamov"-style config value the same way as a bare "alaamov", since
 // it's easy to paste the @ into an env var by habit.
 func TestNew_StripsLeadingAtFromAdminUsername(t *testing.T) {
-	m := New(nil, nil, nil, nil, nil, nil, nil, "@alaamov")
+	m := New(nil, nil, nil, nil, nil, nil, nil, nil, "@alaamov")
 	if !m.IsAdmin(&tgctx.MsgContext{Username: "alaamov"}) {
 		t.Fatal("IsAdmin() = false, want true after stripping leading @ from configured admin username")
 	}
