@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 	"tracker-bot/pkg/buttonbuilder"
 
@@ -13,57 +14,62 @@ import (
 
 // Inline button menus
 
-func TrackEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
+func TrackEntryInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackButtonSelectActivity, TrackCBActivitySelect),
-			buttonbuilder.IB(TrackButtonCreateActivity, TrackCBActivityCreate),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonSelectActivity), TrackCBActivitySelect),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonCreateActivity), TrackCBActivityCreate),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackButtonViewReports, TrackCBReportSummary),
-			buttonbuilder.IB(TrackButtonViewArchive, TrackCBArchiveOpen),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonViewReports), TrackCBReportSummary),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonViewArchive), TrackCBArchiveOpen),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackButtonBackHome, "go_home"),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonHome), "go_home"),
 		),
 	)
 }
 
 // Reply button menus
 
-func TrackActivityListReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+func TrackActivityManageReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonToday), buttonbuilder.RB(TrackButtonBack)),
+		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonActivityActivate)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonActivityDelete)),
+		),
+		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonViewArchive))),
+		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
+		),
 	)
 }
 
-func TrackActivityReportReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+func TrackArchiveReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonReportPeriod), buttonbuilder.RB(TrackButtonReportWeek)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonReportExport), buttonbuilder.RB(TrackButtonToday)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonReportDelete), buttonbuilder.RB(TrackButtonBack)),
+		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonSelectActivity)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonViewArchive)),
+		),
+		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
+		),
 	)
 }
 
-func TrackActivityManageReplyMenu() tgbotapi.ReplyKeyboardMarkup {
-	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonActivityActivate), buttonbuilder.RB(TrackButtonActivityDelete)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonViewArchive)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
-	)
-}
-
-func TrackArchiveReplyMenu() tgbotapi.ReplyKeyboardMarkup {
-	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonSelectActivity), buttonbuilder.RB(TrackButtonViewArchive)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
-	)
-}
-
-func TrackReportsReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+// TrackReportsReplyMenu renders the reports screen's reply keyboard.
+// Reports itself isn't localized yet (Phase 3, still English) — only the
+// Back/Home row uses lang here, since those are the same universal nav
+// buttons used everywhere else in the app.
+func TrackReportsReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonToday), buttonbuilder.RB(TrackButtonPeriod)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
+		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
+		),
 	)
 }
 
@@ -73,63 +79,86 @@ func TrackReportsReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 // interval and deleting a custom one both happen by tapping its button text
 // (see FormatTimerButton/ParseTimerButtonMinutes) rather than through an
 // inline keyboard.
-func TrackTimerReplyMenu(builtIn, custom []int) tgbotapi.ReplyKeyboardMarkup {
+func TrackTimerReplyMenu(lang i18n.Lang, builtIn, custom []int) tgbotapi.ReplyKeyboardMarkup {
 	rows := make([][]tgbotapi.KeyboardButton, 0, 4)
-	rows = append(rows, timerIntervalRows(builtIn, TrackTimerActivatePrefix)...)
-	rows = append(rows, timerIntervalRows(custom, TrackTimerActivatePrefix)...)
+	rows = append(rows, timerIntervalRows(lang, builtIn, TrackTimerActivatePrefix)...)
+	rows = append(rows, timerIntervalRows(lang, custom, TrackTimerActivatePrefix)...)
 
 	if len(custom) > 0 {
 		rows = append(rows, buttonbuilder.RR(
-			buttonbuilder.RB(TrackButtonTimerCreate),
-			buttonbuilder.RB(TrackButtonTimerDelete),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonTimerCreate)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonTimerDelete)),
 		))
 	} else {
-		rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(TrackButtonTimerCreate)))
+		rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonTimerCreate))))
 	}
-	rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)))
+	rows = append(rows, buttonbuilder.RR(
+		buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
+		buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
+	))
 	return buttonbuilder.RK(rows...)
 }
 
 // TrackTimerDeleteReplyMenu lists custom intervals as buttons; tapping one
 // deletes it (see ParseTimerButtonMinutes with TrackTimerDeletePrefix).
-func TrackTimerDeleteReplyMenu(custom []int) tgbotapi.ReplyKeyboardMarkup {
-	rows := timerIntervalRows(custom, TrackTimerDeletePrefix)
-	rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack)))
+func TrackTimerDeleteReplyMenu(lang i18n.Lang, custom []int) tgbotapi.ReplyKeyboardMarkup {
+	rows := timerIntervalRows(lang, custom, TrackTimerDeletePrefix)
+	rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack))))
 	return buttonbuilder.RK(rows...)
 }
 
-// timerIntervalRows renders interval minutes as "<prefix><N> min" buttons,
-// two per row.
-func timerIntervalRows(intervals []int, prefix string) [][]tgbotapi.KeyboardButton {
+// timerIntervalRows renders interval minutes as "<prefix><N> <unit>"
+// buttons, two per row.
+func timerIntervalRows(lang i18n.Lang, intervals []int, prefix string) [][]tgbotapi.KeyboardButton {
 	rows := make([][]tgbotapi.KeyboardButton, 0, (len(intervals)+1)/2)
 	for i := 0; i < len(intervals); i += 2 {
 		if i+1 < len(intervals) {
 			rows = append(rows, buttonbuilder.RR(
-				buttonbuilder.RB(FormatTimerButton(prefix, intervals[i])),
-				buttonbuilder.RB(FormatTimerButton(prefix, intervals[i+1])),
+				buttonbuilder.RB(FormatTimerButton(lang, prefix, intervals[i])),
+				buttonbuilder.RB(FormatTimerButton(lang, prefix, intervals[i+1])),
 			))
 		} else {
-			rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(FormatTimerButton(prefix, intervals[i]))))
+			rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(FormatTimerButton(lang, prefix, intervals[i]))))
 		}
 	}
 	return rows
 }
 
-// FormatTimerButton renders one timer interval as reply-button text.
-func FormatTimerButton(prefix string, minutes int) string {
-	return fmt.Sprintf("%s%d min", prefix, minutes)
+// FormatTimerButton renders one timer interval as reply-button text, e.g.
+// "⏱ 15 min" / "⏱ 15 мин".
+func FormatTimerButton(lang i18n.Lang, prefix string, minutes int) string {
+	return fmt.Sprintf("%s%d %s", prefix, minutes, i18n.T(lang, i18n.KeyTrackMinutesUnit))
 }
 
 // ParseTimerButtonMinutes extracts the interval from a timer reply-button's
-// text (the inverse of FormatTimerButton). ok is false if text isn't
-// "<prefix><N> min" for a positive N — in particular it correctly rejects
-// TrackButtonTimerDelete ("🗑 Delete Timer") even though it shares the "🗑 "
-// prefix with delete-picker buttons, since it doesn't end in " min".
-func ParseTimerButtonMinutes(text, prefix string) (int, bool) {
-	if !strings.HasPrefix(text, prefix) || !strings.HasSuffix(text, " min") {
+// text (the inverse of FormatTimerButton). It tries lang's own minutes unit
+// first, then Default's — same cross-phase safety net as i18n.Key, for a
+// button that was rendered before the user's language was known/changed.
+// ok is false if text isn't "<prefix><N> <unit>" for a positive N — in
+// particular it correctly rejects a translated TrackButtonTimerDelete
+// ("🗑 Timer löschen" etc) even though it shares the "🗑 " prefix with
+// delete-picker buttons, since it doesn't end in a minutes unit at all.
+func ParseTimerButtonMinutes(lang i18n.Lang, text, prefix string) (int, bool) {
+	if n, ok := parseTimerButtonMinutesUnit(text, prefix, i18n.T(lang, i18n.KeyTrackMinutesUnit)); ok {
+		return n, true
+	}
+	if lang != i18n.Default {
+		if n, ok := parseTimerButtonMinutesUnit(text, prefix, i18n.T(i18n.Default, i18n.KeyTrackMinutesUnit)); ok {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func parseTimerButtonMinutesUnit(text, prefix, unit string) (int, bool) {
+	if !strings.HasPrefix(text, prefix) {
 		return 0, false
 	}
-	numStr := strings.TrimSuffix(strings.TrimPrefix(text, prefix), " min")
+	suffix := " " + unit
+	if !strings.HasSuffix(text, suffix) {
+		return 0, false
+	}
+	numStr := strings.TrimSuffix(strings.TrimPrefix(text, prefix), suffix)
 	n, err := strconv.Atoi(numStr)
 	if err != nil || n <= 0 {
 		return 0, false
@@ -137,7 +166,7 @@ func ParseTimerButtonMinutes(text, prefix string) (int, bool) {
 	return n, true
 }
 
-func TrackActivitiesInlineMenu(items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {
+func TrackActivitiesInlineMenu(lang i18n.Lang, items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+1)
 	for _, item := range items {
 		if strings.TrimSpace(item.Name) == "" {
@@ -161,16 +190,16 @@ func TrackActivitiesInlineMenu(items []models.TrackActivityItem) tgbotapi.Inline
 	}
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelArchiveSelected, TrackCBArchiveSelected),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelArchiveSelected), TrackCBArchiveSelected),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelBack, "back_to_main"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelBack), "back_to_main"),
 	))
 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func TrackPromptInlineMenu(items []models.TrackActivityItem, intervalMin int) tgbotapi.InlineKeyboardMarkup {
+func TrackPromptInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, intervalMin int) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+1)
 	for _, item := range items {
 		if strings.TrimSpace(item.Name) == "" {
@@ -186,12 +215,12 @@ func TrackPromptInlineMenu(items []models.TrackActivityItem, intervalMin int) tg
 		))
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelStopTimer, TrackCBPromptStopTimer),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelStopTimer), TrackCBPromptStopTimer),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func TrackArchiveInlineMenu(items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {
+func TrackArchiveInlineMenu(lang i18n.Lang, items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)*2+1)
 	for _, item := range items {
 		if strings.TrimSpace(item.Name) == "" {
@@ -205,42 +234,46 @@ func TrackArchiveInlineMenu(items []models.TrackActivityItem) tgbotapi.InlineKey
 			tgbotapi.NewInlineKeyboardButtonData(TrackLabelArchiveItemPrefix+title, "noop"),
 		))
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-			tgbotapi.NewInlineKeyboardButtonData(TrackLabelRestore, fmt.Sprintf("%s%d", TrackCBArchiveRestore, item.ID)),
-			tgbotapi.NewInlineKeyboardButtonData(TrackLabelDeleteForever, fmt.Sprintf("%s%d", TrackCBArchiveDelete, item.ID)),
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelRestore), fmt.Sprintf("%s%d", TrackCBArchiveRestore, item.ID)),
+			tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelDeleteForever), fmt.Sprintf("%s%d", TrackCBArchiveDelete, item.ID)),
 		))
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelActiveActivities, TrackCBArchiveToActive),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelActiveActivities), TrackCBArchiveToActive),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
-		tgbotapi.NewInlineKeyboardButtonData(TrackLabelBack, "back_to_main"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelBack), "back_to_main"),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func TrackCreateSuccessInlineMenu() tgbotapi.InlineKeyboardMarkup {
+func TrackCreateSuccessInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelOpenActivities, TrackCBOpenActivities),
-			buttonbuilder.IB(TrackLabelCreateAnother, TrackCBCreateAnother),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelOpenActivities), TrackCBOpenActivities),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelCreateAnother), TrackCBCreateAnother),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelBack, "back_to_main"),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelBack), "back_to_main"),
 		),
 	)
 }
 
-func TrackArchiveSuccessInlineMenu() tgbotapi.InlineKeyboardMarkup {
+func TrackArchiveSuccessInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelOpenArchive, TrackCBOpenArchive),
-			buttonbuilder.IB(TrackLabelOpenActivities, TrackCBOpenActivities),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelOpenArchive), TrackCBOpenArchive),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelOpenActivities), TrackCBOpenActivities),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(TrackLabelBack, "back_to_main"),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelBack), "back_to_main"),
 		),
 	)
 }
+
+// ---------------------------------------------------------------------
+// Reports (Today/Calendar/Period) — not yet localized (Phase 3), still
+// plain English literals below, same as before Phase 2.
 
 func TrackReportsHubInlineMenu() tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(

@@ -3,6 +3,7 @@ package track
 import (
 	"fmt"
 	"time"
+	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 )
 
@@ -23,17 +24,17 @@ type TrackActivityReportStats struct {
 	ReportDate           string
 }
 
-func TrackingMenuText(stats models.MainStats) string {
+func TrackingMenuText(lang i18n.Lang, stats models.MainStats) string {
 	target := 120 * time.Minute
-	progress := progressBar(stats.TodayTracked, target, 10)
+	progress := progressBar(lang, stats.TodayTracked, target, 10)
 	return fmt.Sprintf(
 		"%s\n\n%s *%s*\n%s *%s*\n`%s`\n%s *%d*\n%s *%d*\n",
-		TrackUIMainTitle,
-		TrackUIMainLabelCurrentActivity, safeText(stats.CurrentActivityName),
-		TrackUIMainLabelTodayTime, formatDuration(stats.TodayTracked),
+		i18n.T(lang, i18n.KeyTrackMainTitle),
+		i18n.T(lang, i18n.KeyTrackMainCurrentActivity), safeText(stats.CurrentActivityName),
+		i18n.T(lang, i18n.KeyTrackMainTodayTime), formatDuration(stats.TodayTracked),
 		progress,
-		TrackUIMainLabelStreak, stats.StreakDays,
-		TrackUIMainLabelTodayCount, stats.TodaySessions,
+		i18n.T(lang, i18n.KeyTrackMainStreak), stats.StreakDays,
+		i18n.T(lang, i18n.KeyTrackMainTodayCount), stats.TodaySessions,
 	)
 }
 
@@ -63,7 +64,7 @@ func safeText(s string) string {
 	return s
 }
 
-func progressBar(value, target time.Duration, width int) string {
+func progressBar(lang i18n.Lang, value, target time.Duration, width int) string {
 	if width <= 0 {
 		width = 10
 	}
@@ -94,5 +95,5 @@ func progressBar(value, target time.Duration, width int) string {
 			bar += "░"
 		}
 	}
-	return fmt.Sprintf("Progress: %s (%d%%, target %s)", bar, percent, formatDuration(target))
+	return i18n.T(lang, i18n.KeyTrackMainProgress, bar, percent, formatDuration(target))
 }

@@ -81,6 +81,7 @@ var catalog = mergeCatalogs(
 	catalogCommon,
 	catalogEntry,
 	catalogProfile,
+	catalogTrack,
 )
 
 func mergeCatalogs(parts ...map[string]entry) map[string]entry {

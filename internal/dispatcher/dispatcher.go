@@ -464,52 +464,31 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 	// ("⏱ 15 min" / "🗑 15 min") rather than through inline callback_data —
 	// checked here, gated by screen, before the exact-match switch below.
 	if d.isScreen(ctx.UserID, screenTrackTimer) {
-		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
+		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Language, ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
 			d.track.ActivateTrackTimer(ctx, minutes)
 			d.setScreen(ctx.UserID, screenHome)
 			return
 		}
 	}
 	if d.isScreen(ctx.UserID, screenTrackTimerDel) {
-		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
+		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Language, ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
 			d.track.DeleteCustomTimer(ctx, minutes)
 			d.setScreen(ctx.UserID, screenTrackTimer)
 			return
 		}
 	}
 
-	// "👑 Admin" is translated (see i18n.KeyCommonAdmin), so it can't be a
-	// literal switch case below like the other still-untranslated buttons.
-	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonAdmin {
-		if !d.entry.IsAdmin(ctx) {
-			d.replyUseButtons(ctx)
+	// Buttons whose text is translated (see internal/i18n) can't be matched
+	// as literal switch cases below — resolve to a stable key first (see
+	// handleTranslatedButton). Falls through to the literal-text switch for
+	// buttons not yet converted (Reports, Admin's "👥 Users").
+	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok {
+		if d.handleTranslatedButton(ctx, key) {
 			return
 		}
-		d.setScreen(ctx.UserID, screenAdmin)
-		d.entry.ShowAdminMenu(ctx)
-		return
 	}
 
 	switch ctx.Text {
-	case trackbtn.TrackButtonActivityDelete:
-		if !d.isScreen(ctx.UserID, screenTrackManage) {
-			d.replyUseButtons(ctx)
-			return
-		}
-		d.track.DeleteSelectedActivities(ctx)
-		return
-	case trackbtn.TrackButtonActivityActivate:
-		if !d.isScreen(ctx.UserID, screenTrackManage, screenTrackMain) {
-			d.replyUseButtons(ctx)
-			return
-		}
-		d.setScreen(ctx.UserID, screenTrackTimer)
-		d.track.ShowTrackTimerMenu(ctx)
-		return
-	case trackbtn.TrackButtonViewArchive:
-		d.setScreen(ctx.UserID, screenTrackArchive)
-		d.track.ShowArchiveMenu(ctx)
-		return
 	case trackbtn.TrackButtonToday:
 		if !d.isScreen(ctx.UserID, screenTrackReports) {
 			d.replyUseButtons(ctx)
@@ -517,24 +496,83 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 		d.track.ShowTodayReport(ctx)
 		return
-	case trackbtn.TrackButtonTimerCreate:
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+	case trackbtn.TrackButtonPeriod:
+		if !d.isScreen(ctx.UserID, screenTrackReports) {
 			d.replyUseButtons(ctx)
 			return
 		}
-		d.sessions.get(ctx.UserID).waitingCustomTimerMinutes = true
-		d.track.PromptCreateCustomTimer(ctx)
+		d.setScreen(ctx.UserID, screenTrackReports)
+		d.ensurePeriodDefaults(ctx.UserID)
+		d.showPeriodMenu(ctx)
 		return
-	case trackbtn.TrackButtonTimerDelete:
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+	case adminbtn.ReplyButtonUsers:
+		if !d.entry.IsAdmin(ctx) || !d.isScreen(ctx.UserID, screenAdmin) {
 			d.replyUseButtons(ctx)
 			return
+		}
+		d.setScreen(ctx.UserID, screenAdminUsers)
+		d.entry.ShowAdminUsersMenu(ctx, 0)
+		return
+	}
+
+	out := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonFallback))
+	if _, err := d.bot.Send(out); err != nil {
+		log.Error().Err(err).Msg("send fallback failed")
+	}
+}
+
+// handleTranslatedButton routes a reply-button tap that resolved to a
+// stable i18n key (see i18n.Key) rather than literal Go-constant text.
+// Returns false when key isn't one of the buttons handled here, so the
+// caller falls through to the literal-text switch for buttons not yet
+// localized (Reports, Admin's "👥 Users").
+func (d *Dispatcher) handleTranslatedButton(ctx *tgctx.MsgContext, key string) bool {
+	switch key {
+	case i18n.KeyCommonAdmin:
+		if !d.entry.IsAdmin(ctx) {
+			d.replyUseButtons(ctx)
+			return true
+		}
+		d.setScreen(ctx.UserID, screenAdmin)
+		d.entry.ShowAdminMenu(ctx)
+		return true
+	case i18n.KeyTrackButtonActivityDelete:
+		if !d.isScreen(ctx.UserID, screenTrackManage) {
+			d.replyUseButtons(ctx)
+			return true
+		}
+		d.track.DeleteSelectedActivities(ctx)
+		return true
+	case i18n.KeyTrackButtonActivityActivate:
+		if !d.isScreen(ctx.UserID, screenTrackManage, screenTrackMain) {
+			d.replyUseButtons(ctx)
+			return true
+		}
+		d.setScreen(ctx.UserID, screenTrackTimer)
+		d.track.ShowTrackTimerMenu(ctx)
+		return true
+	case i18n.KeyTrackButtonViewArchive:
+		d.setScreen(ctx.UserID, screenTrackArchive)
+		d.track.ShowArchiveMenu(ctx)
+		return true
+	case i18n.KeyTrackButtonTimerCreate:
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.replyUseButtons(ctx)
+			return true
+		}
+		d.sessions.get(ctx.UserID).waitingCustomTimerMinutes = true
+		d.track.PromptCreateCustomTimer(ctx)
+		return true
+	case i18n.KeyTrackButtonTimerDelete:
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.replyUseButtons(ctx)
+			return true
 		}
 		if d.track.ShowTrackTimerDeleteMenu(ctx) {
 			d.setScreen(ctx.UserID, screenTrackTimerDel)
 		}
-		return
-	case trackbtn.TrackButtonBack:
+		return true
+	case i18n.KeyCommonBack:
 		switch {
 		case d.isScreen(ctx.UserID, screenTrackReports):
 			d.track.ShowReportsHub(ctx, false)
@@ -553,38 +591,17 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		default:
 			d.replyUseButtons(ctx)
 		}
-		return
-	case trackbtn.TrackButtonPeriod:
-		if !d.isScreen(ctx.UserID, screenTrackReports) {
-			d.replyUseButtons(ctx)
-			return
-		}
-		d.setScreen(ctx.UserID, screenTrackReports)
-		d.ensurePeriodDefaults(ctx.UserID)
-		d.showPeriodMenu(ctx)
-		return
-	case trackbtn.TrackButtonSelectActivity:
+		return true
+	case i18n.KeyTrackButtonSelectActivity:
 		d.setScreen(ctx.UserID, screenTrackManage)
 		d.track.ShowTrackActivitySelectionMenu(ctx)
-		return
-	case trackbtn.TrackButtonBackHome:
+		return true
+	case i18n.KeyCommonHome:
 		d.setScreen(ctx.UserID, screenHome)
 		d.entry.ShowHomeMenu(ctx)
-		return
-	case adminbtn.ReplyButtonUsers:
-		if !d.entry.IsAdmin(ctx) || !d.isScreen(ctx.UserID, screenAdmin) {
-			d.replyUseButtons(ctx)
-			return
-		}
-		d.setScreen(ctx.UserID, screenAdminUsers)
-		d.entry.ShowAdminUsersMenu(ctx, 0)
-		return
+		return true
 	}
-
-	out := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonFallback))
-	if _, err := d.bot.Send(out); err != nil {
-		log.Error().Err(err).Msg("send fallback failed")
-	}
+	return false
 }
 
 // handleTrackCallback routes track-related inline callbacks.
@@ -761,24 +778,21 @@ func (d *Dispatcher) replyUseButtons(ctx *tgctx.MsgContext) {
 // can tell a stray button tap from actual input.
 func (d *Dispatcher) isTrackButtonText(ctx *tgctx.MsgContext) bool {
 	switch ctx.Text {
-	case trackbtn.TrackButtonActivityActivate,
-		trackbtn.TrackButtonActivityDelete,
-		trackbtn.TrackButtonBack,
-		trackbtn.TrackButtonBackHome,
-		trackbtn.TrackButtonViewArchive,
+	case trackbtn.TrackButtonToday,
 		trackbtn.TrackButtonPeriod,
-		trackbtn.TrackButtonTimerCreate,
-		trackbtn.TrackButtonTimerDelete,
 		adminbtn.ReplyButtonUsers:
 		return true
 	}
-	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonAdmin {
+	// Covers every translated nav/action button (Back/Home, Activate/
+	// Delete, Timer Create/Delete, View Archive, Select Activity, Admin) —
+	// see handleTranslatedButton for the full set this key space spans.
+	if _, ok := i18n.Key(ctx.Language, ctx.Text); ok {
 		return true
 	}
-	if _, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
+	if _, ok := trackbtn.ParseTimerButtonMinutes(ctx.Language, ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
 		return true
 	}
-	if _, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
+	if _, ok := trackbtn.ParseTimerButtonMinutes(ctx.Language, ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
 		return true
 	}
 	return false

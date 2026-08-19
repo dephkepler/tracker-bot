@@ -312,16 +312,16 @@ func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.tracksvc.GetMainStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("GetMainStats failed")
-		msg := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load tracking data. Please try again.")
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackLoadFailed))
 		_, _ = m.bot.Send(msg)
 		return
 	}
 
-	text := track.TrackingMenuText(stats)
+	text := track.TrackingMenuText(ctx.Language, stats)
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = track.TrackEntryInlineMenu()
+	msg.ReplyMarkup = track.TrackEntryInlineMenu(ctx.Language)
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send tracking menu failed")
@@ -332,7 +332,7 @@ func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
 func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 	text := "📈 Reports\n\nChoose a report type:"
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "📈")
-	msgReply.ReplyMarkup = track.TrackReportsReplyMenu()
+	msgReply.ReplyMarkup = track.TrackReportsReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msgReply)
 
 	if inPlace && ctx.MessageID > 0 {
@@ -608,10 +608,9 @@ func (m *Module) renderTodayReport(ctx *tgctx.MsgContext, stats models.ReportTod
 
 // PromptCreateActivity asks user to type a new activity name.
 func (m *Module) PromptCreateActivity(ctx *tgctx.MsgContext) {
-	text := "📌 *Create New Activity*\n\nEnter activity name:"
-	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreatePrompt))
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = track.TrackActivityManageReplyMenu()
+	msg.ReplyMarkup = track.TrackActivityManageReplyMenu(ctx.Language)
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send create activity prompt failed")
@@ -622,7 +621,7 @@ func (m *Module) PromptCreateActivity(ctx *tgctx.MsgContext) {
 func (m *Module) ProcessCreateActivity(ctx *tgctx.MsgContext) bool {
 	name := strings.TrimSpace(ctx.Text)
 	if name == "" {
-		msg := tgbotapi.NewMessage(ctx.ChatID, "Activity name cannot be empty.")
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreateEmptyName))
 		_, _ = m.bot.Send(msg)
 		return false
 	}
@@ -630,16 +629,16 @@ func (m *Module) ProcessCreateActivity(ctx *tgctx.MsgContext) bool {
 	activity, err := m.tracksvc.CreateActivity(ctx.Ctx, ctx.DBUserID, name, "")
 	if err != nil {
 		if err == models.ErrActivityExists {
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Activity already exists."))
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreateAlreadyExists)))
 			return false
 		}
 		log.Error().Err(err).Msg("create activity failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to create activity."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreateFailed)))
 		return false
 	}
 
-	confirm := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("Created: %s", activity.Name))
-	confirm.ReplyMarkup = track.TrackCreateSuccessInlineMenu()
+	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreateConfirmed, activity.Name))
+	confirm.ReplyMarkup = track.TrackCreateSuccessInlineMenu(ctx.Language)
 	_, _ = m.bot.Send(confirm)
 	return true
 }
@@ -649,13 +648,13 @@ func (m *Module) ShowTrackActivitySelectionMenu(ctx *tgctx.MsgContext) {
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list activities failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load activities."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageLoadFailed)))
 		return
 	}
 
 	if len(items) == 0 {
-		msg := tgbotapi.NewMessage(ctx.ChatID, "No activities yet. Create one first.")
-		msg.ReplyMarkup = track.TrackActivityManageReplyMenu()
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageEmpty))
+		msg.ReplyMarkup = track.TrackActivityManageReplyMenu(ctx.Language)
 		_, _ = m.bot.Send(msg)
 		return
 	}
@@ -663,12 +662,12 @@ func (m *Module) ShowTrackActivitySelectionMenu(ctx *tgctx.MsgContext) {
 	selectedCount := countSelectedActivities(items)
 
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "🗂")
-	msgReply.ReplyMarkup = track.TrackActivityManageReplyMenu()
+	msgReply.ReplyMarkup = track.TrackActivityManageReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msgReply)
 
-	msg := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("📂 Select Activity\n\nSelected: %d of %d", selectedCount, len(items)))
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageSelectTitle, selectedCount, len(items)))
 	msg.ParseMode = "HTML"
-	msg.ReplyMarkup = track.TrackActivitiesInlineMenu(items)
+	msg.ReplyMarkup = track.TrackActivitiesInlineMenu(ctx.Language, items)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -677,20 +676,20 @@ func (m *Module) HandleTrackToggleCallback(ctx *tgctx.MsgContext) {
 	payload := strings.TrimPrefix(ctx.Text, "act_toggle_:")
 	activityID, err := strconv.ParseInt(payload, 10, 64)
 	if err != nil {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Invalid activity id."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackInvalidActivityID)))
 		return
 	}
 
 	if err := m.tracksvc.ToggleSelectedActivity(ctx.Ctx, ctx.DBUserID, activityID); err != nil {
 		log.Error().Err(err).Msg("toggle activity failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to update activity selection."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageToggleFailed)))
 		return
 	}
 
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("reload activities failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to refresh activities."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageRefreshFailed)))
 		return
 	}
 
@@ -699,8 +698,8 @@ func (m *Module) HandleTrackToggleCallback(ctx *tgctx.MsgContext) {
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
 		ctx.ChatID,
 		ctx.MessageID,
-		fmt.Sprintf("📂 Select Activity\n\nSelected: %d of %d", selectedCount, len(items)),
-		track.TrackActivitiesInlineMenu(items),
+		i18n.T(ctx.Language, i18n.KeyTrackManageSelectTitle, selectedCount, len(items)),
+		track.TrackActivitiesInlineMenu(ctx.Language, items),
 	)
 	edit.ParseMode = "HTML"
 	if _, err := m.bot.Send(edit); err != nil {
@@ -713,11 +712,11 @@ func (m *Module) DeleteSelectedActivities(ctx *tgctx.MsgContext) {
 	deleted, err := m.tracksvc.DeleteSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("delete selected activities failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to delete selected activities."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageDeleteFailed)))
 		return
 	}
 
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🗑 Deleted: %d", deleted)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageDeleted, deleted)))
 	m.ShowTrackActivitySelectionMenu(ctx)
 }
 
@@ -726,19 +725,19 @@ func (m *Module) ArchiveSelectedActivities(ctx *tgctx.MsgContext) {
 	archived, err := m.tracksvc.ArchiveSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("archive selected activities failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to archive selected activities."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveFailed)))
 		return
 	}
 
 	if archived == 0 {
-		msg := tgbotapi.NewMessage(ctx.ChatID, "No selected activities to archive.")
-		msg.ReplyMarkup = track.TrackArchiveSuccessInlineMenu()
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveNoneSelected))
+		msg.ReplyMarkup = track.TrackArchiveSuccessInlineMenu(ctx.Language)
 		_, _ = m.bot.Send(msg)
 		return
 	}
 
-	msg := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("📦 Archived: %d", archived))
-	msg.ReplyMarkup = track.TrackArchiveSuccessInlineMenu()
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchived, archived))
+	msg.ReplyMarkup = track.TrackArchiveSuccessInlineMenu(ctx.Language)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -747,7 +746,7 @@ func (m *Module) ArchiveSelectedActivitiesInPlace(ctx *tgctx.MsgContext) {
 	archived, err := m.tracksvc.ArchiveSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("archive selected activities failed")
-		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, "⚠️ Failed to archive selected activities.")
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackArchiveFailed))
 		_, _ = m.bot.Send(edit)
 		return
 	}
@@ -756,8 +755,8 @@ func (m *Module) ArchiveSelectedActivitiesInPlace(ctx *tgctx.MsgContext) {
 		edit := tgbotapi.NewEditMessageTextAndMarkup(
 			ctx.ChatID,
 			ctx.MessageID,
-			"No selected activities to archive.",
-			track.TrackArchiveSuccessInlineMenu(),
+			i18n.T(ctx.Language, i18n.KeyTrackArchiveNoneSelected),
+			track.TrackArchiveSuccessInlineMenu(ctx.Language),
 		)
 		_, _ = m.bot.Send(edit)
 		return
@@ -766,8 +765,8 @@ func (m *Module) ArchiveSelectedActivitiesInPlace(ctx *tgctx.MsgContext) {
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
 		ctx.ChatID,
 		ctx.MessageID,
-		fmt.Sprintf("📦 Archived: %d", archived),
-		track.TrackArchiveSuccessInlineMenu(),
+		i18n.T(ctx.Language, i18n.KeyTrackArchived, archived),
+		track.TrackArchiveSuccessInlineMenu(ctx.Language),
 	)
 	_, _ = m.bot.Send(edit)
 }
@@ -788,16 +787,16 @@ func (m *Module) renderArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 	if err != nil {
 		log.Error().Err(err).Msg("list archive failed")
 		if edit && ctx.MessageID > 0 {
-			msg := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, "⚠️ Failed to load archive.")
+			msg := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackArchiveLoadFailed))
 			_, _ = m.bot.Send(msg)
 		} else {
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load archive."))
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveLoadFailed)))
 		}
 		return
 	}
 
 	if len(items) == 0 {
-		text := "Archive is empty."
+		text := i18n.T(ctx.Language, i18n.KeyTrackArchiveEmpty)
 		if edit && ctx.MessageID > 0 {
 			msg := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
 			_, _ = m.bot.Send(msg)
@@ -807,26 +806,26 @@ func (m *Module) renderArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 		return
 	}
 
-	text := fmt.Sprintf("🗄 Archive\n\nTotal archived: %d", len(items))
+	text := i18n.T(ctx.Language, i18n.KeyTrackArchiveTitle, len(items))
 	if edit && ctx.MessageID > 0 {
 		msgReply := tgbotapi.NewMessage(ctx.ChatID, "🗄")
-		msgReply.ReplyMarkup = track.TrackArchiveReplyMenu()
+		msgReply.ReplyMarkup = track.TrackArchiveReplyMenu(ctx.Language)
 		_, _ = m.bot.Send(msgReply)
 
 		msg := tgbotapi.NewEditMessageTextAndMarkup(
 			ctx.ChatID,
 			ctx.MessageID,
 			text,
-			track.TrackArchiveInlineMenu(items),
+			track.TrackArchiveInlineMenu(ctx.Language, items),
 		)
 		_, _ = m.bot.Send(msg)
 		return
 	}
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
-	msg.ReplyMarkup = track.TrackArchiveInlineMenu(items)
+	msg.ReplyMarkup = track.TrackArchiveInlineMenu(ctx.Language, items)
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "🗄")
-	msgReply.ReplyMarkup = track.TrackArchiveReplyMenu()
+	msgReply.ReplyMarkup = track.TrackArchiveReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msgReply)
 	_, _ = m.bot.Send(msg)
 }
@@ -834,19 +833,19 @@ func (m *Module) renderArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 // ShowTrackActivitySelectionMenuInPlace edits current message with activities list.
 func (m *Module) ShowTrackActivitySelectionMenuInPlace(ctx *tgctx.MsgContext) {
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "🗂")
-	msgReply.ReplyMarkup = track.TrackActivityManageReplyMenu()
+	msgReply.ReplyMarkup = track.TrackActivityManageReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msgReply)
 
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list activities failed")
-		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, "⚠️ Failed to load activities.")
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackManageLoadFailed))
 		_, _ = m.bot.Send(edit)
 		return
 	}
 
 	if len(items) == 0 {
-		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, "No activities yet. Create one first.")
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackManageEmpty))
 		_, _ = m.bot.Send(edit)
 		return
 	}
@@ -856,8 +855,8 @@ func (m *Module) ShowTrackActivitySelectionMenuInPlace(ctx *tgctx.MsgContext) {
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
 		ctx.ChatID,
 		ctx.MessageID,
-		fmt.Sprintf("📂 Select Activity\n\nSelected: %d of %d", selectedCount, len(items)),
-		track.TrackActivitiesInlineMenu(items),
+		i18n.T(ctx.Language, i18n.KeyTrackManageSelectTitle, selectedCount, len(items)),
+		track.TrackActivitiesInlineMenu(ctx.Language, items),
 	)
 	edit.ParseMode = "HTML"
 	_, _ = m.bot.Send(edit)
@@ -868,18 +867,18 @@ func (m *Module) RestoreArchivedActivity(ctx *tgctx.MsgContext) {
 	idRaw := strings.TrimPrefix(ctx.Text, track.TrackCBArchiveRestore)
 	activityID, err := strconv.ParseInt(idRaw, 10, 64)
 	if err != nil {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Invalid activity."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveInvalidItem)))
 		return
 	}
 	activityName := m.findArchivedActivityName(ctx, activityID)
 
 	if err := m.tracksvc.RestoreArchivedActivity(ctx.Ctx, ctx.DBUserID, activityID); err != nil {
 		log.Error().Err(err).Msg("restore archived activity failed")
-		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, "⚠️ Failed to restore activity.")
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackArchiveRestoreFailed))
 		_, _ = m.bot.Send(edit)
 		return
 	}
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("♻ Activity restored: %s", activityName)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveRestored, activityName)))
 	m.ShowArchiveMenuInPlace(ctx)
 }
 
@@ -888,18 +887,18 @@ func (m *Module) DeleteArchivedForever(ctx *tgctx.MsgContext) {
 	idRaw := strings.TrimPrefix(ctx.Text, track.TrackCBArchiveDelete)
 	activityID, err := strconv.ParseInt(idRaw, 10, 64)
 	if err != nil {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Invalid activity."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveInvalidItem)))
 		return
 	}
 	activityName := m.findArchivedActivityName(ctx, activityID)
 
 	if err := m.tracksvc.DeleteArchivedForever(ctx.Ctx, ctx.DBUserID, activityID); err != nil {
 		log.Error().Err(err).Msg("delete archived forever failed")
-		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, "⚠️ Failed to delete activity forever.")
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackArchiveDeleteForeverFailed))
 		_, _ = m.bot.Send(edit)
 		return
 	}
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🗑 Deleted forever: %s", activityName)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackArchiveDeletedForever, activityName)))
 	m.ShowArchiveMenuInPlace(ctx)
 }
 
@@ -927,8 +926,8 @@ func (m *Module) ShowTrackTimerMenu(ctx *tgctx.MsgContext) {
 		custom = nil
 	}
 
-	msg := tgbotapi.NewMessage(ctx.ChatID, track.TrackMsgTimerPickerTitle)
-	msg.ReplyMarkup = track.TrackTimerReplyMenu(track.BuiltInTimerIntervals, custom)
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerPickerTitle))
+	msg.ReplyMarkup = track.TrackTimerReplyMenu(ctx.Language, track.BuiltInTimerIntervals, custom)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -942,20 +941,20 @@ func (m *Module) ShowTrackTimerDeleteMenu(ctx *tgctx.MsgContext) bool {
 		custom = nil
 	}
 	if len(custom) == 0 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "No custom timers to delete yet."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerNoneToDelete)))
 		m.ShowTrackTimerMenu(ctx)
 		return false
 	}
 
-	msg := tgbotapi.NewMessage(ctx.ChatID, "Pick a custom timer to delete:")
-	msg.ReplyMarkup = track.TrackTimerDeleteReplyMenu(custom)
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerPickToDelete))
+	msg.ReplyMarkup = track.TrackTimerDeleteReplyMenu(ctx.Language, custom)
 	_, _ = m.bot.Send(msg)
 	return true
 }
 
 // PromptCreateCustomTimer asks user to type a custom interval in minutes.
 func (m *Module) PromptCreateCustomTimer(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, track.TrackMsgCustomTimerPrompt)
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerCustomPrompt))
 	_, _ = m.bot.Send(msg)
 }
 
@@ -965,30 +964,29 @@ func (m *Module) PromptCreateCustomTimer(ctx *tgctx.MsgContext) {
 func (m *Module) ProcessCreateCustomTimer(ctx *tgctx.MsgContext) bool {
 	minutes, err := strconv.Atoi(strings.TrimSpace(ctx.Text))
 	if err != nil {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Enter a whole number of minutes, e.g. 45."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerNotANumber)))
 		return false
 	}
 
 	if err := m.timersvc.AddCustomInterval(ctx.Ctx, ctx.DBUserID, minutes); err != nil {
 		switch {
 		case errors.Is(err, models.ErrCustomTimerInvalidInterval):
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf(
-				"Interval must be between %d and %d minutes.",
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(
+				ctx.Language, i18n.KeyTrackTimerOutOfRange,
 				models.MinCustomTimerMinutes, models.MaxCustomTimerMinutes,
 			)))
 		case errors.Is(err, models.ErrCustomTimerLimitReached):
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf(
-				"You can keep up to %d custom timers. Delete one before adding a new one.",
-				models.MaxCustomTimersPerUser,
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(
+				ctx.Language, i18n.KeyTrackTimerLimitReached, models.MaxCustomTimersPerUser,
 			)))
 		default:
 			log.Error().Err(err).Msg("add custom timer failed")
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save custom timer."))
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerSaveFailed)))
 		}
 		return false
 	}
 
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Custom timer added: %d min", minutes)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerAdded, minutes)))
 	m.ShowTrackTimerMenu(ctx)
 	return true
 }
@@ -998,11 +996,11 @@ func (m *Module) ProcessCreateCustomTimer(ctx *tgctx.MsgContext) bool {
 func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	if err := m.timersvc.RemoveCustomInterval(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil && !errors.Is(err, models.ErrCustomTimerNotFound) {
 		log.Error().Err(err).Msg("delete custom timer failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to delete custom timer."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerDeleteFailed)))
 		return
 	}
 
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🗑 Custom timer removed: %d min", intervalMin)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerRemoved, intervalMin)))
 	m.ShowTrackTimerMenu(ctx)
 }
 
@@ -1011,21 +1009,21 @@ func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	items, err := m.tracksvc.ListSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("load selected activities failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load selected activities."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerLoadSelectedFailed)))
 		return
 	}
 	if len(items) == 0 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Select at least one activity before activating timer."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerNoneSelected)))
 		return
 	}
 
 	if err := m.timersvc.Activate(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil {
 		log.Error().Err(err).Msg("activate timer failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to activate timer."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerActivateFailed)))
 		return
 	}
 
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Timer activated: every %d min", intervalMin)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerActivated, intervalMin)))
 	hide := tgbotapi.NewMessage(ctx.ChatID, " ")
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
@@ -1036,10 +1034,10 @@ func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 func (m *Module) StopTrackTimer(ctx *tgctx.MsgContext) {
 	if err := m.timersvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
 		log.Error().Err(err).Msg("stop timer failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to stop timer."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopFailed)))
 		return
 	}
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⏹ Timer stopped"))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopped)))
 }
 
 // SendPromptMessage sends periodic "what are you doing now?" prompt.
@@ -1052,8 +1050,19 @@ func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int
 		return nil
 	}
 
-	msg := tgbotapi.NewMessage(chatID, "What are you doing now?")
-	msg.ReplyMarkup = track.TrackPromptInlineMenu(items, intervalMin)
+	// This runs off the scheduler, not a live user request, so there's no
+	// tgctx.MsgContext with a pre-loaded Language — look it up directly.
+	// chatID is the user's Telegram id (private-chat DMs only, no groups),
+	// which is what GetProfileStats expects.
+	lang := i18n.Default
+	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err != nil {
+		log.Error().Err(err).Int64("user_id", userID).Msg("load language for prompt failed")
+	} else if stats.Language != nil {
+		lang = i18n.Normalize(*stats.Language)
+	}
+
+	msg := tgbotapi.NewMessage(chatID, i18n.T(lang, i18n.KeyTrackPromptQuestion))
+	msg.ReplyMarkup = track.TrackPromptInlineMenu(lang, items, intervalMin)
 	_, err = m.bot.Send(msg)
 	return err
 }
@@ -1063,25 +1072,25 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 	payload := strings.TrimPrefix(ctx.Text, track.TrackCBPromptActivity)
 	parts := strings.Split(payload, ":")
 	if len(parts) != 2 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Invalid selection payload."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptInvalidPayload)))
 		return
 	}
 
 	activityID, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Invalid activity id."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackInvalidActivityID)))
 		return
 	}
 
 	intervalMin, err := strconv.Atoi(parts[1])
 	if err != nil || intervalMin <= 0 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Invalid interval."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptInvalidInterval)))
 		return
 	}
 
 	if err := m.timersvc.RecordPromptAnswerWithInterval(ctx.Ctx, ctx.DBUserID, activityID, intervalMin); err != nil {
 		log.Error().Err(err).Msg("record prompt answer failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save activity."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptSaveFailed)))
 		return
 	}
 
@@ -1094,8 +1103,8 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 	startAt := endAt.Add(-time.Duration(intervalMin) * time.Minute)
 	activityName := m.findActivityName(ctx, activityID)
 
-	text := fmt.Sprintf(
-		"Saved ✅\nActivity: %s\nTime: %s-%s (%d min)",
+	text := i18n.T(
+		ctx.Language, i18n.KeyTrackPromptSaved,
 		activityName,
 		startAt.Format("15:04"),
 		endAt.Format("15:04"),
