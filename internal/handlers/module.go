@@ -1239,6 +1239,61 @@ func (m *Module) ShowWordBase(ctx *tgctx.MsgContext, edit bool) {
 	m.sendOrEditLearning(ctx, edit, learning.LearningWordBaseTitle(len(items)), &menu)
 }
 
+// ShowReviewCollectionPicker lets the user choose which collections feed
+// the review rotation before picking a push interval (see
+// ShowReviewIntervalPicker) — reached by tapping "Start reviews".
+func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
+	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list learning collections for review picker failed")
+		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load collections.", nil)
+		return
+	}
+	if len(items) == 0 {
+		m.sendOrEditLearning(ctx, edit, "🗂 No collections yet. Create one from the Learning menu first, add some words, then come back to start reviews.", nil)
+		return
+	}
+
+	active := 0
+	for _, it := range items {
+		if it.Active {
+			active++
+		}
+	}
+
+	menu := learning.LearningReviewPickInlineMenu(items)
+	m.sendOrEditLearning(ctx, edit, learning.LearningReviewPickTitle(active), &menu)
+}
+
+// HandleReviewPickToggle flips a collection's review-rotation flag and
+// re-renders the picker.
+func (m *Module) HandleReviewPickToggle(ctx *tgctx.MsgContext, collectionID int64) {
+	if err := m.learningsvc.ToggleCollectionActive(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
+		log.Error().Err(err).Msg("toggle collection active from review picker failed")
+	}
+	m.ShowReviewCollectionPicker(ctx, true)
+}
+
+// HandleReviewContinue moves from the collection picker to the interval
+// picker, refusing to proceed with nothing selected. ok is false when the
+// picker should stay open (caller must not advance the screen).
+func (m *Module) HandleReviewContinue(ctx *tgctx.MsgContext) (ok bool) {
+	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list learning collections before review continue failed")
+		return false
+	}
+	for _, it := range items {
+		if it.Active {
+			m.ShowReviewIntervalPicker(ctx)
+			return true
+		}
+	}
+	menu := learning.LearningReviewPickInlineMenu(items)
+	m.sendOrEditLearning(ctx, true, "⚠️ Select at least one collection first.\n\n"+learning.LearningReviewPickTitle(0), &menu)
+	return false
+}
+
 // ShowCollectionDetail renders one collection's words and actions.
 func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64, edit bool) {
 	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)

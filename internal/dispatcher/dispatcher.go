@@ -54,10 +54,11 @@ const (
 	screenCreateActivity = "create_activity"
 	screenTrackReports   = "track_reports"
 
-	screenLearningMain     = "learning_main"
-	screenLearningWordBase = "learning_word_base"
-	screenLearningArchive  = "learning_archive"
-	screenLearningTimer    = "learning_timer"
+	screenLearningMain       = "learning_main"
+	screenLearningWordBase   = "learning_word_base"
+	screenLearningArchive    = "learning_archive"
+	screenLearningTimer      = "learning_timer"
+	screenLearningReviewPick = "learning_review_pick"
 )
 
 func New(
@@ -904,8 +905,18 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 		// place rather than a separate screen.
 		d.learning.ShowLearningMenu(ctx)
 	case data == learningbtn.LearningCBReviewOpen:
-		d.setScreen(ctx.UserID, screenLearningTimer)
-		d.learning.ShowReviewIntervalPicker(ctx)
+		d.setScreen(ctx.UserID, screenLearningReviewPick)
+		d.learning.ShowReviewCollectionPicker(ctx, true)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewPickToggle):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewPickToggle)
+		if !ok {
+			return
+		}
+		d.learning.HandleReviewPickToggle(ctx, id)
+	case data == learningbtn.LearningCBReviewContinue:
+		if d.learning.HandleReviewContinue(ctx) {
+			d.setScreen(ctx.UserID, screenLearningTimer)
+		}
 	case data == learningbtn.LearningCBReviewStop:
 		d.learning.StopReviews(ctx)
 	case strings.HasPrefix(data, learningbtn.LearningCBReviewReveal):

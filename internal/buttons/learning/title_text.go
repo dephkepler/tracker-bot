@@ -22,6 +22,14 @@ func LearningMenuText(stats models.LearningStats) string {
 	return b.String()
 }
 
+// LearningReviewPickTitle renders the review collection-picker's header.
+func LearningReviewPickTitle(activeCount int) string {
+	if activeCount == 0 {
+		return "🎲 *Pick collections for reviews*\n\nTap to include/exclude — none selected yet. Select at least one, then tap Continue."
+	}
+	return fmt.Sprintf("🎲 *Pick collections for reviews*\n\n%d selected. Tap to include/exclude, then Continue.", activeCount)
+}
+
 // LearningWordBaseTitle renders the word-base screen's header.
 func LearningWordBaseTitle(count int) string {
 	return fmt.Sprintf("🗂 *Word base* — %d collection(s)\n\nTap a collection to view its words.", count)

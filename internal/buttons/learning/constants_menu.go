@@ -18,6 +18,12 @@ const (
 	LearningCBReviewStop        = "learning:review:stop"
 	LearningCBBackMain          = "learning:back:main"
 
+	// Collection picker shown before the interval picker, so the user
+	// explicitly chooses which collections feed the review rotation
+	// instead of it silently defaulting to "every active collection".
+	LearningCBReviewPickToggle = "learning:review:pick:toggle:"
+	LearningCBReviewContinue   = "learning:review:pick:continue"
+
 	// Review-card callbacks, sent standalone (scheduler push or on-demand),
 	// not gated by screen — carry the word id in the payload.
 	LearningCBReviewReveal = "learning:review:reveal:"
@@ -35,6 +41,7 @@ const (
 	LearningButtonWordBase         = "🗂 Word base"
 	LearningButtonHome             = "🏠 Home"
 	LearningButtonBack             = "◀ Back"
+	LearningButtonContinue         = "▶️ Continue"
 )
 
 // Word-base / collection-detail buttons.

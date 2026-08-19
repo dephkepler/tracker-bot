@@ -53,6 +53,27 @@ func LearningWordBaseInlineMenu(items []models.LearningCollectionItem) tgbotapi.
 	return buttonbuilder.IK(rows...)
 }
 
+// LearningReviewPickInlineMenu lets the user choose which collections feed
+// the review rotation before picking a push interval — each row toggles
+// the same is_active flag as LearningWordBaseInlineMenu, just scoped to
+// this screen so the toggle re-renders the picker instead of navigating
+// into a collection's detail view.
+func LearningReviewPickInlineMenu(items []models.LearningCollectionItem) tgbotapi.InlineKeyboardMarkup {
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+2)
+	for _, item := range items {
+		label := fmt.Sprintf(LearningButtonToggleOffFmt, item.Name, item.WordCount)
+		if item.Active {
+			label = fmt.Sprintf(LearningButtonToggleOnFmt, item.Name, item.WordCount)
+		}
+		rows = append(rows, buttonbuilder.IR(
+			buttonbuilder.IB(label, fmt.Sprintf("%s%d", LearningCBReviewPickToggle, item.ID)),
+		))
+	}
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonContinue, LearningCBReviewContinue)))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(LearningButtonBack, LearningCBBackMain)))
+	return buttonbuilder.IK(rows...)
+}
+
 // LearningCollectionDetailInlineMenu shows one collection's words (each with
 // a delete button) plus collection-level actions.
 func LearningCollectionDetailInlineMenu(collectionID int64, active bool, words []models.LearningWordItem) tgbotapi.InlineKeyboardMarkup {
