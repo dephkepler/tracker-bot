@@ -1,0 +1,78 @@
+package i18n
+
+// catalogCommon holds strings shared across many screens rather than owned
+// by one feature — navigation (Back/Home/Cancel), and the generic
+// error/fallback messages the dispatcher sends regardless of which screen
+// the user was on.
+var catalogCommon = map[string]entry{
+	KeyCommonBack: {
+		RU: "◀ Назад",
+		EN: "◀ Back",
+		DE: "◀ Zurück",
+		UK: "◀ Назад",
+		AR: "◀ رجوع",
+	},
+	KeyCommonHome: {
+		RU: "🏠 Домой",
+		EN: "🏠 Home",
+		DE: "🏠 Start",
+		UK: "🏠 Додому",
+		AR: "🏠 الرئيسية",
+	},
+	KeyCommonCancel: {
+		RU: "✖️ Отмена",
+		EN: "✖️ Cancel",
+		DE: "✖️ Abbrechen",
+		UK: "✖️ Скасувати",
+		AR: "✖️ إلغاء",
+	},
+	KeyCommonCancelled: {
+		RU: "Отменено.",
+		EN: "Cancelled.",
+		DE: "Abgebrochen.",
+		UK: "Скасовано.",
+		AR: "تم الإلغاء.",
+	},
+	KeyCommonAdmin: {
+		RU: "👑 Админ",
+		EN: "👑 Admin",
+		DE: "👑 Admin",
+		UK: "👑 Адмін",
+		AR: "👑 المشرف",
+	},
+	KeyCommonUnknownCommand: {
+		RU: "Неизвестная команда.",
+		EN: "Unknown command.",
+		DE: "Unbekannter Befehl.",
+		UK: "Невідома команда.",
+		AR: "أمر غير معروف.",
+	},
+	KeyCommonHelpText: {
+		RU: "Доступные команды: /start, /help",
+		EN: "Available commands: /start, /help",
+		DE: "Verfügbare Befehle: /start, /help",
+		UK: "Доступні команди: /start, /help",
+		AR: "الأوامر المتاحة: /start، /help",
+	},
+	KeyCommonFallback: {
+		RU: "Я тебя понял, но не знаю что с этим сделать. Напиши /help",
+		EN: "Got that, but I don't know what to do with it. Try /help",
+		DE: "Verstanden, aber ich weiß nicht, was ich damit anfangen soll. Versuch's mit /help",
+		UK: "Я тебе зрозумів, але не знаю, що з цим робити. Напиши /help",
+		AR: "فهمت، لكن لا أعرف ماذا أفعل بهذا. جرّب /help",
+	},
+	KeyCommonGenericError: {
+		RU: "⚠️ Ошибка. Попробуй ещё раз.",
+		EN: "⚠️ Error. Please try again.",
+		DE: "⚠️ Fehler. Bitte versuch es noch einmal.",
+		UK: "⚠️ Помилка. Спробуй ще раз.",
+		AR: "⚠️ حدث خطأ. حاول مرة أخرى.",
+	},
+	KeyCommonUseButtons: {
+		RU: "Используй кнопки меню.",
+		EN: "Use buttons from menu.",
+		DE: "Benutze die Menü-Buttons.",
+		UK: "Використовуй кнопки меню.",
+		AR: "استخدم أزرار القائمة.",
+	},
+}

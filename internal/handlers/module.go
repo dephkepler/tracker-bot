@@ -13,6 +13,7 @@ import (
 	"tracker-bot/internal/buttons/profile"
 	"tracker-bot/internal/buttons/subscription"
 	"tracker-bot/internal/buttons/track"
+	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 	"tracker-bot/internal/service"
 	"tracker-bot/internal/utils/tgctx"
@@ -86,20 +87,20 @@ func (m *Module) ShowEntryMenu(ctx *tgctx.MsgContext) {
 // ShowWelcome renders the first-time greeting (only meant for a user's very
 // first /start).
 func (m *Module) ShowWelcome(ctx *tgctx.MsgContext) {
-	m.sendEntryMenu(ctx, entry.WelcomeText())
+	m.sendEntryMenu(ctx, entry.WelcomeText(ctx.Language))
 }
 
 // ShowHomeMenu renders the entry screen for a user who already knows the
 // bot — every other "go home" action (Home button, /start after the first
 // time, post-activation redirect, etc.) should use this, not ShowWelcome.
 func (m *Module) ShowHomeMenu(ctx *tgctx.MsgContext) {
-	m.sendEntryMenu(ctx, entry.HomeMenuText())
+	m.sendEntryMenu(ctx, entry.HomeMenuText(ctx.Language))
 }
 
 func (m *Module) sendEntryMenu(ctx *tgctx.MsgContext, text string) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = entry.EntryReplyMenu(m.IsAdmin(ctx))
+	msg.ReplyMarkup = entry.EntryReplyMenu(ctx.Language, m.IsAdmin(ctx))
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send entry menu failed")
@@ -197,15 +198,15 @@ func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.profilesvc.GetProfileStats(ctx.Ctx, ctx.UserID)
 	if err != nil {
 		log.Error().Err(err).Msg("GetProfile failed")
-		msg := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load profile data. Please try again.")
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLoadFailed))
 		_, _ = m.bot.Send(msg)
 		return
 	}
 
-	text := profile.ProfileMenuText(stats)
+	text := profile.ProfileMenuText(ctx.Language, stats)
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
-	msg.ReplyMarkup = profile.ProfileEntryInlineMenu(m.IsAdmin(ctx))
+	msg.ReplyMarkup = profile.ProfileEntryInlineMenu(ctx.Language, m.IsAdmin(ctx))
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send profile menu failed")
@@ -225,8 +226,8 @@ var languageCodeByButton = map[string]string{
 
 // ShowLanguagePicker asks the user to pick their interface language.
 func (m *Module) ShowLanguagePicker(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, "🌐 Pick your language:")
-	msg.ReplyMarkup = profile.ProfileLanguageManageReplyMenu()
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLanguagePrompt))
+	msg.ReplyMarkup = profile.ProfileLanguageManageReplyMenu(ctx.Language)
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send language picker failed")
 	}
@@ -240,17 +241,29 @@ func (m *Module) ShowLanguagePicker(ctx *tgctx.MsgContext) {
 func (m *Module) ProcessLanguageSelection(ctx *tgctx.MsgContext) bool {
 	code, ok := languageCodeByButton[ctx.Text]
 	if !ok {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Tap one of the language buttons, or ✖️ Cancel."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLanguageInvalid)))
 		return false
 	}
 
 	if err := m.profilesvc.ChangeLanguage(ctx.Ctx, ctx.UserID, code); err != nil {
 		log.Error().Err(err).Msg("save language failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save language. Please try again."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLanguageSaveFailed)))
 		return false
 	}
 
-	hide := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Language set to %s", ctx.Text))
+	// Switch ctx over to the newly-picked language right away — both for the
+	// confirmation below (so it reads in the language just chosen, not the
+	// old one) and for the ShowProfileMenu call after it, so the profile
+	// screen already renders in the new language on this same round trip.
+	// The dispatcher independently invalidates the cached session language
+	// (sess.langLoaded = false) so the NEXT message also picks it up fresh
+	// from DB rather than relying on this in-request mutation.
+	ctx.Language = i18n.Normalize(code)
+
+	// ctx.Text is the language button itself (e.g. "🇷🇺 Русский") — those are
+	// deliberately not translated (see profile.ProfileLanguageManageReplyMenu),
+	// so it's already the right thing to substitute in regardless of language.
+	hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLanguageSaved, ctx.Text))
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
 
@@ -261,10 +274,8 @@ func (m *Module) ProcessLanguageSelection(ctx *tgctx.MsgContext) bool {
 // ShowLocationRequest asks the user to share their location so the bot can
 // detect their real timezone instead of assuming one for everyone.
 func (m *Module) ShowLocationRequest(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID,
-		"📍 Share your location and I'll set your time zone automatically. "+
-			"It's only used once, to look up the zone — I don't track you.")
-	msg.ReplyMarkup = profile.ProfileLocationReplyMenu()
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileTimezonePrompt))
+	msg.ReplyMarkup = profile.ProfileLocationReplyMenu(ctx.Language)
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send location request failed")
 	}
@@ -276,17 +287,20 @@ func (m *Module) ProcessLocationTimeZone(ctx *tgctx.MsgContext, lat, lng float64
 	tzName, err := geotz.Lookup(lat, lng)
 	if err != nil {
 		log.Error().Err(err).Msg("resolve timezone from location failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Couldn't detect a time zone for that location. Try again?"))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileTimezoneLookupFailed)))
 		return
 	}
 
 	if err := m.profilesvc.ChangeTimeZone(ctx.Ctx, ctx.UserID, tzName); err != nil {
 		log.Error().Err(err).Msg("save timezone failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save time zone. Please try again."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileTimezoneSaveFailed)))
 		return
 	}
 
-	hide := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Time zone set to %s", tzName))
+	// tzName is an IANA identifier (e.g. "Europe/Berlin") — a technical
+	// value, not translatable text, so it's inserted as-is regardless of
+	// language.
+	hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileTimezoneSaved, tzName))
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
 

@@ -1,0 +1,151 @@
+package i18n
+
+// catalogProfile holds the Profile screen and its two edit flows (language
+// picker, timezone-via-shared-location). Note: the language picker's own
+// 5 buttons ("🇷🇺 Русский", "Deutsch", ...) are intentionally NOT in this
+// catalog — each always shows its language's own native name regardless of
+// the viewer's current interface language (like every other app's language
+// picker), so they're plain constants in internal/buttons/profile, not
+// translated text.
+var catalogProfile = map[string]entry{
+	KeyProfileTitle: {
+		RU: "👤 Профиль",
+		EN: "👤 Profile",
+		DE: "👤 Profil",
+		UK: "👤 Профіль",
+		AR: "👤 الملف الشخصي",
+	},
+	KeyProfileLabelID: {
+		RU: "🛜 ID:",
+		EN: "🛜 ID:",
+		DE: "🛜 ID:",
+		UK: "🛜 ID:",
+		AR: "🛜 ID:",
+	},
+	KeyProfileLabelName: {
+		RU: "👤 Имя:",
+		EN: "👤 Name:",
+		DE: "👤 Name:",
+		UK: "👤 Ім'я:",
+		AR: "👤 الاسم:",
+	},
+	KeyProfileLabelLanguage: {
+		RU: "🌐 Язык",
+		EN: "🌐 Language",
+		DE: "🌐 Sprache",
+		UK: "🌐 Мова",
+		AR: "🌐 اللغة",
+	},
+	KeyProfileLabelTimezone: {
+		RU: "📍 Часовой пояс:",
+		EN: "📍 Time zone:",
+		DE: "📍 Zeitzone:",
+		UK: "📍 Часовий пояс:",
+		AR: "📍 المنطقة الزمنية:",
+	},
+	KeyProfileLabelEmail: {
+		RU: "📧 Email:",
+		EN: "📧 Email:",
+		DE: "📧 E-Mail:",
+		UK: "📧 Email:",
+		AR: "📧 البريد الإلكتروني:",
+	},
+	KeyProfileButtonTimezone: {
+		RU: "📍 Часовой пояс",
+		EN: "📍 Time zone",
+		DE: "📍 Zeitzone",
+		UK: "📍 Часовий пояс",
+		AR: "📍 المنطقة الزمنية",
+	},
+	KeyProfileButtonContact: {
+		RU: "📧 Контакт",
+		EN: "📧 Contact",
+		DE: "📧 Kontakt",
+		UK: "📧 Контакт",
+		AR: "📧 التواصل",
+	},
+	KeyProfileButtonRefresh: {
+		RU: "🔁 Обновить",
+		EN: "🔁 Refresh",
+		DE: "🔁 Aktualisieren",
+		UK: "🔁 Оновити",
+		AR: "🔁 تحديث",
+	},
+	KeyProfileLoadFailed: {
+		RU: "⚠️ Не удалось загрузить профиль. Попробуй ещё раз.",
+		EN: "⚠️ Failed to load profile data. Please try again.",
+		DE: "⚠️ Profil konnte nicht geladen werden. Bitte versuch es noch einmal.",
+		UK: "⚠️ Не вдалося завантажити профіль. Спробуй ще раз.",
+		AR: "⚠️ تعذّر تحميل بيانات الملف الشخصي. حاول مرة أخرى.",
+	},
+	KeyProfileLanguagePrompt: {
+		RU: "🌐 Выбери язык:",
+		EN: "🌐 Pick your language:",
+		DE: "🌐 Wähle deine Sprache:",
+		UK: "🌐 Обери мову:",
+		AR: "🌐 اختر لغتك:",
+	},
+	KeyProfileLanguageInvalid: {
+		RU: "Нажми одну из кнопок языка или ✖️ Отмена.",
+		EN: "Tap one of the language buttons, or ✖️ Cancel.",
+		DE: "Tippe auf einen der Sprach-Buttons oder auf ✖️ Abbrechen.",
+		UK: "Натисни одну з кнопок мови або ✖️ Скасувати.",
+		AR: "اضغط على أحد أزرار اللغة، أو ✖️ إلغاء.",
+	},
+	KeyProfileLanguageSaveFailed: {
+		RU: "⚠️ Не удалось сохранить язык. Попробуй ещё раз.",
+		EN: "⚠️ Failed to save language. Please try again.",
+		DE: "⚠️ Sprache konnte nicht gespeichert werden. Bitte versuch es noch einmal.",
+		UK: "⚠️ Не вдалося зберегти мову. Спробуй ще раз.",
+		AR: "⚠️ تعذّر حفظ اللغة. حاول مرة أخرى.",
+	},
+	KeyProfileLanguageSaved: {
+		RU: "✅ Язык установлен: %s",
+		EN: "✅ Language set to %s",
+		DE: "✅ Sprache eingestellt auf %s",
+		UK: "✅ Мову встановлено: %s",
+		AR: "✅ تم ضبط اللغة على %s",
+	},
+	KeyProfileButtonShareLocation: {
+		RU: "📍 Отправить геолокацию",
+		EN: "📍 Share location",
+		DE: "📍 Standort teilen",
+		UK: "📍 Надіслати геолокацію",
+		AR: "📍 مشاركة الموقع",
+	},
+	KeyProfileTimezonePrompt: {
+		RU: "📍 Отправь геолокацию, и я автоматически определю твой часовой пояс. Используется только один раз, чтобы узнать зону — я не отслеживаю тебя.",
+		EN: "📍 Share your location and I'll set your time zone automatically. It's only used once, to look up the zone — I don't track you.",
+		DE: "📍 Teile deinen Standort und ich stelle deine Zeitzone automatisch ein. Wird nur einmal verwendet, um die Zone zu bestimmen — ich verfolge dich nicht.",
+		UK: "📍 Надішли геолокацію, і я автоматично визначу твій часовий пояс. Використовується лише один раз, щоб дізнатися зону — я не відстежую тебе.",
+		AR: "📍 شارك موقعك وسأضبط منطقتك الزمنية تلقائيًا. يُستخدم مرة واحدة فقط لتحديد المنطقة — أنا لا أتتبعك.",
+	},
+	KeyProfileTimezoneInvalidTap: {
+		RU: "Нажми 📍 Отправить геолокацию или ✖️ Отмена.",
+		EN: "Tap 📍 Share location, or ✖️ Cancel.",
+		DE: "Tippe auf 📍 Standort teilen oder auf ✖️ Abbrechen.",
+		UK: "Натисни 📍 Надіслати геолокацію або ✖️ Скасувати.",
+		AR: "اضغط على 📍 مشاركة الموقع، أو ✖️ إلغاء.",
+	},
+	KeyProfileTimezoneLookupFailed: {
+		RU: "⚠️ Не удалось определить часовой пояс для этой геолокации. Попробовать снова?",
+		EN: "⚠️ Couldn't detect a time zone for that location. Try again?",
+		DE: "⚠️ Für diesen Standort konnte keine Zeitzone ermittelt werden. Nochmal versuchen?",
+		UK: "⚠️ Не вдалося визначити часовий пояс для цієї геолокації. Спробувати ще раз?",
+		AR: "⚠️ تعذّر تحديد المنطقة الزمنية لهذا الموقع. هل تريد المحاولة مرة أخرى؟",
+	},
+	KeyProfileTimezoneSaveFailed: {
+		RU: "⚠️ Не удалось сохранить часовой пояс. Попробуй ещё раз.",
+		EN: "⚠️ Failed to save time zone. Please try again.",
+		DE: "⚠️ Zeitzone konnte nicht gespeichert werden. Bitte versuch es noch einmal.",
+		UK: "⚠️ Не вдалося зберегти часовий пояс. Спробуй ще раз.",
+		AR: "⚠️ تعذّر حفظ المنطقة الزمنية. حاول مرة أخرى.",
+	},
+	KeyProfileTimezoneSaved: {
+		RU: "✅ Часовой пояс установлен: %s",
+		EN: "✅ Time zone set to %s",
+		DE: "✅ Zeitzone eingestellt auf %s",
+		UK: "✅ Часовий пояс встановлено: %s",
+		AR: "✅ تم ضبط المنطقة الزمنية على %s",
+	},
+}

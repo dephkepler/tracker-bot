@@ -25,6 +25,9 @@ type userSession struct {
 	tz       string // IANA zone name, "" until the user shares a location
 	tzLoaded bool   // true once loaded from the users table (or set explicitly)
 
+	lang       string // raw users.language code, "" until loaded/set — see i18n.Normalize
+	langLoaded bool   // true once loaded from the users table (or invalidated after a change)
+
 	waitingActivityName       bool
 	waitingLocation           bool
 	waitingLanguage           bool

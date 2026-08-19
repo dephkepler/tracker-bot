@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 	adminbtn "tracker-bot/internal/buttons/admin"
-	entrybtn "tracker-bot/internal/buttons/entry"
 	profilebtn "tracker-bot/internal/buttons/profile"
 	trackbtn "tracker-bot/internal/buttons/track"
+	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 	"tracker-bot/internal/service"
 	"tracker-bot/pkg/apptime"
@@ -146,7 +146,10 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 	dbID, isNew, err := d.entrysvc.EnsureUser(ctx.Ctx, in)
 	if err != nil {
 		log.Error().Err(err).Msg("ensure user failed")
-		out := tgbotapi.NewMessage(chatID, "⚠️ Ошибка. Попробуй ещё раз.")
+		// Language isn't known yet at this point (loading it is further
+		// down, and failed here before we got there) — Default is the best
+		// we can do for this rare DB-error path.
+		out := tgbotapi.NewMessage(chatID, i18n.T(i18n.Default, i18n.KeyCommonGenericError))
 		_, _ = d.bot.Send(out)
 		return false
 	}
@@ -168,16 +171,24 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 		}
 	}
 
-	// Same cold-session treatment for the user's detected timezone.
-	if !sess.tzLoaded && d.profilesvc != nil {
+	// Same cold-session treatment for the user's detected timezone and
+	// interface language — one GetProfileStats call covers both.
+	if (!sess.tzLoaded || !sess.langLoaded) && d.profilesvc != nil {
 		if stats, err := d.profilesvc.GetProfileStats(ctx.Ctx, ctx.UserID); err != nil {
-			log.Error().Err(err).Int64("user_id", ctx.UserID).Msg("load profile timezone failed")
-		} else if stats.TimeZone != nil {
-			sess.tz = *stats.TimeZone
-			sess.tzLoaded = true
+			log.Error().Err(err).Int64("user_id", ctx.UserID).Msg("load profile timezone/language failed")
+		} else {
+			if stats.TimeZone != nil {
+				sess.tz = *stats.TimeZone
+				sess.tzLoaded = true
+			}
+			if stats.Language != nil {
+				sess.lang = *stats.Language
+				sess.langLoaded = true
+			}
 		}
 	}
 	ctx.Location = apptime.Resolve(sess.tz)
+	ctx.Language = i18n.Normalize(sess.lang)
 	return true
 }
 
@@ -224,15 +235,15 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 			sess.tzLoaded = false
 			return
 		}
-		if mctx.Text == profilebtn.ProfileButtonCancel {
+		if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyCommonCancel {
 			sess.waitingLocation = false
-			hide := tgbotapi.NewMessage(mctx.ChatID, "Cancelled.")
+			hide := tgbotapi.NewMessage(mctx.ChatID, i18n.T(mctx.Language, i18n.KeyCommonCancelled))
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.profile.ShowProfileMenu(mctx)
 			return
 		}
-		_, _ = d.bot.Send(tgbotapi.NewMessage(mctx.ChatID, "Tap 📍 Share location, or ✖️ Cancel."))
+		_, _ = d.bot.Send(tgbotapi.NewMessage(mctx.ChatID, i18n.T(mctx.Language, i18n.KeyProfileTimezoneInvalidTap)))
 		return
 	}
 
@@ -248,7 +259,7 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 	}
 
 	// Then process reply keyboard buttons.
-	if ctxText := mctx.Text; ctxText == "📈Track" {
+	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonTrack {
 		d.setScreen(mctx.UserID, screenTrackMain)
 	}
 	if d.reply != nil && d.reply.HandleReplyButtons(mctx) {
@@ -353,7 +364,7 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 	sess := d.sessions.get(ctx.UserID)
 
 	if sess.waitingActivityName {
-		if d.isTrackButtonText(ctx.Text) {
+		if d.isTrackButtonText(ctx) {
 			_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Use buttons from menu. Enter activity name as plain text."))
 			return true
 		}
@@ -365,7 +376,7 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		return true
 	}
 	if sess.waitingCustomTimerMinutes {
-		if d.isTrackButtonText(ctx.Text) {
+		if d.isTrackButtonText(ctx) {
 			_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Use buttons from menu. Enter minutes as a plain number."))
 			return true
 		}
@@ -375,9 +386,9 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		return true
 	}
 	if sess.waitingLanguage {
-		if ctx.Text == profilebtn.ProfileButtonCancel {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancel {
 			sess.waitingLanguage = false
-			hide := tgbotapi.NewMessage(ctx.ChatID, "Cancelled.")
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.profile.ShowProfileMenu(ctx)
@@ -385,6 +396,9 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		}
 		if d.profile.ProcessLanguageSelection(ctx) {
 			sess.waitingLanguage = false
+			// Language just changed — force the next message to re-read it
+			// from DB instead of using the now-stale cached value.
+			sess.langLoaded = false
 		}
 		return true
 	}
@@ -417,7 +431,7 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 		return
 
 	case "help":
-		out := tgbotapi.NewMessage(ctx.ChatID, "Доступные команды: /start, /help")
+		out := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonHelpText))
 		if _, err := d.bot.Send(out); err != nil {
 			log.Error().Err(err).Msg("send help failed")
 		}
@@ -425,7 +439,7 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 
 	case "admin":
 		if !d.entry.IsAdmin(ctx) {
-			out := tgbotapi.NewMessage(ctx.ChatID, "Неизвестная команда.")
+			out := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonUnknownCommand))
 			if _, err := d.bot.Send(out); err != nil {
 				log.Error().Err(err).Msg("send unknown command failed")
 			}
@@ -436,7 +450,7 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 		return
 
 	default:
-		out := tgbotapi.NewMessage(ctx.ChatID, "Неизвестная команда.")
+		out := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonUnknownCommand))
 		if _, err := d.bot.Send(out); err != nil {
 			log.Error().Err(err).Msg("send unknown command failed")
 		}
@@ -464,17 +478,29 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 	}
 
+	// "👑 Admin" is translated (see i18n.KeyCommonAdmin), so it can't be a
+	// literal switch case below like the other still-untranslated buttons.
+	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonAdmin {
+		if !d.entry.IsAdmin(ctx) {
+			d.replyUseButtons(ctx)
+			return
+		}
+		d.setScreen(ctx.UserID, screenAdmin)
+		d.entry.ShowAdminMenu(ctx)
+		return
+	}
+
 	switch ctx.Text {
 	case trackbtn.TrackButtonActivityDelete:
 		if !d.isScreen(ctx.UserID, screenTrackManage) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		d.track.DeleteSelectedActivities(ctx)
 		return
 	case trackbtn.TrackButtonActivityActivate:
 		if !d.isScreen(ctx.UserID, screenTrackManage, screenTrackMain) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		d.setScreen(ctx.UserID, screenTrackTimer)
@@ -486,14 +512,14 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		return
 	case trackbtn.TrackButtonToday:
 		if !d.isScreen(ctx.UserID, screenTrackReports) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		d.track.ShowTodayReport(ctx)
 		return
 	case trackbtn.TrackButtonTimerCreate:
 		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		d.sessions.get(ctx.UserID).waitingCustomTimerMinutes = true
@@ -501,7 +527,7 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		return
 	case trackbtn.TrackButtonTimerDelete:
 		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		if d.track.ShowTrackTimerDeleteMenu(ctx) {
@@ -525,12 +551,12 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 			d.setScreen(ctx.UserID, screenTrackMain)
 			d.track.ShowTrackingMenu(ctx)
 		default:
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 		}
 		return
 	case trackbtn.TrackButtonPeriod:
 		if !d.isScreen(ctx.UserID, screenTrackReports) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		d.setScreen(ctx.UserID, screenTrackReports)
@@ -545,17 +571,9 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		d.setScreen(ctx.UserID, screenHome)
 		d.entry.ShowHomeMenu(ctx)
 		return
-	case entrybtn.EntryButtonAdmin:
-		if !d.entry.IsAdmin(ctx) {
-			d.replyUseButtons(ctx.ChatID)
-			return
-		}
-		d.setScreen(ctx.UserID, screenAdmin)
-		d.entry.ShowAdminMenu(ctx)
-		return
 	case adminbtn.ReplyButtonUsers:
 		if !d.entry.IsAdmin(ctx) || !d.isScreen(ctx.UserID, screenAdmin) {
-			d.replyUseButtons(ctx.ChatID)
+			d.replyUseButtons(ctx)
 			return
 		}
 		d.setScreen(ctx.UserID, screenAdminUsers)
@@ -563,7 +581,7 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		return
 	}
 
-	out := tgbotapi.NewMessage(ctx.ChatID, "Я тебя понял, но не знаю что с этим сделать. Напиши /help")
+	out := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonFallback))
 	if _, err := d.bot.Send(out); err != nil {
 		log.Error().Err(err).Msg("send fallback failed")
 	}
@@ -734,13 +752,15 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 }
 
 // replyUseButtons sends a guard message when user is out of current flow.
-func (d *Dispatcher) replyUseButtons(chatID int64) {
-	_, _ = d.bot.Send(tgbotapi.NewMessage(chatID, "Use buttons from menu."))
+func (d *Dispatcher) replyUseButtons(ctx *tgctx.MsgContext) {
+	_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonUseButtons)))
 }
 
-// isTrackButtonText checks if text belongs to track reply buttons.
-func (d *Dispatcher) isTrackButtonText(text string) bool {
-	switch text {
+// isTrackButtonText checks if text belongs to a known nav/action button, so
+// a "waiting for free text" flow (activity name, custom timer minutes, ...)
+// can tell a stray button tap from actual input.
+func (d *Dispatcher) isTrackButtonText(ctx *tgctx.MsgContext) bool {
+	switch ctx.Text {
 	case trackbtn.TrackButtonActivityActivate,
 		trackbtn.TrackButtonActivityDelete,
 		trackbtn.TrackButtonBack,
@@ -749,14 +769,16 @@ func (d *Dispatcher) isTrackButtonText(text string) bool {
 		trackbtn.TrackButtonPeriod,
 		trackbtn.TrackButtonTimerCreate,
 		trackbtn.TrackButtonTimerDelete,
-		entrybtn.EntryButtonAdmin,
 		adminbtn.ReplyButtonUsers:
 		return true
 	}
-	if _, ok := trackbtn.ParseTimerButtonMinutes(text, trackbtn.TrackTimerActivatePrefix); ok {
+	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonAdmin {
 		return true
 	}
-	if _, ok := trackbtn.ParseTimerButtonMinutes(text, trackbtn.TrackTimerDeletePrefix); ok {
+	if _, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
+		return true
+	}
+	if _, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
 		return true
 	}
 	return false

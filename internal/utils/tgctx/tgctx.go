@@ -3,6 +3,7 @@ package tgctx
 import (
 	"context"
 	"time"
+	"tracker-bot/internal/i18n"
 )
 
 // MsgContext is Telegram update context for message-based handlers.
@@ -18,6 +19,12 @@ type MsgContext struct {
 	// IsAdmin); not persisted separately from the DB's own users.username
 	// column, which is set independently in ensureUser.
 	Username string
+	// Language is this user's resolved interface language (from
+	// users.language, loaded/cached the same way as Location — see
+	// internal/dispatcher/dispatcher.go ensureUser). Always a supported
+	// i18n.Lang (never empty/invalid — i18n.Normalize guarantees that), so
+	// callers can pass it straight to i18n.T without a nil/empty check.
+	Language i18n.Lang
 	// IsNewUser is true only in the handleMessage call that first created this
 	// user's row (i.e. their very first /start) — used to show a one-time
 	// welcome instead of the plain "back home" message on every return.
