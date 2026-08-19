@@ -741,7 +741,7 @@ func (d *Dispatcher) handleTranslatedButton(ctx *tgctx.MsgContext, key string) b
 			d.replyUseButtons(ctx)
 			return true
 		}
-		d.track.ShowHeatmap(ctx)
+		d.track.ShowHeatmap(ctx, false)
 		return true
 	case i18n.KeyTrackButtonCalendar:
 		if !d.isScreen(ctx.UserID, screenTrackReports) {
@@ -917,6 +917,15 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 			return
 		}
 		d.track.HandleTrackToggleCallback(ctx)
+	case strings.HasPrefix(data, trackbtn.TrackCBHeatmapDay):
+		raw := strings.TrimPrefix(data, trackbtn.TrackCBHeatmapDay)
+		day, err := apptime.ParseDay(raw, d.userLocation(ctx.UserID))
+		if err != nil {
+			return
+		}
+		d.track.ShowHeatmapDayDetail(ctx, day)
+	case data == trackbtn.TrackCBHeatmapBack:
+		d.track.ShowHeatmap(ctx, true)
 	}
 }
 

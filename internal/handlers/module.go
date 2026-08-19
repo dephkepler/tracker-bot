@@ -500,16 +500,24 @@ func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 // heatmapWeeks is how many weeks the "🔥 Heatmap" report covers.
 const heatmapWeeks = 8
 
-// ShowHeatmap renders a GitHub-style calendar heatmap of the last 8 weeks:
-// which days had any tracked time at all, across every activity.
-func (m *Module) ShowHeatmap(ctx *tgctx.MsgContext) {
-	loc := ctx.Location
+// heatmapWindow returns the Monday-aligned grid start and today's midnight
+// (both in loc) for the current 8-week heatmap window.
+func heatmapWindow(loc *time.Location) (gridStart, todayMidnight time.Time) {
 	today := apptime.NowIn(loc)
-	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
+	todayMidnight = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
 	// Days since the most recent Monday (time.Weekday: Sunday=0..Saturday=6).
 	mondayOffset := (int(todayMidnight.Weekday()) + 6) % 7
 	thisMonday := todayMidnight.AddDate(0, 0, -mondayOffset)
-	gridStart := thisMonday.AddDate(0, 0, -7*(heatmapWeeks-1))
+	gridStart = thisMonday.AddDate(0, 0, -7*(heatmapWeeks-1))
+	return gridStart, todayMidnight
+}
+
+// ShowHeatmap renders a GitHub-style calendar heatmap of the last 8 weeks:
+// which days had any tracked time at all, across every activity. Each day
+// is a tappable button — see ShowHeatmapDayDetail.
+func (m *Module) ShowHeatmap(ctx *tgctx.MsgContext, edit bool) {
+	loc := ctx.Location
+	gridStart, todayMidnight := heatmapWindow(loc)
 	gridEnd := todayMidnight.AddDate(0, 0, 1) // exclusive
 
 	days, err := m.tracksvc.GetTrackedDaysInRange(ctx.Ctx, ctx.DBUserID, gridStart, gridEnd, loc)
@@ -525,7 +533,96 @@ func (m *Module) ShowHeatmap(ctx *tgctx.MsgContext) {
 	}
 
 	text := track.TrackHeatmapText(ctx.Language, gridStart, todayMidnight, tracked, heatmapWeeks)
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
+	menu := track.TrackHeatmapInlineMenu(ctx.Language, gridStart, todayMidnight, tracked, heatmapWeeks)
+
+	if edit && ctx.MessageID > 0 {
+		out := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, menu)
+		if _, err := m.bot.Send(out); err != nil {
+			log.Error().Err(err).Msg("edit heatmap failed, sending fresh message instead")
+			m.ShowHeatmap(ctx, false)
+		}
+		return
+	}
+	out := tgbotapi.NewMessage(ctx.ChatID, text)
+	out.ReplyMarkup = menu
+	if _, err := m.bot.Send(out); err != nil {
+		log.Error().Err(err).Msg("send heatmap failed")
+	}
+}
+
+// ShowHeatmapDayDetail drills into one day: total tracked time (with a
+// per-activity breakdown) and any word reviews answered that day.
+func (m *Module) ShowHeatmapDayDetail(ctx *tgctx.MsgContext, day time.Time) {
+	loc := ctx.Location
+	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
+	dayEnd := dayStart.AddDate(0, 0, 1)
+
+	var b strings.Builder
+	b.WriteString(track.TrackHeatmapDayTitle(ctx.Language, dayStart))
+	b.WriteString("\n\n")
+
+	activities, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list activities for heatmap day detail failed")
+	}
+	activityIDs := make([]int64, 0, len(activities))
+	for _, a := range activities {
+		activityIDs = append(activityIDs, a.ID)
+	}
+
+	b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayTrackedHeader))
+	b.WriteString("\n")
+	if len(activityIDs) == 0 {
+		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayNoActivity))
+		b.WriteString("\n")
+	} else {
+		items, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, dayStart, dayEnd, activityIDs, loc)
+		if err != nil {
+			log.Error().Err(err).Msg("get period report for heatmap day detail failed")
+		}
+		if len(items.Activities) == 0 {
+			b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayNoActivity))
+			b.WriteString("\n")
+		} else {
+			for _, a := range items.Activities {
+				b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayActivityLine, activityDisplayNameFromParts(a.Emoji, a.Name), formatReportDuration(a.Duration), a.Sessions))
+			}
+		}
+	}
+
+	b.WriteString("\n")
+	b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayReviewsHeader))
+	b.WriteString("\n")
+	reviews, err := m.learningsvc.ListReviewsOnDay(ctx.Ctx, ctx.DBUserID, dayStart, dayEnd)
+	if err != nil {
+		log.Error().Err(err).Msg("list reviews on day for heatmap detail failed")
+	}
+	if len(reviews) == 0 {
+		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayNoReviews))
+		b.WriteString("\n")
+	} else {
+		for _, r := range reviews {
+			mark := "🔁"
+			if r.Correct {
+				mark = "✅"
+			}
+			b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackHeatmapDayReviewLine, mark, r.Term, r.Translation))
+		}
+	}
+
+	menu := track.TrackHeatmapDayDetailInlineMenu(ctx.Language)
+	if ctx.MessageID > 0 {
+		edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, b.String(), menu)
+		if _, err := m.bot.Send(edit); err == nil {
+			return
+		}
+		log.Error().Msg("edit heatmap day detail failed, sending fresh message instead")
+	}
+	out := tgbotapi.NewMessage(ctx.ChatID, b.String())
+	out.ReplyMarkup = menu
+	if _, err := m.bot.Send(out); err != nil {
+		log.Error().Err(err).Msg("send heatmap day detail failed")
+	}
 }
 
 func (m *Module) ShowTodayChart(ctx *tgctx.MsgContext) {

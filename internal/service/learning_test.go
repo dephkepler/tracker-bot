@@ -242,6 +242,16 @@ func (f *fakeLearningRepo) RecordReview(_ context.Context, wordID, userID int64,
 	return nil
 }
 
+func (f *fakeLearningRepo) ListReviewsOnDay(_ context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error) {
+	out := make([]models.LearningReviewEntry, 0)
+	for _, d := range f.reviewDates[userID] {
+		if !d.Before(from) && d.Before(to) {
+			out = append(out, models.LearningReviewEntry{ReviewedAt: d})
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeLearningRepo) UpsertPushInterval(_ context.Context, userID int64, intervalMin int, nextPushAt time.Time) error {
 	f.pushRows[userID] = struct {
 		intervalMin int

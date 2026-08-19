@@ -264,4 +264,20 @@ func TestLearningRepository_StatsDetail(t *testing.T) {
 	if correct != 1 || total != 2 {
 		t.Fatalf("accuracy = (%d, %d), want (1, 2)", correct, total)
 	}
+
+	now := time.Now().UTC()
+	entries, err := repo.ListReviewsOnDay(ctx, userID, now.Add(-time.Hour), now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("list reviews on day: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("list reviews on day = %+v, want 2 entries", entries)
+	}
+	entries, err = repo.ListReviewsOnDay(ctx, userID, now.Add(-48*time.Hour), now.Add(-24*time.Hour))
+	if err != nil {
+		t.Fatalf("list reviews on day (out of range): %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("list reviews on day (out of range) = %+v, want empty", entries)
+	}
 }

@@ -37,6 +37,10 @@ const (
 	TrackCBReportsCalCancel       = "track:report:cal:cancel"
 	TrackCBReportsCalThisMonth    = "track:report:cal:this_month"
 	TrackCBReportsCalThisYear     = "track:report:cal:this_year"
+
+	// TrackCBHeatmapDay carries the tapped day as "<TrackCBHeatmapDay>2006-01-02".
+	TrackCBHeatmapDay  = "track:heatmap:day:"
+	TrackCBHeatmapBack = "track:heatmap:back"
 )
 
 // ---------------------------------------------------------------------

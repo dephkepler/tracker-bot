@@ -38,6 +38,9 @@ type LearningService interface {
 	// "reveal" step of a review card before the user grades it.
 	PeekWord(ctx context.Context, userID, wordID int64) (collectionName, term, translation string, err error)
 	GradeAnswer(ctx context.Context, userID, wordID int64, correct bool) (nextIntervalDays int, learned bool, err error)
+	// ListReviewsOnDay returns every review the user answered within
+	// [from, to) — used by the tracking heatmap's day drill-down.
+	ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error)
 
 	// Push scheduling.
 	Activate(ctx context.Context, userID int64, intervalMin int) error
@@ -222,6 +225,11 @@ func (srv *learningService) GradeAnswer(ctx context.Context, userID, wordID int6
 		return 0, false, err
 	}
 	return newInterval, learned, nil
+}
+
+// ListReviewsOnDay returns every review the user answered within [from, to).
+func (srv *learningService) ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error) {
+	return srv.repo.ListReviewsOnDay(ctx, userID, from, to)
 }
 
 // gradeSchedule is a simplified SM-2: quality is binary (knew it / didn't),

@@ -441,6 +441,49 @@ func TrackReportPeriodCalendarInlineMenu(lang i18n.Lang, month time.Time, from, 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
+// TrackHeatmapInlineMenu renders the calendar heatmap as a tappable grid:
+// one button per day (🟩 tracked / ⬛ missed, both open that day's
+// drill-down; ⬜ upcoming days are inert). gridStart must be a Monday.
+func TrackHeatmapInlineMenu(lang i18n.Lang, gridStart, today time.Time, trackedDays map[string]bool, weeks int) tgbotapi.InlineKeyboardMarkup {
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, weeks+2)
+
+	header := make([]tgbotapi.InlineKeyboardButton, 0, 7)
+	for _, k := range weekdayShortKeys {
+		header = append(header, tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, k), "noop"))
+	}
+	rows = append(rows, header)
+
+	for w := 0; w < weeks; w++ {
+		row := make([]tgbotapi.InlineKeyboardButton, 0, 7)
+		for d := 0; d < 7; d++ {
+			day := gridStart.AddDate(0, 0, w*7+d)
+			if day.After(today) {
+				row = append(row, tgbotapi.NewInlineKeyboardButtonData("⬜", "noop"))
+				continue
+			}
+			emoji := "⬛"
+			if trackedDays[day.Format("2006-01-02")] {
+				emoji = "🟩"
+			}
+			row = append(row, tgbotapi.NewInlineKeyboardButtonData(emoji, TrackCBHeatmapDay+day.Format("2006-01-02")))
+		}
+		rows = append(rows, row)
+	}
+
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelBack), "back_to_main"),
+	))
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+// TrackHeatmapDayDetailInlineMenu is the single "back to heatmap" row shown
+// under a day's drill-down.
+func TrackHeatmapDayDetailInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelBack), TrackCBHeatmapBack)),
+	)
+}
+
 func sameDay(a, b time.Time) bool {
 	if a.IsZero() || b.IsZero() {
 		return false

@@ -21,6 +21,27 @@ var catalogTrackReports = map[string]entry{
 	KeyTrackHeatmapDaysTracked: {
 		RU: "%d из %d дней с трекингом", EN: "%d of %d days tracked", DE: "%d von %d Tagen erfasst", UK: "%d з %d днів з трекінгом", AR: "%d من %d أيام تم تتبعها",
 	},
+	KeyTrackHeatmapHint: {
+		RU: "Тапни на квадратик, чтобы посмотреть, что было в этот день", EN: "Tap a square to see what happened that day", DE: "Tippe auf ein Feld, um zu sehen, was an diesem Tag war", UK: "Тапни на квадратик, щоб побачити, що було цього дня", AR: "اضغط على مربع لترى ما حدث في ذلك اليوم",
+	},
+	KeyTrackHeatmapDayTrackedHeader: {
+		RU: "⏱ Трекинг:", EN: "⏱ Tracked:", DE: "⏱ Erfasst:", UK: "⏱ Трекінг:", AR: "⏱ تم التتبع:",
+	},
+	KeyTrackHeatmapDayNoActivity: {
+		RU: "В этот день ничего не трекалось.", EN: "No tracked time this day.", DE: "An diesem Tag wurde nichts erfasst.", UK: "Цього дня нічого не трекалося.", AR: "لم يتم تتبع أي وقت في هذا اليوم.",
+	},
+	KeyTrackHeatmapDayActivityLine: {
+		RU: "• %s — %s (%d)\n", EN: "• %s — %s (%d)\n", DE: "• %s — %s (%d)\n", UK: "• %s — %s (%d)\n", AR: "• %s — %s (%d)\n",
+	},
+	KeyTrackHeatmapDayReviewsHeader: {
+		RU: "🧠 Слова:", EN: "🧠 Words:", DE: "🧠 Wörter:", UK: "🧠 Слова:", AR: "🧠 الكلمات:",
+	},
+	KeyTrackHeatmapDayNoReviews: {
+		RU: "В этот день слова не повторялись.", EN: "No word reviews this day.", DE: "An diesem Tag wurden keine Wörter wiederholt.", UK: "Цього дня слова не повторювалися.", AR: "لم تتم مراجعة أي كلمات في هذا اليوم.",
+	},
+	KeyTrackHeatmapDayReviewLine: {
+		RU: "%s %s → %s\n", EN: "%s %s → %s\n", DE: "%s %s → %s\n", UK: "%s %s → %s\n", AR: "%s %s → %s\n",
+	},
 	KeyTrackLabelBackToReports: {
 		RU: "↩️ Назад к отчётам", EN: "↩️ Back to Reports", DE: "↩️ Zurück zu Berichten", UK: "↩️ Назад до звітів", AR: "↩️ العودة إلى التقارير",
 	},

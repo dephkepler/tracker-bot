@@ -205,6 +205,14 @@ const (
 	KeyTrackHeatmapTitle       = "track.reports.heatmap.title"
 	KeyTrackHeatmapLegend      = "track.reports.heatmap.legend"
 	KeyTrackHeatmapDaysTracked = "track.reports.heatmap.days_tracked" // "%d of %d days tracked"
+	KeyTrackHeatmapHint        = "track.reports.heatmap.hint"
+
+	KeyTrackHeatmapDayTrackedHeader = "track.reports.heatmap.day.tracked_header"
+	KeyTrackHeatmapDayNoActivity    = "track.reports.heatmap.day.no_activity"
+	KeyTrackHeatmapDayActivityLine  = "track.reports.heatmap.day.activity_line" // "• %s — %s (%d)\n"
+	KeyTrackHeatmapDayReviewsHeader = "track.reports.heatmap.day.reviews_header"
+	KeyTrackHeatmapDayNoReviews     = "track.reports.heatmap.day.no_reviews"
+	KeyTrackHeatmapDayReviewLine    = "track.reports.heatmap.day.review_line" // "%s %s → %s\n"
 
 	KeyTrackTodayChartLoadFailed = "track.reports.today_chart.load_failed"
 	KeyTrackTodayChartEmpty      = "track.reports.today_chart.empty"

@@ -35,6 +35,7 @@ type LearningRepository interface {
 	// Review delivery.
 	PickDueWord(ctx context.Context, userID int64, now time.Time) (*models.LearningDueWord, error)
 	RecordReview(ctx context.Context, wordID, userID int64, correct bool, now time.Time) error
+	ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error)
 
 	// Push scheduling — mirrors TimerRepository's shape (migrations/0004).
 	UpsertPushInterval(ctx context.Context, userID int64, intervalMin int, nextPushAt time.Time) error
@@ -334,6 +335,36 @@ func (r *learningRepository) RecordReview(ctx context.Context, wordID, userID in
 		return fmt.Errorf("record review: %w", err)
 	}
 	return nil
+}
+
+// ListReviewsOnDay returns every review the user answered within
+// [from, to), most recent first — for the heatmap day drill-down.
+func (r *learningRepository) ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error) {
+	q := `
+	SELECT w.term, w.translation, r.correct, r.reviewed_at
+	FROM learning_reviews r
+	JOIN learning_words w ON w.id = r.word_id
+	WHERE r.user_id = $1 AND r.reviewed_at >= $2 AND r.reviewed_at < $3
+	ORDER BY r.reviewed_at DESC;
+	`
+	rows, err := r.db.Query(ctx, q, userID, from.UTC(), to.UTC())
+	if err != nil {
+		return nil, fmt.Errorf("list reviews on day query: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]models.LearningReviewEntry, 0)
+	for rows.Next() {
+		var e models.LearningReviewEntry
+		if err := rows.Scan(&e.Term, &e.Translation, &e.Correct, &e.ReviewedAt); err != nil {
+			return nil, fmt.Errorf("list reviews on day scan: %w", err)
+		}
+		out = append(out, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list reviews on day rows: %w", err)
+	}
+	return out, nil
 }
 
 // UpsertPushInterval enables review pushes and saves interval + next push

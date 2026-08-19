@@ -185,6 +185,15 @@ type LearningCollectionStat struct {
 	LearnedWords int
 }
 
+// LearningReviewEntry is one answered review, for the heatmap day
+// drill-down ("what words did I study that day").
+type LearningReviewEntry struct {
+	Term        string
+	Translation string
+	Correct     bool
+	ReviewedAt  time.Time
+}
+
 // LearningStatsDetail is the "📈 Statistics" screen's full view model.
 type LearningStatsDetail struct {
 	Overall        LearningStats
