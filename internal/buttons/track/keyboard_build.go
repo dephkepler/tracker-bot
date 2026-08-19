@@ -2,6 +2,7 @@ package track
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"tracker-bot/internal/models"
@@ -46,8 +47,8 @@ func TrackActivityReportReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 
 func TrackActivityManageReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonActivityActivate), buttonbuilder.RB(TrackButtonActivityArchive)),
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonActivityDelete), buttonbuilder.RB(TrackButtonViewArchive)),
+		buttonbuilder.RR(buttonbuilder.RB(TrackButtonActivityActivate), buttonbuilder.RB(TrackButtonActivityDelete)),
+		buttonbuilder.RR(buttonbuilder.RB(TrackButtonViewArchive)),
 		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
 	)
 }
@@ -66,32 +67,74 @@ func TrackReportsReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 	)
 }
 
-func TrackTimerReplyMenu() tgbotapi.ReplyKeyboardMarkup {
-	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)),
-	)
+// TrackTimerReplyMenu renders the timer picker as plain reply buttons:
+// built-in intervals first, then any custom ones the user added, then
+// actions to add/delete a custom interval, then navigation. Activating an
+// interval and deleting a custom one both happen by tapping its button text
+// (see FormatTimerButton/ParseTimerButtonMinutes) rather than through an
+// inline keyboard.
+func TrackTimerReplyMenu(builtIn, custom []int) tgbotapi.ReplyKeyboardMarkup {
+	rows := make([][]tgbotapi.KeyboardButton, 0, 4)
+	rows = append(rows, timerIntervalRows(builtIn, TrackTimerActivatePrefix)...)
+	rows = append(rows, timerIntervalRows(custom, TrackTimerActivatePrefix)...)
+
+	if len(custom) > 0 {
+		rows = append(rows, buttonbuilder.RR(
+			buttonbuilder.RB(TrackButtonTimerCreate),
+			buttonbuilder.RB(TrackButtonTimerDelete),
+		))
+	} else {
+		rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(TrackButtonTimerCreate)))
+	}
+	rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack), buttonbuilder.RB(TrackButtonBackHome)))
+	return buttonbuilder.RK(rows...)
 }
 
-// TrackTimerInlineMenu renders the timer picker: built-in intervals first,
-// then any custom intervals the user added, each with its own delete
-// button, then the "add custom" action.
-func TrackTimerInlineMenu(builtIn, custom []int) tgbotapi.InlineKeyboardMarkup {
-	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(builtIn)+len(custom)+2)
-	for _, m := range builtIn {
-		rows = append(rows, buttonbuilder.IR(
-			buttonbuilder.IB(fmt.Sprintf("⏱ %d min", m), fmt.Sprintf("%s%d", TrackCBTimerActivate, m)),
-		))
+// TrackTimerDeleteReplyMenu lists custom intervals as buttons; tapping one
+// deletes it (see ParseTimerButtonMinutes with TrackTimerDeletePrefix).
+func TrackTimerDeleteReplyMenu(custom []int) tgbotapi.ReplyKeyboardMarkup {
+	rows := timerIntervalRows(custom, TrackTimerDeletePrefix)
+	rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(TrackButtonBack)))
+	return buttonbuilder.RK(rows...)
+}
+
+// timerIntervalRows renders interval minutes as "<prefix><N> min" buttons,
+// two per row.
+func timerIntervalRows(intervals []int, prefix string) [][]tgbotapi.KeyboardButton {
+	rows := make([][]tgbotapi.KeyboardButton, 0, (len(intervals)+1)/2)
+	for i := 0; i < len(intervals); i += 2 {
+		if i+1 < len(intervals) {
+			rows = append(rows, buttonbuilder.RR(
+				buttonbuilder.RB(FormatTimerButton(prefix, intervals[i])),
+				buttonbuilder.RB(FormatTimerButton(prefix, intervals[i+1])),
+			))
+		} else {
+			rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(FormatTimerButton(prefix, intervals[i]))))
+		}
 	}
-	for _, m := range custom {
-		rows = append(rows, buttonbuilder.IR(
-			buttonbuilder.IB(fmt.Sprintf("⏱ %d min", m), fmt.Sprintf("%s%d", TrackCBTimerActivate, m)),
-			buttonbuilder.IB(TrackLabelDeleteTimer, fmt.Sprintf("%s%d", TrackCBTimerDelete, m)),
-		))
+	return rows
+}
+
+// FormatTimerButton renders one timer interval as reply-button text.
+func FormatTimerButton(prefix string, minutes int) string {
+	return fmt.Sprintf("%s%d min", prefix, minutes)
+}
+
+// ParseTimerButtonMinutes extracts the interval from a timer reply-button's
+// text (the inverse of FormatTimerButton). ok is false if text isn't
+// "<prefix><N> min" for a positive N — in particular it correctly rejects
+// TrackButtonTimerDelete ("🗑 Delete Timer") even though it shares the "🗑 "
+// prefix with delete-picker buttons, since it doesn't end in " min".
+func ParseTimerButtonMinutes(text, prefix string) (int, bool) {
+	if !strings.HasPrefix(text, prefix) || !strings.HasSuffix(text, " min") {
+		return 0, false
 	}
-	rows = append(rows, buttonbuilder.IR(
-		buttonbuilder.IB(TrackButtonTimerCreate, TrackCBTimerCreate),
-	))
-	return buttonbuilder.IK(rows...)
+	numStr := strings.TrimSuffix(strings.TrimPrefix(text, prefix), " min")
+	n, err := strconv.Atoi(numStr)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 func TrackActivitiesInlineMenu(items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {

@@ -37,9 +37,6 @@ const (
 	TrackCBReportsCalCancel       = "track:report:cal:cancel"
 	TrackCBReportsCalThisMonth    = "track:report:cal:this_month"
 	TrackCBReportsCalThisYear     = "track:report:cal:this_year"
-	TrackCBTimerActivate          = "track:timer:activate:"
-	TrackCBTimerCreate            = "track:timer:create"
-	TrackCBTimerDelete            = "track:timer:delete:"
 )
 
 // ---------------------------------------------------------------------
@@ -105,14 +102,21 @@ const (
 // Activity manage reply menu buttons
 const (
 	TrackButtonActivityActivate = "📳 Activate"
-	TrackButtonActivityArchive  = "🛒 Archive"
 	TrackButtonActivityDelete   = "🗑 Delete"
 )
 
-// Timer picker (inline menu)
+// Timer picker (reply menu)
 const (
 	TrackButtonTimerCreate = "➕ Custom Timer"
-	TrackLabelDeleteTimer  = "🗑"
+	TrackButtonTimerDelete = "🗑 Delete Timer"
+
+	// TrackTimerActivatePrefix/TrackTimerDeletePrefix prefix a timer button's
+	// text (see FormatTimerButton/ParseTimerButtonMinutes) so the same
+	// "<prefix><N> min" shape can mean either "activate this interval" (on
+	// the main timer screen) or "delete this custom interval" (on the
+	// delete-picker screen), depending on which screen the user is on.
+	TrackTimerActivatePrefix = "⏱ "
+	TrackTimerDeletePrefix   = "🗑 "
 )
 
 // BuiltInTimerIntervals are the always-available timer choices shown before

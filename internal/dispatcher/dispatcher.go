@@ -44,6 +44,7 @@ const (
 	screenTrackMain      = "track_main"
 	screenTrackManage    = "track_manage"
 	screenTrackTimer     = "track_timer"
+	screenTrackTimerDel  = "track_timer_delete"
 	screenTrackArchive   = "track_archive"
 	screenCreateActivity = "create_activity"
 	screenTrackReports   = "track_reports"
@@ -378,6 +379,24 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 
 // handleText routes plain text based on current screen and reply buttons.
 func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
+	// Timer interval buttons carry their minutes in the button text itself
+	// ("⏱ 15 min" / "🗑 15 min") rather than through inline callback_data —
+	// checked here, gated by screen, before the exact-match switch below.
+	if d.isScreen(ctx.UserID, screenTrackTimer) {
+		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
+			d.track.ActivateTrackTimer(ctx, minutes)
+			d.setScreen(ctx.UserID, screenHome)
+			return
+		}
+	}
+	if d.isScreen(ctx.UserID, screenTrackTimerDel) {
+		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Text, trackbtn.TrackTimerDeletePrefix); ok {
+			d.track.DeleteCustomTimer(ctx, minutes)
+			d.setScreen(ctx.UserID, screenTrackTimer)
+			return
+		}
+	}
+
 	switch ctx.Text {
 	case trackbtn.TrackButtonActivityDelete:
 		if !d.isScreen(ctx.UserID, screenTrackManage) {
@@ -394,10 +413,6 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		d.setScreen(ctx.UserID, screenTrackTimer)
 		d.track.ShowTrackTimerMenu(ctx)
 		return
-	case trackbtn.TrackButtonActivityArchive:
-		d.setScreen(ctx.UserID, screenTrackArchive)
-		d.track.ShowArchiveMenu(ctx)
-		return
 	case trackbtn.TrackButtonViewArchive:
 		d.setScreen(ctx.UserID, screenTrackArchive)
 		d.track.ShowArchiveMenu(ctx)
@@ -409,10 +424,30 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 		d.track.ShowTodayReport(ctx)
 		return
+	case trackbtn.TrackButtonTimerCreate:
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.replyUseButtons(ctx.ChatID)
+			return
+		}
+		d.sessions.get(ctx.UserID).waitingCustomTimerMinutes = true
+		d.track.PromptCreateCustomTimer(ctx)
+		return
+	case trackbtn.TrackButtonTimerDelete:
+		if !d.isScreen(ctx.UserID, screenTrackTimer) {
+			d.replyUseButtons(ctx.ChatID)
+			return
+		}
+		if d.track.ShowTrackTimerDeleteMenu(ctx) {
+			d.setScreen(ctx.UserID, screenTrackTimerDel)
+		}
+		return
 	case trackbtn.TrackButtonBack:
 		switch {
 		case d.isScreen(ctx.UserID, screenTrackReports):
 			d.track.ShowReportsHub(ctx, false)
+		case d.isScreen(ctx.UserID, screenTrackTimerDel):
+			d.setScreen(ctx.UserID, screenTrackTimer)
+			d.track.ShowTrackTimerMenu(ctx)
 		case d.isScreen(ctx.UserID, screenTrackManage, screenTrackArchive, screenTrackTimer):
 			d.setScreen(ctx.UserID, screenTrackMain)
 			d.track.ShowTrackingMenu(ctx)
@@ -606,34 +641,6 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 			return
 		}
 		d.track.HandleTrackToggleCallback(ctx)
-	case strings.HasPrefix(data, trackbtn.TrackCBTimerActivate):
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.closeInlineMenu(ctx, "Timer menu is closed. Open it again from Track.")
-			return
-		}
-		minutes, ok := parseCallbackID(data, trackbtn.TrackCBTimerActivate)
-		if !ok || minutes <= 0 {
-			return
-		}
-		d.track.ActivateTrackTimer(ctx, int(minutes))
-		d.setScreen(ctx.UserID, screenHome)
-	case data == trackbtn.TrackCBTimerCreate:
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.closeInlineMenu(ctx, "Timer menu is closed. Open it again from Track.")
-			return
-		}
-		sess.waitingCustomTimerMinutes = true
-		d.track.PromptCreateCustomTimer(ctx)
-	case strings.HasPrefix(data, trackbtn.TrackCBTimerDelete):
-		if !d.isScreen(ctx.UserID, screenTrackTimer) {
-			d.closeInlineMenu(ctx, "Timer menu is closed. Open it again from Track.")
-			return
-		}
-		minutes, ok := parseCallbackID(data, trackbtn.TrackCBTimerDelete)
-		if !ok || minutes <= 0 {
-			return
-		}
-		d.track.DeleteCustomTimer(ctx, int(minutes))
 	}
 }
 
@@ -646,16 +653,22 @@ func (d *Dispatcher) replyUseButtons(chatID int64) {
 func (d *Dispatcher) isTrackButtonText(text string) bool {
 	switch text {
 	case trackbtn.TrackButtonActivityActivate,
-		trackbtn.TrackButtonActivityArchive,
 		trackbtn.TrackButtonActivityDelete,
 		trackbtn.TrackButtonBack,
 		trackbtn.TrackButtonBackHome,
 		trackbtn.TrackButtonViewArchive,
-		trackbtn.TrackButtonPeriod:
+		trackbtn.TrackButtonPeriod,
+		trackbtn.TrackButtonTimerCreate,
+		trackbtn.TrackButtonTimerDelete:
 		return true
-	default:
-		return false
 	}
+	if _, ok := trackbtn.ParseTimerButtonMinutes(text, trackbtn.TrackTimerActivatePrefix); ok {
+		return true
+	}
+	if _, ok := trackbtn.ParseTimerButtonMinutes(text, trackbtn.TrackTimerDeletePrefix); ok {
+		return true
+	}
+	return false
 }
 
 // ensurePeriodDefaults sets initial period report dates for user.

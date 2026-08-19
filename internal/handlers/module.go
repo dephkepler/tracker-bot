@@ -750,12 +750,9 @@ func (m *Module) findArchivedActivityName(ctx *tgctx.MsgContext, activityID int6
 }
 
 // ShowTrackTimerMenu renders timer interval selector: built-in 15/30 min
-// choices plus any custom intervals the user has added.
+// choices plus any custom intervals the user has added, all as reply
+// buttons (tap = activate; see TrackButtonTimerDelete for removal).
 func (m *Module) ShowTrackTimerMenu(ctx *tgctx.MsgContext) {
-	reply := tgbotapi.NewMessage(ctx.ChatID, "🗂")
-	reply.ReplyMarkup = track.TrackTimerReplyMenu()
-	_, _ = m.bot.Send(reply)
-
 	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list custom timers failed")
@@ -763,8 +760,29 @@ func (m *Module) ShowTrackTimerMenu(ctx *tgctx.MsgContext) {
 	}
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, track.TrackMsgTimerPickerTitle)
-	msg.ReplyMarkup = track.TrackTimerInlineMenu(track.BuiltInTimerIntervals, custom)
+	msg.ReplyMarkup = track.TrackTimerReplyMenu(track.BuiltInTimerIntervals, custom)
 	_, _ = m.bot.Send(msg)
+}
+
+// ShowTrackTimerDeleteMenu lists custom intervals as reply buttons; tapping
+// one deletes it (see DeleteCustomTimer). If there are none, it just
+// re-shows the main timer picker instead of an empty delete screen.
+func (m *Module) ShowTrackTimerDeleteMenu(ctx *tgctx.MsgContext) bool {
+	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list custom timers failed")
+		custom = nil
+	}
+	if len(custom) == 0 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "No custom timers to delete yet."))
+		m.ShowTrackTimerMenu(ctx)
+		return false
+	}
+
+	msg := tgbotapi.NewMessage(ctx.ChatID, "Pick a custom timer to delete:")
+	msg.ReplyMarkup = track.TrackTimerDeleteReplyMenu(custom)
+	_, _ = m.bot.Send(msg)
+	return true
 }
 
 // PromptCreateCustomTimer asks user to type a custom interval in minutes.
@@ -807,8 +825,8 @@ func (m *Module) ProcessCreateCustomTimer(ctx *tgctx.MsgContext) bool {
 	return true
 }
 
-// DeleteCustomTimer removes a custom interval and re-renders the picker
-// in place.
+// DeleteCustomTimer removes a custom interval and returns to the main timer
+// picker with it gone.
 func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	if err := m.timersvc.RemoveCustomInterval(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil && !errors.Is(err, models.ErrCustomTimerNotFound) {
 		log.Error().Err(err).Msg("delete custom timer failed")
@@ -816,21 +834,8 @@ func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
 		return
 	}
 
-	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
-	if err != nil {
-		log.Error().Err(err).Msg("list custom timers failed")
-		custom = nil
-	}
-
-	edit := tgbotapi.NewEditMessageTextAndMarkup(
-		ctx.ChatID,
-		ctx.MessageID,
-		track.TrackMsgTimerPickerTitle,
-		track.TrackTimerInlineMenu(track.BuiltInTimerIntervals, custom),
-	)
-	if _, err := m.bot.Send(edit); err != nil {
-		log.Error().Err(err).Msg("edit timer picker failed")
-	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🗑 Custom timer removed: %d min", intervalMin)))
+	m.ShowTrackTimerMenu(ctx)
 }
 
 // ActivateTrackTimer enables periodic prompts for selected activities.
