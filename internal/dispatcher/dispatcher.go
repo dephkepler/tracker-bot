@@ -538,7 +538,7 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 		if ctx.Text == learningbtn.LearningButtonBack {
 			d.setScreen(ctx.UserID, screenLearningMain)
-			hide := tgbotapi.NewMessage(ctx.ChatID, " ")
+			hide := tgbotapi.NewMessage(ctx.ChatID, "◀ Back to Learning menu.")
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.learning.ShowLearningMenu(ctx)

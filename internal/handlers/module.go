@@ -1362,10 +1362,13 @@ func (m *Module) ActivateReviews(ctx *tgctx.MsgContext, intervalMin int) {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to activate reviews. Please try again."))
 		return
 	}
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🎲 Reviews activated — a word every %d min.", intervalMin)))
-	hide := tgbotapi.NewMessage(ctx.ChatID, " ")
-	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
-	_, _ = m.bot.Send(hide)
+	// Clear the interval-picker reply keyboard on the confirmation message
+	// itself (rather than a separate blank message) so there's no window
+	// where a stray tap on the old keyboard can land as stray text on
+	// whatever screen comes next.
+	confirm := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🎲 Reviews activated — a word every %d min.", intervalMin))
+	confirm.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(confirm)
 	m.ShowLearningMenu(ctx)
 }
 
