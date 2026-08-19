@@ -212,6 +212,52 @@ func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
+// languageCodeByButton maps a language-picker reply button's text to the
+// ISO code stored in users.language (see migration 0001_users_init.up.sql's
+// users_allowed_language CHECK constraint: ru/en/de/uk/ar).
+var languageCodeByButton = map[string]string{
+	profile.ProfileButtonLanguageRussian:   "ru",
+	profile.ProfileButtonLanguageEnglish:   "en",
+	profile.ProfileButtonLanguageGerman:    "de",
+	profile.ProfileButtonLanguageUkrainian: "uk",
+	profile.ProfileButtonLanguageArabian:   "ar",
+}
+
+// ShowLanguagePicker asks the user to pick their interface language.
+func (m *Module) ShowLanguagePicker(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, "🌐 Pick your language:")
+	msg.ReplyMarkup = profile.ProfileLanguageManageReplyMenu()
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send language picker failed")
+	}
+}
+
+// ProcessLanguageSelection saves the language behind the reply button the
+// user tapped (see languageCodeByButton) and returns to the profile screen.
+// Returns false — without changing anything — if ctx.Text isn't one of the
+// picker's buttons, so the caller keeps waiting for a valid tap instead of
+// silently dropping the selection.
+func (m *Module) ProcessLanguageSelection(ctx *tgctx.MsgContext) bool {
+	code, ok := languageCodeByButton[ctx.Text]
+	if !ok {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "Tap one of the language buttons, or ✖️ Cancel."))
+		return false
+	}
+
+	if err := m.profilesvc.ChangeLanguage(ctx.Ctx, ctx.UserID, code); err != nil {
+		log.Error().Err(err).Msg("save language failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save language. Please try again."))
+		return false
+	}
+
+	hide := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Language set to %s", ctx.Text))
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+
+	m.ShowProfileMenu(ctx)
+	return true
+}
+
 // ShowLocationRequest asks the user to share their location so the bot can
 // detect their real timezone instead of assuming one for everyone.
 func (m *Module) ShowLocationRequest(ctx *tgctx.MsgContext) {

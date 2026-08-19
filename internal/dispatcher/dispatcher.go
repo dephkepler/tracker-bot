@@ -297,6 +297,17 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 		return
 	}
 
+	if q.Data == profilebtn.ProfileCBEditLanguage {
+		d.sessions.get(mctx.UserID).waitingLanguage = true
+		d.profile.ShowLanguagePicker(mctx)
+		return
+	}
+
+	if q.Data == profilebtn.ProfileCBRefresh {
+		d.profile.ShowProfileMenu(mctx)
+		return
+	}
+
 	// "back_to_main"/"noop" are used as raw literals (not "track:"-prefixed)
 	// by several inline keyboards in internal/buttons/track/keyboard_build.go.
 	// Without this they never reach handleTrackCallback below, so every
@@ -360,6 +371,20 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		}
 		if d.track.ProcessCreateCustomTimer(ctx) {
 			sess.waitingCustomTimerMinutes = false
+		}
+		return true
+	}
+	if sess.waitingLanguage {
+		if ctx.Text == profilebtn.ProfileButtonCancel {
+			sess.waitingLanguage = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, "Cancelled.")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.profile.ShowProfileMenu(ctx)
+			return true
+		}
+		if d.profile.ProcessLanguageSelection(ctx) {
+			sess.waitingLanguage = false
 		}
 		return true
 	}

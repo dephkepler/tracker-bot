@@ -27,6 +27,7 @@ type userSession struct {
 
 	waitingActivityName       bool
 	waitingLocation           bool
+	waitingLanguage           bool
 	waitingPeriodRange        bool
 	waitingCustomTimerMinutes bool
 

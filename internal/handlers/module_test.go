@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"testing"
+	"tracker-bot/internal/buttons/profile"
 	"tracker-bot/internal/utils/tgctx"
 )
 
@@ -38,5 +39,33 @@ func TestNew_StripsLeadingAtFromAdminUsername(t *testing.T) {
 	m := New(nil, nil, nil, nil, nil, nil, nil, "@alaamov")
 	if !m.IsAdmin(&tgctx.MsgContext{Username: "alaamov"}) {
 		t.Fatal("IsAdmin() = false, want true after stripping leading @ from configured admin username")
+	}
+}
+
+// TestLanguageCodeByButton checks every language-picker button maps to the
+// exact code the DB's users_allowed_language CHECK constraint accepts
+// (migrations/0001_users_init.up.sql: ru/en/de/uk/ar) — a typo here would
+// make ProcessLanguageSelection silently fail ChangeLanguage for that button.
+func TestLanguageCodeByButton(t *testing.T) {
+	want := map[string]string{
+		profile.ProfileButtonLanguageRussian:   "ru",
+		profile.ProfileButtonLanguageEnglish:   "en",
+		profile.ProfileButtonLanguageGerman:    "de",
+		profile.ProfileButtonLanguageUkrainian: "uk",
+		profile.ProfileButtonLanguageArabian:   "ar",
+	}
+
+	if len(languageCodeByButton) != len(want) {
+		t.Fatalf("languageCodeByButton has %d entries, want %d", len(languageCodeByButton), len(want))
+	}
+	for button, code := range want {
+		got, ok := languageCodeByButton[button]
+		if !ok {
+			t.Errorf("languageCodeByButton missing entry for %q", button)
+			continue
+		}
+		if got != code {
+			t.Errorf("languageCodeByButton[%q] = %q, want %q", button, got, code)
+		}
 	}
 }

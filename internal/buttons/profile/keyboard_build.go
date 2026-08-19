@@ -37,6 +37,7 @@ func ProfileLanguageManageReplyMenu() tgbotapi.ReplyKeyboardMarkup {
 		buttonbuilder.RR(buttonbuilder.RB(ProfileButtonLanguageEnglish)),
 		buttonbuilder.RR(buttonbuilder.RB(ProfileButtonLanguageRussian), buttonbuilder.RB(ProfileButtonLanguageGerman)),
 		buttonbuilder.RR(buttonbuilder.RB(ProfileButtonLanguageUkrainian), buttonbuilder.RB(ProfileButtonLanguageArabian)),
+		buttonbuilder.RR(buttonbuilder.RB(ProfileButtonCancel)),
 	)
 }
 
