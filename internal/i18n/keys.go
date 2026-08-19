@@ -162,6 +162,7 @@ const (
 const (
 	KeyTrackButtonToday    = "track.button.today"
 	KeyTrackButtonCalendar = "track.button.calendar"
+	KeyTrackButtonHeatmap  = "track.button.heatmap"
 
 	KeyTrackLabelBackToReports      = "track.label.back_to_reports"
 	KeyTrackLabelSelectedActivities = "track.label.selected_activities"
@@ -200,6 +201,10 @@ const (
 	KeyTrackCalendarMonth12 = "track.calendar.month_name.12"
 
 	KeyTrackReportsHubTitle = "track.reports.hub_title"
+
+	KeyTrackHeatmapTitle       = "track.reports.heatmap.title"
+	KeyTrackHeatmapLegend      = "track.reports.heatmap.legend"
+	KeyTrackHeatmapDaysTracked = "track.reports.heatmap.days_tracked" // "%d of %d days tracked"
 
 	KeyTrackTodayChartLoadFailed = "track.reports.today_chart.load_failed"
 	KeyTrackTodayChartEmpty      = "track.reports.today_chart.empty"

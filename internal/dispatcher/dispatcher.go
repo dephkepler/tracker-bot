@@ -736,6 +736,13 @@ func (d *Dispatcher) handleTranslatedButton(ctx *tgctx.MsgContext, key string) b
 		}
 		d.track.ShowTodayReport(ctx)
 		return true
+	case i18n.KeyTrackButtonHeatmap:
+		if !d.isScreen(ctx.UserID, screenTrackReports) {
+			d.replyUseButtons(ctx)
+			return true
+		}
+		d.track.ShowHeatmap(ctx)
+		return true
 	case i18n.KeyTrackButtonCalendar:
 		if !d.isScreen(ctx.UserID, screenTrackReports) {
 			d.replyUseButtons(ctx)

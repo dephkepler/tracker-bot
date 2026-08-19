@@ -67,6 +67,9 @@ func TrackReportsReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonCalendar)),
 		),
 		buttonbuilder.RR(
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonHeatmap)),
+		),
+		buttonbuilder.RR(
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
 		),

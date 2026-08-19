@@ -2,6 +2,7 @@ package track
 
 import (
 	"fmt"
+	"strings"
 	"time"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
@@ -54,6 +55,57 @@ func formatDuration(d time.Duration) string {
 	default:
 		return fmt.Sprintf("%dm", m)
 	}
+}
+
+// weekdayShortKeys indexes Mon(0)..Sun(6) to the matching i18n key — same
+// order as the calendar picker's header row.
+var weekdayShortKeys = [...]string{
+	i18n.KeyTrackCalendarMon, i18n.KeyTrackCalendarTue, i18n.KeyTrackCalendarWed,
+	i18n.KeyTrackCalendarThu, i18n.KeyTrackCalendarFri, i18n.KeyTrackCalendarSat, i18n.KeyTrackCalendarSun,
+}
+
+// TrackHeatmapText renders a GitHub-style calendar heatmap: 🟩 tracked, ⬛
+// missed, ⬜ upcoming (only appears within the current, still-incomplete
+// week). gridStart must be a Monday; today is the last day considered
+// "past" (inclusive).
+func TrackHeatmapText(lang i18n.Lang, gridStart, today time.Time, trackedDays map[string]bool, weeks int) string {
+	var b strings.Builder
+	b.WriteString(i18n.T(lang, i18n.KeyTrackHeatmapTitle))
+	b.WriteString("\n\n")
+
+	header := make([]string, 0, 7)
+	for _, k := range weekdayShortKeys {
+		header = append(header, i18n.T(lang, k))
+	}
+	b.WriteString(strings.Join(header, " "))
+	b.WriteString("\n")
+
+	trackedCount, totalPast := 0, 0
+	for w := 0; w < weeks; w++ {
+		cells := make([]string, 0, 7)
+		for d := 0; d < 7; d++ {
+			day := gridStart.AddDate(0, 0, w*7+d)
+			switch {
+			case day.After(today):
+				cells = append(cells, "⬜")
+			case trackedDays[day.Format("2006-01-02")]:
+				cells = append(cells, "🟩")
+				trackedCount++
+				totalPast++
+			default:
+				cells = append(cells, "⬛")
+				totalPast++
+			}
+		}
+		b.WriteString(strings.Join(cells, " "))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyTrackHeatmapLegend))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyTrackHeatmapDaysTracked, trackedCount, totalPast))
+	return b.String()
 }
 
 // safeText returns fallback when string is empty.

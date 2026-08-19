@@ -28,6 +28,7 @@ type TrackerService interface {
 	GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64, loc *time.Location) (map[int]time.Duration, error)
 	GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error)
 	GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) ([]models.HourActivityDuration, error)
+	GetTrackedDaysInRange(ctx context.Context, userID int64, from, to time.Time, loc *time.Location) ([]time.Time, error)
 }
 
 type trackerService struct {
@@ -316,6 +317,12 @@ func (srv *trackerService) GetPeriodBuckets(ctx context.Context, userID int64, f
 // activity (see repo.TrackerRepository.GetHourlyBucketsByActivity).
 func (srv *trackerService) GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) ([]models.HourActivityDuration, error) {
 	return srv.repo.GetHourlyBucketsByActivity(ctx, userID, from, to, activityIDs, resolveLoc(loc).String())
+}
+
+// GetTrackedDaysInRange returns distinct local calendar days with at least
+// one completed session, for the "🔥 Heatmap" report.
+func (srv *trackerService) GetTrackedDaysInRange(ctx context.Context, userID int64, from, to time.Time, loc *time.Location) ([]time.Time, error) {
+	return srv.repo.GetTrackedDaysInRange(ctx, userID, from, to, resolveLoc(loc).String())
 }
 
 func calcStreakDays(days []time.Time, now time.Time, loc *time.Location) int {

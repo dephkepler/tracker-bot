@@ -269,20 +269,25 @@ func (m *Module) DeleteAdminUser(ctx *tgctx.MsgContext, dbID int64) {
 // — shared by the admin drill-down/overview screens.
 func (m *Module) sendOrEditAdmin(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
 	if edit && ctx.MessageID > 0 {
+		var out tgbotapi.Chattable
 		if menu != nil {
-			out := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
-			_, _ = m.bot.Send(out)
-			return
+			out = tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
+		} else {
+			out = tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
 		}
-		out := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
-		_, _ = m.bot.Send(out)
+		if _, err := m.bot.Send(out); err != nil {
+			log.Error().Err(err).Msg("edit admin screen failed, sending fresh message instead")
+			m.sendOrEditAdmin(ctx, false, text, menu)
+		}
 		return
 	}
 	out := tgbotapi.NewMessage(ctx.ChatID, text)
 	if menu != nil {
 		out.ReplyMarkup = *menu
 	}
-	_, _ = m.bot.Send(out)
+	if _, err := m.bot.Send(out); err != nil {
+		log.Error().Err(err).Msg("send admin screen failed")
+	}
 }
 
 // PromptAdminBroadcast asks the admin to type the message to send to every
@@ -492,6 +497,37 @@ func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 }
 
 // ShowTodayChart renders today's activity distribution as text bars.
+// heatmapWeeks is how many weeks the "🔥 Heatmap" report covers.
+const heatmapWeeks = 8
+
+// ShowHeatmap renders a GitHub-style calendar heatmap of the last 8 weeks:
+// which days had any tracked time at all, across every activity.
+func (m *Module) ShowHeatmap(ctx *tgctx.MsgContext) {
+	loc := ctx.Location
+	today := apptime.NowIn(loc)
+	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
+	// Days since the most recent Monday (time.Weekday: Sunday=0..Saturday=6).
+	mondayOffset := (int(todayMidnight.Weekday()) + 6) % 7
+	thisMonday := todayMidnight.AddDate(0, 0, -mondayOffset)
+	gridStart := thisMonday.AddDate(0, 0, -7*(heatmapWeeks-1))
+	gridEnd := todayMidnight.AddDate(0, 0, 1) // exclusive
+
+	days, err := m.tracksvc.GetTrackedDaysInRange(ctx.Ctx, ctx.DBUserID, gridStart, gridEnd, loc)
+	if err != nil {
+		log.Error().Err(err).Msg("get tracked days in range failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackLoadFailed)))
+		return
+	}
+
+	tracked := make(map[string]bool, len(days))
+	for _, d := range days {
+		tracked[d.Format("2006-01-02")] = true
+	}
+
+	text := track.TrackHeatmapText(ctx.Language, gridStart, todayMidnight, tracked, heatmapWeeks)
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
+}
+
 func (m *Module) ShowTodayChart(ctx *tgctx.MsgContext) {
 	stats, err := m.tracksvc.GetTodayReport(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
@@ -1628,15 +1664,24 @@ func (m *Module) DeleteArchivedCollectionForever(ctx *tgctx.MsgContext, collecti
 // every Learning sub-screen.
 func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
 	if edit && ctx.MessageID > 0 {
+		var out tgbotapi.Chattable
 		if menu != nil {
-			out := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
-			out.ParseMode = "Markdown"
-			_, _ = m.bot.Send(out)
-			return
+			e := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
+			e.ParseMode = "Markdown"
+			out = e
+		} else {
+			e := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
+			e.ParseMode = "Markdown"
+			out = e
 		}
-		out := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
-		out.ParseMode = "Markdown"
-		_, _ = m.bot.Send(out)
+		if _, err := m.bot.Send(out); err != nil {
+			// Edit can legitimately fail (message too old, deleted, or some
+			// other transient API error) — previously this was silently
+			// swallowed, leaving the user staring at an unchanged screen
+			// with no feedback at all. Fall back to a fresh message instead.
+			log.Error().Err(err).Msg("edit learning screen failed, sending fresh message instead")
+			m.sendOrEditLearning(ctx, false, text, menu)
+		}
 		return
 	}
 	out := tgbotapi.NewMessage(ctx.ChatID, text)
@@ -1644,7 +1689,9 @@ func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text strin
 	if menu != nil {
 		out.ReplyMarkup = *menu
 	}
-	_, _ = m.bot.Send(out)
+	if _, err := m.bot.Send(out); err != nil {
+		log.Error().Err(err).Msg("send learning screen failed")
+	}
 }
 
 // ShowReviewIntervalPicker shows the review-push interval picker.

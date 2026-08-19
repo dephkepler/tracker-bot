@@ -42,6 +42,7 @@ type TrackerRepository interface {
 	GetLastTrackedActiveActivity(ctx context.Context, userID int64) (Activity, bool, error)
 	GetTodayDurationByActivity(ctx context.Context, userID, activityID int64, tzName string) (time.Duration, error)
 	GetTrackedDaysDescByActivity(ctx context.Context, userID, activityID int64, tzName string) ([]time.Time, error)
+	GetTrackedDaysInRange(ctx context.Context, userID int64, from, to time.Time, tzName string) ([]time.Time, error)
 	GetTodayTrackedActivitiesCount(ctx context.Context, userID int64, tzName string) (int, error)
 }
 type trackRepository struct {
@@ -706,6 +707,44 @@ func (r *trackRepository) GetTrackedDaysDescByActivity(ctx context.Context, user
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("tracked days by activity rows: %w", err)
+	}
+	return out, nil
+}
+
+// GetTrackedDaysInRange returns distinct local calendar days (across all
+// non-archived activities) that have at least one completed session
+// starting within [from, to) — used to build the "🔥 Heatmap" report.
+func (r *trackRepository) GetTrackedDaysInRange(ctx context.Context, userID int64, from, to time.Time, tzName string) ([]time.Time, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("tracked days in range: invalid userID")
+	}
+	q := `
+	SELECT DISTINCT date_trunc('day', s.start_at AT TIME ZONE $4)::timestamp
+	FROM activity_sessions s
+	JOIN activities a ON a.id = s.activity_id
+	WHERE s.user_id = $1
+	  AND a.is_archived = FALSE
+	  AND s.end_at IS NOT NULL
+	  AND s.start_at >= $2
+	  AND s.start_at < $3
+	ORDER BY 1;
+	`
+	rows, err := r.db.Query(ctx, q, userID, from.UTC(), to.UTC(), tzName)
+	if err != nil {
+		return nil, fmt.Errorf("tracked days in range query: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]time.Time, 0, 64)
+	for rows.Next() {
+		var day time.Time
+		if err := rows.Scan(&day); err != nil {
+			return nil, fmt.Errorf("tracked days in range scan: %w", err)
+		}
+		out = append(out, day.UTC())
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("tracked days in range rows: %w", err)
 	}
 	return out, nil
 }

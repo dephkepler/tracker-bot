@@ -9,6 +9,18 @@ var catalogTrackReports = map[string]entry{
 	KeyTrackButtonCalendar: {
 		RU: "📅 Календарь", EN: "📅 Calendar", DE: "📅 Kalender", UK: "📅 Календар", AR: "📅 التقويم",
 	},
+	KeyTrackButtonHeatmap: {
+		RU: "🔥 Карта активности", EN: "🔥 Heatmap", DE: "🔥 Heatmap", UK: "🔥 Карта активності", AR: "🔥 خريطة النشاط",
+	},
+	KeyTrackHeatmapTitle: {
+		RU: "🔥 *Карта активности* — последние 8 недель", EN: "🔥 *Heatmap* — last 8 weeks", DE: "🔥 *Heatmap* — letzte 8 Wochen", UK: "🔥 *Карта активності* — останні 8 тижнів", AR: "🔥 *خريطة النشاط* — آخر 8 أسابيع",
+	},
+	KeyTrackHeatmapLegend: {
+		RU: "🟩 трекал  ⬛ пропуск  ⬜ впереди", EN: "🟩 tracked  ⬛ missed  ⬜ upcoming", DE: "🟩 erfasst  ⬛ verpasst  ⬜ bevorstehend", UK: "🟩 трекав  ⬛ пропуск  ⬜ попереду", AR: "🟩 تم التتبع  ⬛ تفويت  ⬜ قادم",
+	},
+	KeyTrackHeatmapDaysTracked: {
+		RU: "%d из %d дней с трекингом", EN: "%d of %d days tracked", DE: "%d von %d Tagen erfasst", UK: "%d з %d днів з трекінгом", AR: "%d من %d أيام تم تتبعها",
+	},
 	KeyTrackLabelBackToReports: {
 		RU: "↩️ Назад к отчётам", EN: "↩️ Back to Reports", DE: "↩️ Zurück zu Berichten", UK: "↩️ Назад до звітів", AR: "↩️ العودة إلى التقارير",
 	},
