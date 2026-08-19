@@ -27,6 +27,7 @@ type TrackerService interface {
 	GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) (models.ReportPeriodStats, error)
 	GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64, loc *time.Location) (map[int]time.Duration, error)
 	GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error)
+	GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) ([]models.HourActivityDuration, error)
 }
 
 type trackerService struct {
@@ -309,6 +310,12 @@ func (srv *trackerService) GetMonthDailyTotals(ctx context.Context, userID int64
 // GetPeriodBuckets returns bucketed totals (hour/day/month).
 func (srv *trackerService) GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error) {
 	return srv.repo.GetPeriodBuckets(ctx, userID, from, to, activityIDs, granularity, resolveLoc(loc).String())
+}
+
+// GetHourlyBucketsByActivity returns per-hour totals broken down by
+// activity (see repo.TrackerRepository.GetHourlyBucketsByActivity).
+func (srv *trackerService) GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) ([]models.HourActivityDuration, error) {
+	return srv.repo.GetHourlyBucketsByActivity(ctx, userID, from, to, activityIDs, resolveLoc(loc).String())
 }
 
 func calcStreakDays(days []time.Time, now time.Time, loc *time.Location) int {

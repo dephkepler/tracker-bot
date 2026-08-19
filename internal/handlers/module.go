@@ -659,6 +659,19 @@ func (m *Module) appendGranularityText(ctx *tgctx.MsgContext, b *strings.Builder
 		labelFmt = "15:00"
 	}
 
+	// Hourly buckets show which activity(ies) filled each hour, not just a
+	// total — a flat total minute count wasn't enough to tell what was
+	// actually tracked at a glance.
+	if granularity == "hour" {
+		rows, err := m.tracksvc.GetHourlyBucketsByActivity(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, ctx.Location)
+		if err != nil || len(rows) == 0 {
+			return
+		}
+		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackGranularityByHours))
+		appendHourlyByActivityLines(ctx, b, rows, labelFmt)
+		return
+	}
+
 	buckets, durs, err := m.tracksvc.GetPeriodBuckets(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, granularity, ctx.Location)
 	if err != nil || len(buckets) == 0 {
 		return
@@ -669,13 +682,34 @@ func (m *Module) appendGranularityText(ctx *tgctx.MsgContext, b *strings.Builder
 		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackGranularityByMonths))
 	case "day":
 		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackGranularityByDays))
-	case "hour":
-		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackGranularityByHours))
 	}
 
 	for i := range buckets {
 		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackGranularityBucketLine, buckets[i].Format(labelFmt), formatReportDuration(durs[i])))
 	}
+}
+
+// appendHourlyByActivityLines groups per-(hour, activity) rows (pre-sorted
+// by hour, then duration descending) into one report line per hour, e.g.
+// "- 10:00: 🏋 Deep work 30m, 📖 Reading 17m".
+func appendHourlyByActivityLines(ctx *tgctx.MsgContext, b *strings.Builder, rows []models.HourActivityDuration, labelFmt string) {
+	i := 0
+	for i < len(rows) {
+		bucket := rows[i].BucketStart
+		parts := make([]string, 0, 4)
+		for i < len(rows) && rows[i].BucketStart.Equal(bucket) {
+			parts = append(parts, fmt.Sprintf("%s %s", activityDisplayNameFromParts(rows[i].Emoji, rows[i].Name), formatReportDuration(rows[i].Duration)))
+			i++
+		}
+		b.WriteString(i18n.T(ctx.Language, i18n.KeyTrackGranularityBucketLine, bucket.Format(labelFmt), strings.Join(parts, ", ")))
+	}
+}
+
+func activityDisplayNameFromParts(emoji, name string) string {
+	if emoji != "" {
+		return emoji + " " + name
+	}
+	return name
 }
 
 // ShowTodayReport is an alias to chart-style today report.

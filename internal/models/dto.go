@@ -118,6 +118,17 @@ type MonthDurationStat struct {
 	Duration time.Duration
 }
 
+// HourActivityDuration is one (hour bucket, activity) total — lets the
+// "By hours" report line show which activity(ies) filled each hour instead
+// of just a total. Rows for the same BucketStart are adjacent, ordered by
+// Duration descending.
+type HourActivityDuration struct {
+	BucketStart time.Time
+	Name        string
+	Emoji       string
+	Duration    time.Duration
+}
+
 // LearningStats contains values for learning dashboard.
 type LearningStats struct {
 	TotalWords    int

@@ -38,6 +38,7 @@ type TrackerRepository interface {
 	GetPeriodMonthlyTotals(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, tzName string) ([]time.Time, []time.Duration, error)
 	GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64, loc *time.Location, tzName string) (map[int]time.Duration, error)
 	GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, tzName string) ([]time.Time, []time.Duration, error)
+	GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, tzName string) ([]errlocal.HourActivityDuration, error)
 	GetLastTrackedActiveActivity(ctx context.Context, userID int64) (Activity, bool, error)
 	GetTodayDurationByActivity(ctx context.Context, userID, activityID int64, tzName string) (time.Duration, error)
 	GetTrackedDaysDescByActivity(ctx context.Context, userID, activityID int64, tzName string) ([]time.Time, error)
@@ -588,6 +589,49 @@ func (r *trackRepository) GetPeriodBuckets(ctx context.Context, userID int64, fr
 		return nil, nil, fmt.Errorf("period buckets rows: %w", err)
 	}
 	return buckets, durs, nil
+}
+
+// GetHourlyBucketsByActivity returns per-hour totals broken down by
+// activity, so a "By hours" report can show *what* was tracked in each
+// hour instead of just a total minute count. Rows are ordered by hour, then
+// by duration descending within that hour.
+func (r *trackRepository) GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, tzName string) ([]errlocal.HourActivityDuration, error) {
+	if userID <= 0 || len(activityIDs) == 0 {
+		return nil, nil
+	}
+	q := `
+	SELECT date_trunc('hour', s.start_at AT TIME ZONE $5) AS bucket_start,
+	       a.name, COALESCE(a.emoji, ''),
+	       COALESCE(SUM(s.end_at - s.start_at), interval '0') AS total_dur
+	FROM activity_sessions s
+	JOIN activities a ON a.id = s.activity_id
+	WHERE s.user_id = $1
+	  AND a.is_archived = FALSE
+	  AND s.end_at IS NOT NULL
+	  AND s.start_at >= $2
+	  AND s.start_at < $3
+	  AND s.activity_id = ANY($4)
+	GROUP BY bucket_start, a.id, a.name, a.emoji
+	ORDER BY bucket_start, total_dur DESC;
+	`
+	rows, err := r.db.Query(ctx, q, userID, from.UTC(), to.UTC(), activityIDs, tzName)
+	if err != nil {
+		return nil, fmt.Errorf("hourly buckets by activity query: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]errlocal.HourActivityDuration, 0, 64)
+	for rows.Next() {
+		var item errlocal.HourActivityDuration
+		if err := rows.Scan(&item.BucketStart, &item.Name, &item.Emoji, &item.Duration); err != nil {
+			return nil, fmt.Errorf("hourly buckets by activity scan: %w", err)
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("hourly buckets by activity rows: %w", err)
+	}
+	return out, nil
 }
 
 func (r *trackRepository) GetLastTrackedActiveActivity(ctx context.Context, userID int64) (Activity, bool, error) {

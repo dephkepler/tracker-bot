@@ -1,8 +1,12 @@
 package handlers
 
 import (
+	"strings"
 	"testing"
+	"time"
 	"tracker-bot/internal/buttons/profile"
+	"tracker-bot/internal/i18n"
+	"tracker-bot/internal/models"
 	"tracker-bot/internal/utils/tgctx"
 )
 
@@ -66,6 +70,35 @@ func TestLanguageCodeByButton(t *testing.T) {
 		}
 		if got != code {
 			t.Errorf("languageCodeByButton[%q] = %q, want %q", button, got, code)
+		}
+	}
+}
+
+// TestAppendHourlyByActivityLines_GroupsByHour checks the "By hours" report
+// line lists every activity tracked within that hour (most-time-first, per
+// GetHourlyBucketsByActivity's ordering), one line per hour rather than
+// silently collapsing to a single total.
+func TestAppendHourlyByActivityLines_GroupsByHour(t *testing.T) {
+	nine := time.Date(2026, 8, 19, 9, 0, 0, 0, time.UTC)
+	ten := time.Date(2026, 8, 19, 10, 0, 0, 0, time.UTC)
+	rows := []models.HourActivityDuration{
+		{BucketStart: nine, Name: "work", Emoji: "", Duration: 2 * time.Minute},
+		{BucketStart: ten, Name: "Deep work", Emoji: "🏋", Duration: 30 * time.Minute},
+		{BucketStart: ten, Name: "Reading", Emoji: "📖", Duration: 17 * time.Minute},
+	}
+
+	var b strings.Builder
+	ctx := &tgctx.MsgContext{Language: i18n.EN}
+	appendHourlyByActivityLines(ctx, &b, rows, "15:00")
+	got := b.String()
+
+	wantLines := []string{
+		"- 09:00: work 2m",
+		"- 10:00: 🏋 Deep work 30m, 📖 Reading 17m",
+	}
+	for _, want := range wantLines {
+		if !strings.Contains(got, want) {
+			t.Errorf("output = %q, want it to contain %q", got, want)
 		}
 	}
 }
