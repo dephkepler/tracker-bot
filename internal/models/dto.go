@@ -44,6 +44,14 @@ type CustomTimerOption struct {
 	IntervalMin int
 }
 
+// AdminUserRow is one row in the admin "who's using the bot" listing.
+type AdminUserRow struct {
+	DBID      int64
+	TgUserID  int64
+	UserName  *string
+	CreatedAt time.Time
+}
+
 // TimerDueUser represents one user that should receive timer prompt now.
 type TimerDueUser struct {
 	DBUserID    int64

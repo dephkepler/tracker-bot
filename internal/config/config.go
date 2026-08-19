@@ -8,8 +8,9 @@ import (
 )
 
 type Config struct {
-	Telegram  Telegram
-	PostreSQL PgConfig
+	Telegram      Telegram
+	PostreSQL     PgConfig
+	AdminUsername string `env:"ADMIN_USERNAME" env-default:"alaamov"`
 }
 type PgConfig struct {
 	Host    string `env:"HOST_DB"`

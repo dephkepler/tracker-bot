@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	adminbtn "tracker-bot/internal/buttons/admin"
+	entrybtn "tracker-bot/internal/buttons/entry"
 	profilebtn "tracker-bot/internal/buttons/profile"
 	trackbtn "tracker-bot/internal/buttons/track"
 	"tracker-bot/internal/models"
@@ -45,6 +47,7 @@ const (
 	screenTrackManage    = "track_manage"
 	screenTrackTimer     = "track_timer"
 	screenTrackTimerDel  = "track_timer_delete"
+	screenAdmin          = "admin"
 	screenTrackArchive   = "track_archive"
 	screenCreateActivity = "create_activity"
 	screenTrackReports   = "track_reports"
@@ -132,6 +135,7 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 	if from == nil {
 		return false
 	}
+	ctx.Username = from.UserName
 
 	in := &models.UserInput{
 		TgUserID: int64(from.ID),
@@ -302,8 +306,33 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 		return
 	}
 
+	if strings.HasPrefix(q.Data, "admin:") {
+		if !d.entry.IsAdmin(mctx) {
+			return
+		}
+		d.handleAdminCallback(mctx, q.Data)
+		return
+	}
+
 	if d.reply != nil && d.reply.HandleReplyButtons(mctx) {
 		return
+	}
+}
+
+// handleAdminCallback routes admin-only inline callbacks: opening the admin
+// screen (e.g. from the Profile screen's "👑 Admin" button) and paging the
+// users list. Caller must have already checked entry.IsAdmin.
+func (d *Dispatcher) handleAdminCallback(ctx *tgctx.MsgContext, data string) {
+	switch {
+	case data == adminbtn.CBOpen:
+		d.setScreen(ctx.UserID, screenAdmin)
+		d.entry.ShowAdminMenu(ctx, 0)
+	case strings.HasPrefix(data, adminbtn.CBUsersPage):
+		offset, ok := parseCallbackID(data, adminbtn.CBUsersPage)
+		if !ok {
+			return
+		}
+		d.entry.ShowAdminMenu(ctx, int(offset))
 	}
 }
 
@@ -366,6 +395,18 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 		if _, err := d.bot.Send(out); err != nil {
 			log.Error().Err(err).Msg("send help failed")
 		}
+		return
+
+	case "admin":
+		if !d.entry.IsAdmin(ctx) {
+			out := tgbotapi.NewMessage(ctx.ChatID, "Неизвестная команда.")
+			if _, err := d.bot.Send(out); err != nil {
+				log.Error().Err(err).Msg("send unknown command failed")
+			}
+			return
+		}
+		d.setScreen(ctx.UserID, screenAdmin)
+		d.entry.ShowAdminMenu(ctx, 0)
 		return
 
 	default:
@@ -471,6 +512,14 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 	case trackbtn.TrackButtonBackHome:
 		d.setScreen(ctx.UserID, screenHome)
 		d.entry.ShowHomeMenu(ctx)
+		return
+	case entrybtn.EntryButtonAdmin:
+		if !d.entry.IsAdmin(ctx) {
+			d.replyUseButtons(ctx.ChatID)
+			return
+		}
+		d.setScreen(ctx.UserID, screenAdmin)
+		d.entry.ShowAdminMenu(ctx, 0)
 		return
 	}
 

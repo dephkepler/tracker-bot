@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"tracker-bot/internal/buttons/admin"
 	"tracker-bot/internal/buttons/entry"
 	"tracker-bot/internal/buttons/learning"
 	"tracker-bot/internal/buttons/profile"
@@ -36,10 +37,18 @@ type Module struct {
 	learningsvc     service.LearningService
 	subscriptionsvc service.SubscriptionService
 	entrysvc        service.EntryService
+	// adminUsername is the Telegram @handle (no leading "@") allowed to see
+	// the admin screen — see IsAdmin. Empty disables the admin feature
+	// entirely rather than matching everyone.
+	adminUsername string
 }
 
+// adminUsersPageSize is how many users are listed per page on the admin
+// screen.
+const adminUsersPageSize = 15
+
 // New creates handler module with all service dependencies.
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminUsername string) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -48,7 +57,20 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		learningsvc:     learningsvc,
 		subscriptionsvc: subscriptionsvc,
 		entrysvc:        entrysvc,
+		adminUsername:   strings.TrimPrefix(strings.TrimSpace(adminUsername), "@"),
 	}
+}
+
+// IsAdmin reports whether ctx belongs to the configured admin user, matched
+// by Telegram @handle (case-insensitive). False whenever adminUsername is
+// unset or the user has no @handle — this is the actual access check, not
+// just whether the admin button is shown, so callers must call it directly
+// rather than trusting screen/button visibility.
+func (m *Module) IsAdmin(ctx *tgctx.MsgContext) bool {
+	if m.adminUsername == "" || ctx.Username == "" {
+		return false
+	}
+	return strings.EqualFold(ctx.Username, m.adminUsername)
 }
 
 // ShowEntryMenu renders the main entry screen: a one-time welcome for a
@@ -77,11 +99,48 @@ func (m *Module) ShowHomeMenu(ctx *tgctx.MsgContext) {
 func (m *Module) sendEntryMenu(ctx *tgctx.MsgContext, text string) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = entry.EntryReplyMenu()
+	msg.ReplyMarkup = entry.EntryReplyMenu(m.IsAdmin(ctx))
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send entry menu failed")
 	}
+}
+
+// ShowAdminMenu renders the admin "who's using the bot" screen: a total
+// count plus one page of users (see admin.UsersInlineMenu for paging).
+// Silently does nothing for a non-admin caller — this is the actual access
+// check (see IsAdmin), the button/command being hidden from other users is
+// only a UI nicety on top of it.
+func (m *Module) ShowAdminMenu(ctx *tgctx.MsgContext, offset int) {
+	if !m.IsAdmin(ctx) {
+		return
+	}
+
+	total, err := m.entrysvc.CountUsers(ctx.Ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("count users failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load users."))
+		return
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+	if total > 0 && offset >= total {
+		offset = ((total - 1) / adminUsersPageSize) * adminUsersPageSize
+	}
+
+	users, err := m.entrysvc.ListUsersPage(ctx.Ctx, adminUsersPageSize, offset)
+	if err != nil {
+		log.Error().Err(err).Msg("list users failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load users."))
+		return
+	}
+
+	text := fmt.Sprintf("👑 Admin — Users\n\nTotal: %d", total)
+	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg.ReplyMarkup = admin.UsersInlineMenu(users, offset, adminUsersPageSize, total)
+	_, _ = m.bot.Send(msg)
 }
 
 // ShowProfileMenu loads profile stats and renders profile screen.
@@ -97,7 +156,7 @@ func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	text := profile.ProfileMenuText(stats)
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
-	msg.ReplyMarkup = profile.ProfileEntryInlineMenu()
+	msg.ReplyMarkup = profile.ProfileEntryInlineMenu(m.IsAdmin(ctx))
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send profile menu failed")

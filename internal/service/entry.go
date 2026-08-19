@@ -14,6 +14,11 @@ type EntryService interface {
 	// very first time (used to decide between a welcome message and a plain
 	// "back home" one).
 	EnsureUser(ctx context.Context, user *models.UserInput) (dbID int64, isNew bool, err error)
+	// CountUsers returns the total number of registered users (admin stat).
+	CountUsers(ctx context.Context) (int, error)
+	// ListUsersPage returns one page of registered users, newest first
+	// (admin listing).
+	ListUsersPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error)
 }
 
 type entryService struct {
@@ -58,4 +63,21 @@ func (s *entryService) EnsureUser(ctx context.Context, user *models.UserInput) (
 	}
 
 	return dbID, true, nil
+}
+
+// CountUsers returns the total number of registered users.
+func (s *entryService) CountUsers(ctx context.Context) (int, error) {
+	return s.repo.CountAll(ctx)
+}
+
+// ListUsersPage returns one page of registered users, clamping limit/offset
+// to sane bounds.
+func (s *entryService) ListUsersPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error) {
+	if limit <= 0 {
+		limit = 15
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return s.repo.ListPage(ctx, limit, offset)
 }

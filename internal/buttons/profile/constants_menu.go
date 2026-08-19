@@ -14,6 +14,11 @@ const (
 	ProfileButtonEditTimeZone = "📍 Time zone"
 	ProfileButtonEditContact  = "📧 Contact"
 	ProfileButtonRefresh      = "🔁 Refresh"
+	// ProfileButtonAdmin only ever gets rendered for the configured admin
+	// user (see ProfileEntryInlineMenu's isAdmin param) — never shown to
+	// regular users, and access is re-checked server-side on the callback
+	// regardless (handlers.Module.IsAdmin), not just gated by visibility.
+	ProfileButtonAdmin = "👑 Admin"
 )
 
 // Language reply menu buttons.

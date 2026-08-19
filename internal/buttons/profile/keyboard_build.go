@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"tracker-bot/internal/buttons/admin"
 	"tracker-bot/pkg/buttonbuilder"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -8,8 +9,11 @@ import (
 
 // Inline button menus
 
-func ProfileEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
-	return buttonbuilder.IK(
+// ProfileEntryInlineMenu renders the profile screen's inline menu. isAdmin
+// adds a row that opens the admin screen — pass handlers.Module.IsAdmin(ctx),
+// never hardcode true.
+func ProfileEntryInlineMenu(isAdmin bool) tgbotapi.InlineKeyboardMarkup {
+	rows := [][]tgbotapi.InlineKeyboardButton{
 		buttonbuilder.IR(
 			buttonbuilder.IB(ProfileButtonEditLanguage, ProfileCBEditLanguage),
 			buttonbuilder.IB(ProfileButtonEditTimeZone, ProfileCBEditTimeZone),
@@ -18,10 +22,12 @@ func ProfileEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
 			buttonbuilder.IB(ProfileButtonEditContact, ProfileCBEditContact),
 			buttonbuilder.IB(ProfileButtonRefresh, ProfileCBRefresh),
 		),
-		buttonbuilder.IR(
-			buttonbuilder.IB("🏠 Home", "go_home"),
-		),
-	)
+	}
+	if isAdmin {
+		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ProfileButtonAdmin, admin.CBOpen)))
+	}
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB("🏠 Home", "go_home")))
+	return buttonbuilder.IK(rows...)
 }
 
 // Reply button menus

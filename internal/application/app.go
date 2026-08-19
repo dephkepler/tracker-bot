@@ -67,7 +67,7 @@ func (app *Application) Build(ctx context.Context) error {
 	uistatesvc := service.NewUIStateService(uistateRepo)
 
 	//handlers and dispatcher
-	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc)
+	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, app.cfg.AdminUsername)
 	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, provilesvc, uistatesvc, module, module, module, module, module)
 	app.timerScheduler = scheduler.NewTimerScheduler(ctx, timersvc, module)
 
