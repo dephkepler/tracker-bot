@@ -1141,7 +1141,7 @@ func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 
 // PromptCreateCollection asks the user to type a name for a new collection.
 func (m *Module) PromptCreateCollection(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, "✏️ Send a name for the new collection:")
+	msg := tgbotapi.NewMessage(ctx.ChatID, "✏️ Send a short one-line name for the new collection (e.g. \"Travel words\"). You'll paste the actual word list on the next step.")
 	msg.ReplyMarkup = learning.LearningWaitingReplyMenu()
 	_, _ = m.bot.Send(msg)
 }
@@ -1152,8 +1152,20 @@ func (m *Module) PromptCreateCollection(ctx *tgctx.MsgContext) {
 // input, matching ProcessCreateActivity's contract).
 func (m *Module) ProcessCreateCollectionName(ctx *tgctx.MsgContext) (collectionID int64, done bool) {
 	name := strings.TrimSpace(ctx.Text)
+	// A pasted "word - translation" list lands here too, since this and the
+	// word-entry step share the same plain reply keyboard — catch it before
+	// it becomes a garbage multi-line collection name (see the bug report
+	// this guards against: a whole word list swallowed as one giant name).
+	if strings.Contains(name, "\n") {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ That looks like a word list, not a name. Send a short one-line name first (e.g. \"Travel words\") — you'll paste the word list on the next step."))
+		return 0, false
+	}
 	if len(name) < 2 {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be at least 2 characters. Try again:"))
+		return 0, false
+	}
+	if len(name) > 60 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name is too long (max 60 characters). Try a shorter one:"))
 		return 0, false
 	}
 
