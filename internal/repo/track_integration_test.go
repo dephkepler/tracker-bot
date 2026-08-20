@@ -22,7 +22,7 @@ func TestTrackerRepository_GetTrackedDaysInRange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create activity: %v", err)
 	}
-	if err := sessionRepo.CreateRetroSession(ctx, userID, activity.ID, 30, "test"); err != nil {
+	if err := sessionRepo.CreateRetroSession(ctx, userID, activity.ID, 30, "test", time.Now().UTC()); err != nil {
 		t.Fatalf("create retro session: %v", err)
 	}
 

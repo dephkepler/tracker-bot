@@ -50,7 +50,7 @@ func (s *TimerScheduler) tick(now time.Time) {
 	}
 
 	for _, item := range dueUsers {
-		if err := s.track.SendPromptMessage(s.ctx, item.TgUserID, item.DBUserID, item.IntervalMin); err != nil {
+		if err := s.track.SendPromptMessage(s.ctx, item.TgUserID, item.DBUserID, item.IntervalMin, item.NextPingAt); err != nil {
 			log.Error().Err(err).Int64("user_id", item.DBUserID).Msg("timer scheduler: send prompt failed")
 			continue
 		}

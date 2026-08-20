@@ -117,7 +117,7 @@ func (f *fakeCustomTimerRepo) Count(_ context.Context, userID int64) (int, error
 
 type fakeSessionRepo struct{}
 
-func (fakeSessionRepo) CreateRetroSession(context.Context, int64, int64, int, string) error {
+func (fakeSessionRepo) CreateRetroSession(context.Context, int64, int64, int, string, time.Time) error {
 	return nil
 }
 

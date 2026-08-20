@@ -1315,8 +1315,10 @@ func (m *Module) StopTrackTimer(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopped)))
 }
 
-// SendPromptMessage sends periodic "what are you doing now?" prompt.
-func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int64, intervalMin int) error {
+// SendPromptMessage sends periodic "what are you doing now?" prompt. dueAt
+// is the moment this prompt was actually scheduled for — embedded in the
+// buttons so a late answer credits the right window (see RecordPromptAnswer).
+func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int64, intervalMin int, dueAt time.Time) error {
 	items, err := m.tracksvc.ListSelectedActivities(ctx, userID)
 	if err != nil {
 		return err
@@ -1337,7 +1339,7 @@ func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int
 	}
 
 	msg := tgbotapi.NewMessage(chatID, i18n.T(lang, i18n.KeyTrackPromptQuestion))
-	msg.ReplyMarkup = track.TrackPromptInlineMenu(lang, items, intervalMin)
+	msg.ReplyMarkup = track.TrackPromptInlineMenu(lang, items, intervalMin, dueAt)
 	_, err = m.bot.Send(msg)
 	return err
 }
@@ -1346,7 +1348,7 @@ func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int
 func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 	payload := strings.TrimPrefix(ctx.Text, track.TrackCBPromptActivity)
 	parts := strings.Split(payload, ":")
-	if len(parts) != 2 {
+	if len(parts) != 3 {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptInvalidPayload)))
 		return
 	}
@@ -1363,7 +1365,18 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 		return
 	}
 
-	if err := m.timersvc.RecordPromptAnswerWithInterval(ctx.Ctx, ctx.DBUserID, activityID, intervalMin); err != nil {
+	dueAtUnix, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil || dueAtUnix <= 0 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptInvalidPayload)))
+		return
+	}
+	// dueAt is when this prompt was actually scheduled — credited as-is
+	// (not "now") so answering several stacked prompts together still
+	// splits the time across their real windows instead of stacking
+	// duplicate credit onto the moment they were finally tapped.
+	dueAt := time.Unix(dueAtUnix, 0).UTC()
+
+	if err := m.timersvc.RecordPromptAnswerWithInterval(ctx.Ctx, ctx.DBUserID, activityID, intervalMin, dueAt); err != nil {
 		log.Error().Err(err).Msg("record prompt answer failed")
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptSaveFailed)))
 		return
@@ -1374,7 +1387,7 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 		_, _ = m.bot.Request(del)
 	}
 
-	endAt := apptime.NowIn(ctx.Location)
+	endAt := dueAt.In(ctx.Location)
 	startAt := endAt.Add(-time.Duration(intervalMin) * time.Minute)
 	activityName := m.findActivityName(ctx, activityID)
 

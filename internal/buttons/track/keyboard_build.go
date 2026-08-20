@@ -202,7 +202,12 @@ func TrackActivitiesInlineMenu(lang i18n.Lang, items []models.TrackActivityItem)
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-func TrackPromptInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, intervalMin int) tgbotapi.InlineKeyboardMarkup {
+// TrackPromptInlineMenu renders the periodic "what are you doing?" prompt's
+// activity picker. dueAt is embedded in each button's callback data (as a
+// unix timestamp) so a late answer still credits the interval that was
+// actually due, instead of "now minus interval" — see
+// handlers.Module.RecordPromptAnswer.
+func TrackPromptInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, intervalMin int, dueAt time.Time) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+1)
 	for _, item := range items {
 		if strings.TrimSpace(item.Name) == "" {
@@ -212,7 +217,7 @@ func TrackPromptInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, int
 		if item.Emoji != "" {
 			title = item.Emoji + " " + item.Name
 		}
-		callbackData := fmt.Sprintf("%s%d:%d", TrackCBPromptActivity, item.ID, intervalMin)
+		callbackData := fmt.Sprintf("%s%d:%d:%d", TrackCBPromptActivity, item.ID, intervalMin, dueAt.UTC().Unix())
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(title, callbackData),
 		))

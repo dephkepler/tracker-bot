@@ -84,6 +84,11 @@ type TimerDueUser struct {
 	DBUserID    int64
 	TgUserID    int64
 	IntervalMin int
+	// NextPingAt is when this prompt was actually due — embedded in the
+	// prompt's buttons so a late answer still credits the original
+	// interval window instead of "now minus interval" (see
+	// handlers.Module.RecordPromptAnswer).
+	NextPingAt time.Time
 }
 
 // ActivityDurationStat is one activity aggregate line in reports.

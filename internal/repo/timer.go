@@ -51,7 +51,7 @@ func (r *timerRepository) UpsertInterval(ctx context.Context, userID int64, inte
 // ListDueUsers returns users whose next_ping_at is due.
 func (r *timerRepository) ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error) {
 	q := `
-	SELECT uts.user_id, u.tg_user_id, uts.interval_min
+	SELECT uts.user_id, u.tg_user_id, uts.interval_min, uts.next_ping_at
 	FROM user_timer_settings uts
 	JOIN users u ON u.id = uts.user_id
 	WHERE uts.enabled = TRUE
@@ -70,7 +70,7 @@ func (r *timerRepository) ListDueUsers(ctx context.Context, now time.Time, limit
 	out := make([]models.TimerDueUser, 0, limit)
 	for rows.Next() {
 		var item models.TimerDueUser
-		if err := rows.Scan(&item.DBUserID, &item.TgUserID, &item.IntervalMin); err != nil {
+		if err := rows.Scan(&item.DBUserID, &item.TgUserID, &item.IntervalMin, &item.NextPingAt); err != nil {
 			return nil, fmt.Errorf("list due users scan: %w", err)
 		}
 		out = append(out, item)

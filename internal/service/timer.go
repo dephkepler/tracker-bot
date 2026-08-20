@@ -16,7 +16,10 @@ type TimerService interface {
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error)
 	MarkPromptSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error
 	RecordPromptAnswer(ctx context.Context, userID, activityID int64) error
-	RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int) error
+	// RecordPromptAnswerWithInterval stores the prompt answer as a session
+	// ending at endAt (the prompt's actual due time), not "now" — so a late
+	// answer still credits the window it was originally due for.
+	RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int, endAt time.Time) error
 
 	// AddCustomInterval saves a user-defined timer interval (in addition to
 	// the built-in 15/30 min choices) so it shows up in the picker next to
@@ -92,21 +95,28 @@ func (s *timerService) MarkPromptSent(ctx context.Context, userID int64, interva
 	return s.timerRepo.SetNextPing(ctx, userID, nextPingAt)
 }
 
-// RecordPromptAnswer stores prompt answer using current timer interval from settings.
+// RecordPromptAnswer stores prompt answer using current timer interval from
+// settings, credited as ending now. Unused by the live prompt flow (which
+// always knows its own due time — see RecordPromptAnswerWithInterval) but
+// kept for interface completeness.
 func (s *timerService) RecordPromptAnswer(ctx context.Context, userID, activityID int64) error {
 	intervalMin, err := s.timerRepo.GetInterval(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("get interval: %w", err)
 	}
-	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt")
+	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt", time.Now().UTC())
 }
 
-// RecordPromptAnswerWithInterval stores prompt answer for explicit interval.
-func (s *timerService) RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int) error {
+// RecordPromptAnswerWithInterval stores prompt answer for explicit interval,
+// credited as ending at endAt (the prompt's actual due time).
+func (s *timerService) RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int, endAt time.Time) error {
 	if intervalMin <= 0 {
 		return fmt.Errorf("invalid interval")
 	}
-	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt")
+	if endAt.IsZero() {
+		endAt = time.Now().UTC()
+	}
+	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt", endAt)
 }
 
 // AddCustomInterval validates and stores a new custom timer interval.
