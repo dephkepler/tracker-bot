@@ -773,17 +773,113 @@ func TestLearningService_GradeAnswer_UpdatesScheduleAndRecordsReview(t *testing.
 		wordID = wid
 	}
 
-	nextInterval, learned, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeGood)
+	nextReviewAt, learned, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeGood)
 	if err != nil {
 		t.Fatalf("grade answer: %v", err)
 	}
-	if nextInterval != 1 || learned {
-		t.Fatalf("got (interval=%d learned=%v), want interval=1 learned=false for a first Good answer", nextInterval, learned)
+	if learned {
+		t.Fatalf("learned = true, want false for a first Good answer")
+	}
+	wantAt := time.Now().UTC().Add(24 * time.Hour)
+	if nextReviewAt.Before(wantAt.Add(-time.Minute)) || nextReviewAt.After(wantAt.Add(time.Minute)) {
+		t.Fatalf("nextReviewAt = %v, want ~1 day from now (%v)", nextReviewAt, wantAt)
 	}
 	if len(repo.reviewDates[1]) != 1 {
 		t.Fatalf("review history has %d entries, want 1", len(repo.reviewDates[1]))
 	}
 	if repo.words[wordID].nextReviewAt.Before(time.Now().UTC().Add(23 * time.Hour)) {
 		t.Fatalf("nextReviewAt = %v, want ~1 day from now", repo.words[wordID].nextReviewAt)
+	}
+}
+
+// TestLearningService_GradeAnswer_AgainUsesMinuteStep checks Again schedules
+// a short 10-minute step, not a full day — the bug report this guards
+// against showed a flat "next review tomorrow" regardless of grade.
+func TestLearningService_GradeAnswer_AgainUsesMinuteStep(t *testing.T) {
+	repo, svc := newTestLearningService()
+	ctx := context.Background()
+	id, err := svc.CreateCollection(ctx, 1, "Coll")
+	if err != nil {
+		t.Fatalf("create collection: %v", err)
+	}
+	if _, _, err := svc.AddWordsFromText(ctx, 1, id, "a - a1"); err != nil {
+		t.Fatalf("add words: %v", err)
+	}
+	var wordID int64
+	for wid := range repo.words {
+		wordID = wid
+	}
+
+	nextReviewAt, learned, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeAgain)
+	if err != nil {
+		t.Fatalf("grade answer: %v", err)
+	}
+	if learned {
+		t.Fatal("learned = true, want false for Again")
+	}
+	until := time.Until(nextReviewAt)
+	if until <= 0 || until > 15*time.Minute {
+		t.Fatalf("next review in %v, want a short (~10 min) step", until)
+	}
+}
+
+// TestLearningService_GradeAnswer_HardOnNewWordUsesMinuteStep checks Hard
+// on a brand-new word (never graduated) also uses a short step, matching
+// the user's explicit request for Anki-style "in 15 minutes" behavior.
+func TestLearningService_GradeAnswer_HardOnNewWordUsesMinuteStep(t *testing.T) {
+	repo, svc := newTestLearningService()
+	ctx := context.Background()
+	id, err := svc.CreateCollection(ctx, 1, "Coll")
+	if err != nil {
+		t.Fatalf("create collection: %v", err)
+	}
+	if _, _, err := svc.AddWordsFromText(ctx, 1, id, "a - a1"); err != nil {
+		t.Fatalf("add words: %v", err)
+	}
+	var wordID int64
+	for wid := range repo.words {
+		wordID = wid
+	}
+
+	nextReviewAt, _, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeHard)
+	if err != nil {
+		t.Fatalf("grade answer: %v", err)
+	}
+	until := time.Until(nextReviewAt)
+	if until <= 0 || until > 20*time.Minute {
+		t.Fatalf("next review in %v, want a short (~15 min) step for Hard on a new word", until)
+	}
+}
+
+// TestLearningService_GradeAnswer_HardOnGraduatedWordUsesDays checks Hard
+// falls back to the normal day-based growth once a word has already
+// graduated to daily reviews (repetitions > 0) — the minute-level step is
+// only for still-new words.
+func TestLearningService_GradeAnswer_HardOnGraduatedWordUsesDays(t *testing.T) {
+	repo, svc := newTestLearningService()
+	ctx := context.Background()
+	id, err := svc.CreateCollection(ctx, 1, "Coll")
+	if err != nil {
+		t.Fatalf("create collection: %v", err)
+	}
+	if _, _, err := svc.AddWordsFromText(ctx, 1, id, "a - a1"); err != nil {
+		t.Fatalf("add words: %v", err)
+	}
+	var wordID int64
+	for wid := range repo.words {
+		wordID = wid
+	}
+	// Graduate it once with Good first (repetitions 0 -> 1).
+	if _, _, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeGood); err != nil {
+		t.Fatalf("first grade: %v", err)
+	}
+
+	nextReviewAt, _, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeHard)
+	if err != nil {
+		t.Fatalf("second grade: %v", err)
+	}
+	until := time.Until(nextReviewAt)
+	if until < 20*time.Hour {
+		t.Fatalf("next review in %v, want at least ~1 day (word already graduated)", until)
 	}
 }

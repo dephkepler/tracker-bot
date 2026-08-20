@@ -2,6 +2,7 @@ package learning
 
 import (
 	"strings"
+	"time"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 )
@@ -107,19 +108,41 @@ func LearningReviewRevealedText(lang i18n.Lang, collectionName, term, translatio
 
 // LearningReviewGradedText renders the confirmation after grading. Reaching
 // "learned" takes priority over the grade-specific message, regardless of
-// which grade (Good/Easy) triggered it.
-func LearningReviewGradedText(lang i18n.Lang, term string, grade models.LearningGrade, nextIntervalDays int, learned bool) string {
+// which grade (Good/Easy) triggered it. nextReviewAt is the actual
+// scheduled instant, not just a day count — Again and a Hard on a
+// still-new word use short minute-level steps (see service.reviewDelay),
+// so this picks a "in N min" vs "in N day(s)" wording based on how far
+// away it really is, instead of assuming whole days.
+func LearningReviewGradedText(lang i18n.Lang, term string, grade models.LearningGrade, nextReviewAt time.Time, learned bool) string {
 	if learned {
 		return i18n.T(lang, i18n.KeyLearningReviewLearned, term)
 	}
+
+	until := time.Until(nextReviewAt)
+	useMinutes := until < 24*time.Hour
+	minutes := int(until.Minutes() + 0.5)
+	if minutes < 1 {
+		minutes = 1
+	}
+	days := int(until.Hours()/24 + 0.5)
+	if days < 1 {
+		days = 1
+	}
+
 	switch grade {
 	case models.LearningGradeAgain:
+		if useMinutes {
+			return i18n.T(lang, i18n.KeyLearningReviewMissedMinutes, term, minutes)
+		}
 		return i18n.T(lang, i18n.KeyLearningReviewMissed, term)
 	case models.LearningGradeHard:
-		return i18n.T(lang, i18n.KeyLearningReviewHardConfirm, term, nextIntervalDays)
+		if useMinutes {
+			return i18n.T(lang, i18n.KeyLearningReviewHardConfirmMinutes, term, minutes)
+		}
+		return i18n.T(lang, i18n.KeyLearningReviewHardConfirm, term, days)
 	case models.LearningGradeEasy:
-		return i18n.T(lang, i18n.KeyLearningReviewEasyConfirm, term, nextIntervalDays)
+		return i18n.T(lang, i18n.KeyLearningReviewEasyConfirm, term, days)
 	default: // models.LearningGradeGood
-		return i18n.T(lang, i18n.KeyLearningReviewCorrect, term, nextIntervalDays)
+		return i18n.T(lang, i18n.KeyLearningReviewCorrect, term, days)
 	}
 }

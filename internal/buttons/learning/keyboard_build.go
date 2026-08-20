@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 	"tracker-bot/pkg/buttonbuilder"
@@ -154,18 +155,37 @@ func LearningReviewRevealInlineMenu(lang i18n.Lang, wordID int64) tgbotapi.Inlin
 // LearningReviewGradeInlineMenu is the revealed state: user grades how well
 // they recalled the word, Anki-style (Again/Hard/Good/Easy — see
 // models.LearningGrade) — this drives how much the next interval grows or
-// shrinks, not just whether it counts as "correct".
-func LearningReviewGradeInlineMenu(lang i18n.Lang, wordID int64) tgbotapi.InlineKeyboardMarkup {
+// shrinks, not just whether it counts as "correct". Each button previews
+// its resulting delay (e.g. "🔴 Again (10m)"), matching real Anki, so the
+// user sees the consequence before picking rather than only after.
+func LearningReviewGradeInlineMenu(lang i18n.Lang, wordID int64, again, hard, good, easy time.Duration) tgbotapi.InlineKeyboardMarkup {
+	label := func(key string, d time.Duration) string {
+		return fmt.Sprintf("%s (%s)", i18n.T(lang, key), FormatGradeDelay(d))
+	}
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonAgain), fmt.Sprintf("%s%d", LearningCBReviewAgain, wordID)),
-			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonHard), fmt.Sprintf("%s%d", LearningCBReviewHard, wordID)),
+			buttonbuilder.IB(label(i18n.KeyLearningButtonAgain, again), fmt.Sprintf("%s%d", LearningCBReviewAgain, wordID)),
+			buttonbuilder.IB(label(i18n.KeyLearningButtonHard, hard), fmt.Sprintf("%s%d", LearningCBReviewHard, wordID)),
 		),
 		buttonbuilder.IR(
-			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonGood), fmt.Sprintf("%s%d", LearningCBReviewGood, wordID)),
-			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonEasy), fmt.Sprintf("%s%d", LearningCBReviewEasy, wordID)),
+			buttonbuilder.IB(label(i18n.KeyLearningButtonGood, good), fmt.Sprintf("%s%d", LearningCBReviewGood, wordID)),
+			buttonbuilder.IB(label(i18n.KeyLearningButtonEasy, easy), fmt.Sprintf("%s%d", LearningCBReviewEasy, wordID)),
 		),
 	)
+}
+
+// FormatGradeDelay renders a grade-preview duration compactly, e.g. "10m",
+// "15m", "1d", "4d" — deliberately not translated (plain unit
+// abbreviations), same reasoning as track.FormatTimerButton's "min" suffix.
+func FormatGradeDelay(d time.Duration) string {
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()+0.5))
+	}
+	days := int(d.Hours()/24 + 0.5)
+	if days < 1 {
+		days = 1
+	}
+	return fmt.Sprintf("%dd", days)
 }
 
 // Reply button menus

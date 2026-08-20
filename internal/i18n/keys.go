@@ -353,4 +353,11 @@ const (
 	KeyLearningReviewHardConfirm    = "learning.review.graded_hard"
 	KeyLearningReviewEasyConfirm    = "learning.review.graded_easy"
 	KeyLearningReviewMissed         = "learning.review.graded_missed" // Again
+	// KeyLearningReviewMissedMinutes/KeyLearningReviewHardConfirmMinutes are
+	// the minute-granularity variants used when the next review is under a
+	// day away (Again always, Hard on a still-new word — see
+	// service.reviewDelay), instead of misleadingly saying "tomorrow"/"in
+	// N day(s)" for a word due back in 10-15 minutes.
+	KeyLearningReviewMissedMinutes      = "learning.review.graded_missed_minutes"
+	KeyLearningReviewHardConfirmMinutes = "learning.review.graded_hard_minutes"
 )

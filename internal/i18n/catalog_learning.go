@@ -267,4 +267,10 @@ var catalogLearning = map[string]entry{
 	KeyLearningReviewMissed: {
 		RU: "🔴 Не страшно — *%s* снова в очереди, следующее повторение завтра.", EN: "🔴 No worries — *%s* is back in the rotation, next review tomorrow.", DE: "🔴 Kein Problem — *%s* ist wieder in der Rotation, nächste Wiederholung morgen.", UK: "🔴 Нічого страшного — *%s* знову в черзі, наступне повторення завтра.", AR: "🔴 لا بأس — *%s* عادت إلى الدورة، المراجعة التالية غدًا.",
 	},
+	KeyLearningReviewMissedMinutes: {
+		RU: "🔴 Не страшно — *%s* вернётся через %d мин.", EN: "🔴 No worries — *%s* will come back in %d min.", DE: "🔴 Kein Problem — *%s* kommt in %d Min zurück.", UK: "🔴 Нічого страшного — *%s* повернеться через %d хв.", AR: "🔴 لا بأس — ستعود *%s* خلال %d دقيقة.",
+	},
+	KeyLearningReviewHardConfirmMinutes: {
+		RU: "🟠 Записал — *%s* вернётся через %d мин.", EN: "🟠 Noted — *%s* will come back in %d min.", DE: "🟠 Notiert — *%s* kommt in %d Min zurück.", UK: "🟠 Записав — *%s* повернеться через %d хв.", AR: "🟠 تم التسجيل — ستعود *%s* خلال %d دقيقة.",
+	},
 }

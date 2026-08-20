@@ -38,9 +38,18 @@ type LearningService interface {
 	// translation) without touching its SRS state — used to render the
 	// "reveal" step of a review card before the user grades it.
 	PeekWord(ctx context.Context, userID, wordID int64) (collectionName, term, translation string, err error)
+	// PreviewGradeDelays computes, without writing anything, how soon each
+	// of the four grades would schedule this word's next review — shown on
+	// the grade buttons themselves (Anki-style), so the user can see the
+	// consequence before picking.
+	PreviewGradeDelays(ctx context.Context, userID, wordID int64) (again, hard, good, easy time.Duration, err error)
 	// GradeAnswer applies an Anki-style Again/Hard/Good/Easy grade to a
 	// word's schedule (see gradeSchedule) and records the review.
-	GradeAnswer(ctx context.Context, userID, wordID int64, grade models.LearningGrade) (nextIntervalDays int, learned bool, err error)
+	// nextReviewAt is the actual scheduled instant — Again and a Hard on a
+	// still-new word use short minute-level steps (see reviewDelay), not a
+	// flat "tomorrow", so callers should format it as a real duration
+	// rather than assuming whole days.
+	GradeAnswer(ctx context.Context, userID, wordID int64, grade models.LearningGrade) (nextReviewAt time.Time, learned bool, err error)
 	// ListReviewsOnDay returns every review the user answered within
 	// [from, to) — used by the tracking heatmap's day drill-down.
 	ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error)
@@ -212,28 +221,73 @@ func (srv *learningService) PeekWord(ctx context.Context, userID, wordID int64) 
 	return collectionName, term, translation, nil
 }
 
+// PreviewGradeDelays computes each grade's resulting delay read-only, by
+// running the same gradeSchedule/reviewDelay math GradeAnswer would use for
+// each of the four grades, without persisting anything.
+func (srv *learningService) PreviewGradeDelays(ctx context.Context, userID, wordID int64) (again, hard, good, easy time.Duration, err error) {
+	_, _, _, easeFactor, intervalDays, repetitions, err := srv.repo.GetWordForGrading(ctx, userID, wordID)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	for _, g := range []struct {
+		grade models.LearningGrade
+		out   *time.Duration
+	}{
+		{models.LearningGradeAgain, &again},
+		{models.LearningGradeHard, &hard},
+		{models.LearningGradeGood, &good},
+		{models.LearningGradeEasy, &easy},
+	} {
+		_, newInterval, _, _ := gradeSchedule(easeFactor, intervalDays, repetitions, g.grade)
+		*g.out = reviewDelay(g.grade, repetitions, newInterval)
+	}
+	return again, hard, good, easy, nil
+}
+
 // GradeAnswer applies an Anki-style Again/Hard/Good/Easy update (see
 // gradeSchedule) and records the review for stats/streak. A word counts as
 // "correct" for accuracy stats whenever the grade isn't Again — Hard still
 // means they recalled it, just with effort.
-func (srv *learningService) GradeAnswer(ctx context.Context, userID, wordID int64, grade models.LearningGrade) (int, bool, error) {
+func (srv *learningService) GradeAnswer(ctx context.Context, userID, wordID int64, grade models.LearningGrade) (time.Time, bool, error) {
 	_, _, _, easeFactor, intervalDays, repetitions, err := srv.repo.GetWordForGrading(ctx, userID, wordID)
 	if err != nil {
-		return 0, false, err
+		return time.Time{}, false, err
 	}
 
 	newEase, newInterval, newReps, learned := gradeSchedule(easeFactor, intervalDays, repetitions, grade)
 	now := time.Now().UTC()
-	nextReviewAt := now.Add(time.Duration(newInterval) * 24 * time.Hour)
+	// reviewDelay, not a flat newInterval-days offset: Again and a Hard on
+	// a still-new word use short minute-level "relearning" steps (like real
+	// Anki), so the word comes back up for a push soon instead of always
+	// waiting a full day — see reviewDelay's doc comment.
+	nextReviewAt := now.Add(reviewDelay(grade, repetitions, newInterval))
 
 	if err := srv.repo.UpdateWordSchedule(ctx, wordID, newEase, newInterval, newReps, nextReviewAt, learned); err != nil {
-		return 0, false, err
+		return time.Time{}, false, err
 	}
 	correct := grade != models.LearningGradeAgain
 	if err := srv.repo.RecordReview(ctx, wordID, userID, correct, now); err != nil {
-		return 0, false, err
+		return time.Time{}, false, err
 	}
-	return newInterval, learned, nil
+	return nextReviewAt, learned, nil
+}
+
+// reviewDelay decides how soon a word comes back up after being graded.
+// Again always uses a short "forgot it, try again shortly" step. Hard uses
+// the same short step ONLY while the word is still new (oldRepetitions==0,
+// i.e. it hasn't graduated to daily reviews yet) — once it's in the regular
+// rotation, Hard falls back to its slower-than-Good daily growth like any
+// other grade. Good/Easy always use the full day-based newIntervalDays.
+func reviewDelay(grade models.LearningGrade, oldRepetitions, newIntervalDays int) time.Duration {
+	switch grade {
+	case models.LearningGradeAgain:
+		return 10 * time.Minute
+	case models.LearningGradeHard:
+		if oldRepetitions == 0 {
+			return 15 * time.Minute
+		}
+	}
+	return time.Duration(newIntervalDays) * 24 * time.Hour
 }
 
 // ListReviewsOnDay returns every review the user answered within [from, to).

@@ -1900,11 +1900,19 @@ func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
 		return
 	}
 
+	// Preview each grade's resulting delay so the buttons themselves show
+	// "in 10m"/"in 1d" etc, Anki-style, instead of only revealing that
+	// after the user has already picked one.
+	again, hard, good, easy, err := m.learningsvc.PreviewGradeDelays(ctx.Ctx, ctx.DBUserID, wordID)
+	if err != nil {
+		log.Error().Err(err).Msg("preview grade delays failed")
+	}
+
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
 		ctx.ChatID,
 		ctx.MessageID,
 		learning.LearningReviewRevealedText(ctx.Language, collectionName, term, translation),
-		learning.LearningReviewGradeInlineMenu(ctx.Language, wordID),
+		learning.LearningReviewGradeInlineMenu(ctx.Language, wordID, again, hard, good, easy),
 	)
 	edit.ParseMode = "Markdown"
 	if _, err := m.bot.Send(edit); err != nil {
@@ -1921,13 +1929,24 @@ func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, grade mo
 		return
 	}
 
-	nextIntervalDays, learned, err := m.learningsvc.GradeAnswer(ctx.Ctx, ctx.DBUserID, wordID, grade)
+	nextReviewAt, learned, err := m.learningsvc.GradeAnswer(ctx.Ctx, ctx.DBUserID, wordID, grade)
 	if err != nil {
 		log.Error().Err(err).Msg("grade answer failed")
 		return
 	}
 
-	edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, learning.LearningReviewGradedText(ctx.Language, term, grade, nextIntervalDays, learned))
+	// Explicitly clear the Again/Hard/Good/Easy buttons (plain
+	// EditMessageText leaves whatever markup the message already had) and
+	// replace them with a way back to the Learning menu — otherwise a
+	// graded card is a dead end with no menu in sight, and the stale
+	// buttons stay tappable, letting a stray second tap silently re-grade
+	// the same word with a different answer.
+	menu := learning.LearningBackToMainInlineMenu(ctx.Language)
+	edit := tgbotapi.NewEditMessageTextAndMarkup(
+		ctx.ChatID, ctx.MessageID,
+		learning.LearningReviewGradedText(ctx.Language, term, grade, nextReviewAt, learned),
+		menu,
+	)
 	edit.ParseMode = "Markdown"
 	if _, err := m.bot.Send(edit); err != nil {
 		log.Error().Err(err).Msg("record review grade failed")
