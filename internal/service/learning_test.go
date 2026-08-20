@@ -477,6 +477,11 @@ func TestParseWordLine(t *testing.T) {
 		{"apple – яблоко", "apple", "яблоко", true},
 		{"apple: яблоко", "apple", "яблоко", true},
 		{"apple-яблоко", "apple", "яблоко", true},
+		// Mobile "smart punctuation" autocorrect turns a typed "-" into an
+		// en/em dash *without* re-adding the surrounding spaces — this must
+		// still parse (see the prod bug report it guards against).
+		{"apple—яблоко", "apple", "яблоко", true},
+		{"apple–яблоко", "apple", "яблоко", true},
 		{"just some text", "", "", false},
 		{"- яблоко", "", "", false},
 		{"apple -", "", "", false},

@@ -163,8 +163,11 @@ func (srv *learningService) AddWordsFromText(ctx context.Context, userID, collec
 }
 
 // wordLineSeparators are tried in order; the first one present in the line
-// splits it into term/translation.
-var wordLineSeparators = []string{" - ", " – ", " — ", ":", "-"}
+// splits it into term/translation. The bare "–"/"—" entries matter beyond
+// the padded " – "/" — " ones: mobile "smart punctuation" autocorrect often
+// turns a typed "-" into an en/em dash *without* re-adding the surrounding
+// spaces (e.g. "apple—яблоко"), which would otherwise fail to parse at all.
+var wordLineSeparators = []string{" - ", " – ", " — ", ":", "–", "—", "-"}
 
 // parseWordLine splits one line into (term, translation). ok is false when
 // no separator is found or either side is empty after trimming.
