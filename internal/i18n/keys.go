@@ -46,6 +46,7 @@ const (
 	KeyEntryButtonProfile      = "entry.button.profile"
 	KeyEntryButtonTrack        = "entry.button.track"
 	KeyEntryButtonLearning     = "entry.button.learning"
+	KeyEntryButtonRoadmap      = "entry.button.roadmap"
 	KeyEntryButtonSubscription = "entry.button.subscription"
 	KeyEntryWelcome            = "entry.welcome"
 )
@@ -360,4 +361,96 @@ const (
 	// N day(s)" for a word due back in 10-15 minutes.
 	KeyLearningReviewMissedMinutes      = "learning.review.graded_missed_minutes"
 	KeyLearningReviewHardConfirmMinutes = "learning.review.graded_hard_minutes"
+)
+
+// Roadmap — up to models.MaxRoadmapsPerUser technologies being learned,
+// each with a free-text mastery goal and a checklist of freeform cards,
+// nudged by a periodic digest push. Phase 4b.
+//
+// Shared buttons are deliberately NOT redefined here: "◀ Back"/"🏠 Home"/
+// "✅ Done"/"❌ Cancel" reuse KeyCommonBack/KeyCommonHome/KeyCommonDone/
+// KeyCommonCancelX, name validation reuses KeyCommonNameSingleLineInvalid,
+// archive restore/delete reuse KeyTrackLabelRestore/KeyTrackLabelDeleteForever,
+// and "✏️ Rename" reuses KeyLearningButtonRename — two keys rendering the
+// same text would collide in the reverse index Key() depends on (see
+// TestCatalog_NoTextCollisionsWithinLanguage).
+const (
+	KeyRoadmapButtonCreate            = "roadmap.button.create"
+	KeyRoadmapButtonList              = "roadmap.button.list"
+	KeyRoadmapButtonStartReminders    = "roadmap.button.start_reminders"
+	KeyRoadmapButtonManageReminders   = "roadmap.button.manage_reminders"
+	KeyRoadmapButtonStopReminders     = "roadmap.button.stop_reminders"
+	KeyRoadmapButtonArchive           = "roadmap.button.archive"
+	KeyRoadmapButtonProgress          = "roadmap.button.progress"
+	KeyRoadmapButtonAddCards          = "roadmap.button.add_cards"
+	KeyRoadmapButtonSetGoal           = "roadmap.button.set_goal"
+	KeyRoadmapButtonArchiveThis       = "roadmap.button.archive_this"
+	KeyRoadmapButtonSkipGoal          = "roadmap.button.skip_goal"
+	KeyRoadmapButtonToggleOnFmt       = "roadmap.button.toggle_on_fmt"   // "🟢 %s — %d/%d"
+	KeyRoadmapButtonToggleOffFmt      = "roadmap.button.toggle_off_fmt"  // "⚪ %s — %d/%d"
+	KeyRoadmapArchiveItemFmt          = "roadmap.label.archive_item_fmt" // "📦 %s — %d/%d"
+	KeyRoadmapLabelIncludedInReminder = "roadmap.label.included_in_reminders"
+	KeyRoadmapLabelExcludedReminder   = "roadmap.label.excluded_from_reminders"
+
+	KeyRoadmapMenuTitle             = "roadmap.menu.title"
+	KeyRoadmapMenuTotalRoadmaps     = "roadmap.menu.total_roadmaps" // "🧭 Technologies: *%d* of *%d*"
+	KeyRoadmapMenuTotalCards        = "roadmap.menu.total_cards"
+	KeyRoadmapMenuDone              = "roadmap.menu.done"
+	KeyRoadmapMenuPending           = "roadmap.menu.pending"
+	KeyRoadmapMenuRemindersActive   = "roadmap.menu.reminders_active" // "🕐 Reminders: every *%d* min (next in %s)"
+	KeyRoadmapMenuRemindersInactive = "roadmap.menu.reminders_inactive"
+	KeyRoadmapLoadFailed            = "roadmap.load_failed"
+
+	KeyRoadmapListTitle       = "roadmap.list.title" // "🗺 *My roadmaps* — %d of %d"
+	KeyRoadmapListEmpty       = "roadmap.list.empty"
+	KeyRoadmapListLoadFailed  = "roadmap.list.load_failed"
+	KeyRoadmapDetailTitle     = "roadmap.detail.title" // "🧭 *%s* — %d/%d done"
+	KeyRoadmapDetailGoal      = "roadmap.detail.goal"  // "🎯 Goal: %s"
+	KeyRoadmapDetailNoGoal    = "roadmap.detail.no_goal"
+	KeyRoadmapDetailHint      = "roadmap.detail.hint"
+	KeyRoadmapDetailNoCards   = "roadmap.detail.no_cards"
+	KeyRoadmapNotFound        = "roadmap.not_found"
+	KeyRoadmapCardsLoadFailed = "roadmap.cards.load_failed"
+
+	KeyRoadmapCreatePrompt    = "roadmap.create.prompt"
+	KeyRoadmapCreateExists    = "roadmap.create.exists"
+	KeyRoadmapCreateFailed    = "roadmap.create.failed"
+	KeyRoadmapCreateConfirmed = "roadmap.create.confirmed"     // "🧭 Roadmap *%s* created!"
+	KeyRoadmapLimitReached    = "roadmap.create.limit_reached" // "⚠️ Up to %d active roadmaps..."
+
+	KeyRoadmapGoalPrompt  = "roadmap.goal.prompt"   // "🎯 What does \"I know *%s*\" mean for you? ... (up to %d characters)"
+	KeyRoadmapGoalTooLong = "roadmap.goal.too_long" // "⚠️ Goal is too long — %d characters max."
+	KeyRoadmapGoalSaved   = "roadmap.goal.saved"
+	KeyRoadmapGoalSkipped = "roadmap.goal.skipped"
+	KeyRoadmapGoalFailed  = "roadmap.goal.failed"
+
+	KeyRoadmapRenamePrompt = "roadmap.rename.prompt"    // "✏️ Send a new name for *%s*:"
+	KeyRoadmapRenamed      = "roadmap.rename.confirmed" // "✅ Now called *%s*."
+	KeyRoadmapRenameFailed = "roadmap.rename.failed"
+
+	KeyRoadmapAddCardsPromptFirst = "roadmap.add_cards.prompt_first"
+	KeyRoadmapAddCardsPromptMore  = "roadmap.add_cards.prompt_more"
+	KeyRoadmapAddCardsNoneParsed  = "roadmap.add_cards.none_parsed"
+	KeyRoadmapAddCardsFailed      = "roadmap.add_cards.failed"
+	KeyRoadmapAddCardsAdded       = "roadmap.add_cards.added"   // "✅ Added %d card(s)."
+	KeyRoadmapAddCardsSkipped     = "roadmap.add_cards.skipped" // " (%d line(s) skipped — too long.)"
+	KeyRoadmapAddCardsDoneNotice  = "roadmap.add_cards.done_notice"
+
+	KeyRoadmapArchiveTitle = "roadmap.archive.title" // "🔁 *Archived roadmaps* — %d"
+	KeyRoadmapArchiveEmpty = "roadmap.archive.empty"
+
+	KeyRoadmapPushIntervalPrompt = "roadmap.push.interval_prompt"
+	KeyRoadmapPushActivateFailed = "roadmap.push.activate_failed"
+	KeyRoadmapPushActivated      = "roadmap.push.activated" // "🔔 Reminders on — a digest every %d min."
+	KeyRoadmapPushNeedOne        = "roadmap.push.need_one"
+
+	KeyRoadmapDigestTitle       = "roadmap.digest.title"
+	KeyRoadmapDigestRoadmapLine = "roadmap.digest.roadmap_line" // "*%s* — %d/%d\n"
+	KeyRoadmapDigestEmpty       = "roadmap.digest.empty"
+
+	KeyRoadmapStatsTitle       = "roadmap.stats.title"
+	KeyRoadmapStatsRoadmapLine = "roadmap.stats.roadmap_line" // "• %s — %d/%d (%d%%)\n"
+	KeyRoadmapStatsGoalLine    = "roadmap.stats.goal_line"    // "  🎯 %s\n"
+	KeyRoadmapStatsEmpty       = "roadmap.stats.empty"
+	KeyRoadmapStatsLoadFailed  = "roadmap.stats.load_failed"
 )

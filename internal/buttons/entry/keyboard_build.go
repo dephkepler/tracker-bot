@@ -20,6 +20,9 @@ func EntryReplyMenu(lang i18n.Lang, isAdmin bool) tgbotapi.ReplyKeyboardMarkup {
 		),
 		buttonbuilder.RR(
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyEntryButtonLearning)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyEntryButtonRoadmap)),
+		),
+		buttonbuilder.RR(
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyEntryButtonSubscription)),
 		),
 	}

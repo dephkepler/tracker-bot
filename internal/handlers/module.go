@@ -13,6 +13,7 @@ import (
 	"tracker-bot/internal/buttons/learning"
 	"tracker-bot/internal/buttons/onboarding"
 	"tracker-bot/internal/buttons/profile"
+	"tracker-bot/internal/buttons/roadmap"
 	"tracker-bot/internal/buttons/subscription"
 	"tracker-bot/internal/buttons/track"
 	"tracker-bot/internal/i18n"
@@ -42,6 +43,7 @@ type Module struct {
 	entrysvc        service.EntryService
 	adminsvc        service.AdminService
 	challengesvc    service.ChallengeService
+	roadmapsvc      service.RoadmapService
 	// adminUsername is the Telegram @handle (no leading "@") allowed to see
 	// the admin screen — see IsAdmin. Empty disables the admin feature
 	// entirely rather than matching everyone.
@@ -53,7 +55,7 @@ type Module struct {
 const adminUsersPageSize = 15
 
 // New creates handler module with all service dependencies.
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, adminUsername string) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, roadmapsvc service.RoadmapService, adminUsername string) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -64,6 +66,7 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		entrysvc:        entrysvc,
 		adminsvc:        adminsvc,
 		challengesvc:    challengesvc,
+		roadmapsvc:      roadmapsvc,
 		adminUsername:   strings.TrimPrefix(strings.TrimSpace(adminUsername), "@"),
 	}
 }
@@ -2245,4 +2248,508 @@ func (m *Module) RecordChallengePushAnswer(ctx *tgctx.MsgContext, challengeID in
 		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, result)
 		_, _ = m.bot.Send(edit)
 	}
+}
+
+// ShowRoadmapMenu loads roadmap stats and renders the Roadmap screen.
+func (m *Module) ShowRoadmapMenu(ctx *tgctx.MsgContext) {
+	stats, err := m.roadmapsvc.GetRoadmapStats(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("GetRoadmapStats failed")
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapLoadFailed))
+		_, _ = m.bot.Send(msg)
+		return
+	}
+
+	msg := tgbotapi.NewMessage(ctx.ChatID, roadmap.RoadmapMenuText(ctx.Language, stats))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = roadmap.RoadmapEntryInlineMenu(ctx.Language, stats.TimerActive)
+
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send roadmap menu failed")
+	}
+}
+
+// sendOrEditRoadmap sends a fresh message or edits the current inline
+// message — shared by every Roadmap sub-screen (copy of
+// sendOrEditLearning).
+func (m *Module) sendOrEditRoadmap(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
+	if edit && ctx.MessageID > 0 {
+		var out tgbotapi.Chattable
+		if menu != nil {
+			e := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, *menu)
+			e.ParseMode = "Markdown"
+			out = e
+		} else {
+			e := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text)
+			e.ParseMode = "Markdown"
+			out = e
+		}
+		if _, err := m.bot.Send(out); err != nil {
+			log.Error().Err(err).Msg("edit roadmap screen failed, sending fresh message instead")
+			m.sendOrEditRoadmap(ctx, false, text, menu)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg.ParseMode = "Markdown"
+	if menu != nil {
+		msg.ReplyMarkup = *menu
+	}
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send roadmap screen failed, retrying as plain text")
+		m.sendRoadmapPlain(ctx.ChatID, text, menu)
+	}
+}
+
+// sendRoadmapPlain re-sends a screen with no ParseMode. Roadmap screens
+// embed user-authored text (card lines, goals, technology names) in a
+// Markdown message, and that text is routinely pasted technical prose —
+// "snake_case", "sync.Mutex", "SELECT *". An unbalanced _ or * makes
+// Telegram reject the whole message, which would otherwise mean the screen
+// (or a reminder digest) silently never arrives. Dropping the formatting is
+// a much better failure mode than dropping the message, and it beats
+// escaping the user's own text into something they didn't type.
+func (m *Module) sendRoadmapPlain(chatID int64, text string, menu *tgbotapi.InlineKeyboardMarkup) {
+	msg := tgbotapi.NewMessage(chatID, text)
+	if menu != nil {
+		msg.ReplyMarkup = *menu
+	}
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send roadmap screen as plain text failed too")
+	}
+}
+
+// ShowRoadmapList lists a user's active roadmaps; edit renders it by
+// replacing an existing inline message instead of sending a new one.
+func (m *Module) ShowRoadmapList(ctx *tgctx.MsgContext, edit bool) {
+	items, err := m.roadmapsvc.ListRoadmaps(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list roadmaps failed")
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyRoadmapListLoadFailed), nil)
+		return
+	}
+	if len(items) == 0 {
+		menu := roadmap.RoadmapBackToMainInlineMenu(ctx.Language)
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyRoadmapListEmpty), &menu)
+		return
+	}
+	menu := roadmap.RoadmapListInlineMenu(ctx.Language, items)
+	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapListTitle(ctx.Language, len(items)), &menu)
+}
+
+// ShowRoadmapDetail renders one roadmap's card checklist and actions.
+func (m *Module) ShowRoadmapDetail(ctx *tgctx.MsgContext, roadmapID int64, edit bool) {
+	item, err := m.roadmapsvc.Roadmap(ctx.Ctx, ctx.DBUserID, roadmapID)
+	if err != nil {
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyRoadmapNotFound), nil)
+		return
+	}
+	cards, err := m.roadmapsvc.ListCards(ctx.Ctx, ctx.DBUserID, roadmapID)
+	if err != nil {
+		log.Error().Err(err).Msg("list roadmap cards failed")
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyRoadmapCardsLoadFailed), nil)
+		return
+	}
+
+	menu := roadmap.RoadmapDetailInlineMenu(ctx.Language, roadmapID, item.Active, cards)
+	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapDetailText(ctx.Language, item, len(cards)), &menu)
+}
+
+// PromptCreateRoadmap asks the user to type a technology name. It checks the
+// MaxRoadmapsPerUser cap up front, so the user learns they're full before
+// typing rather than after — the service re-checks on insert anyway.
+func (m *Module) PromptCreateRoadmap(ctx *tgctx.MsgContext) (ok bool) {
+	items, err := m.roadmapsvc.ListRoadmaps(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list roadmaps failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapLoadFailed)))
+		return false
+	}
+	if len(items) >= models.MaxRoadmapsPerUser {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapLimitReached, models.MaxRoadmapsPerUser)))
+		return false
+	}
+
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapCreatePrompt))
+	msg.ReplyMarkup = roadmap.RoadmapWaitingReplyMenu(ctx.Language)
+	_, _ = m.bot.Send(msg)
+	return true
+}
+
+// ProcessCreateRoadmapName validates and creates a roadmap from typed text,
+// then immediately prompts for its goal. done is true once the "waiting for
+// a name" state should be cleared (on both success and unrecoverable input,
+// matching ProcessCreateCollectionName's contract).
+func (m *Module) ProcessCreateRoadmapName(ctx *tgctx.MsgContext) (roadmapID int64, done bool) {
+	name := strings.TrimSpace(ctx.Text)
+
+	id, err := m.roadmapsvc.CreateRoadmap(ctx.Ctx, ctx.DBUserID, name)
+	if err != nil {
+		switch {
+		case errors.Is(err, models.ErrRoadmapInvalidName):
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonNameSingleLineInvalid)))
+			return 0, false
+		case errors.Is(err, models.ErrRoadmapExists):
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapCreateExists)))
+			return 0, false
+		case errors.Is(err, models.ErrRoadmapLimitReached):
+			// Racing themselves across two clients, or archiving in another
+			// window — the cap is re-checked on insert, so surface it here
+			// too rather than pretending it worked.
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapLimitReached, models.MaxRoadmapsPerUser))
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = m.bot.Send(hide)
+			return 0, true
+		}
+		log.Error().Err(err).Msg("create roadmap failed")
+		hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapCreateFailed))
+		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		_, _ = m.bot.Send(hide)
+		return 0, true
+	}
+
+	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapCreateConfirmed, name))
+	confirm.ParseMode = "Markdown"
+	_, _ = m.bot.Send(confirm)
+	m.PromptRoadmapGoal(ctx, id)
+	return id, true
+}
+
+// PromptRoadmapGoal asks for the roadmap's free-text mastery goal. The goal
+// is optional, so the keyboard offers Skip alongside Cancel.
+func (m *Module) PromptRoadmapGoal(ctx *tgctx.MsgContext, roadmapID int64) {
+	name, err := m.roadmapsvc.RoadmapName(ctx.Ctx, ctx.DBUserID, roadmapID)
+	if err != nil {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapNotFound)))
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, roadmap.RoadmapGoalPromptText(ctx.Language, name))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = roadmap.RoadmapGoalReplyMenu(ctx.Language)
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessRoadmapGoal stores a typed mastery goal. done is true once the
+// "waiting for a goal" state should be cleared.
+func (m *Module) ProcessRoadmapGoal(ctx *tgctx.MsgContext, roadmapID int64) (done bool) {
+	if err := m.roadmapsvc.SetGoal(ctx.Ctx, ctx.DBUserID, roadmapID, ctx.Text); err != nil {
+		if errors.Is(err, models.ErrRoadmapGoalTooLong) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapGoalTooLong, models.MaxRoadmapGoalLen)))
+			return false
+		}
+		log.Error().Err(err).Msg("set roadmap goal failed")
+		hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapGoalFailed))
+		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		_, _ = m.bot.Send(hide)
+		return true
+	}
+
+	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapGoalSaved))
+	confirm.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(confirm)
+	return true
+}
+
+// NoticeRoadmapGoalSkipped confirms the user chose to leave the goal empty.
+func (m *Module) NoticeRoadmapGoalSkipped(ctx *tgctx.MsgContext) {
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapGoalSkipped))
+	msg.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(msg)
+}
+
+// PromptRenameRoadmap asks the user to type a new name for a roadmap.
+func (m *Module) PromptRenameRoadmap(ctx *tgctx.MsgContext, roadmapID int64) {
+	name, err := m.roadmapsvc.RoadmapName(ctx.Ctx, ctx.DBUserID, roadmapID)
+	if err != nil {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapNotFound)))
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, roadmap.RoadmapRenamePromptText(ctx.Language, name))
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = roadmap.RoadmapWaitingReplyMenu(ctx.Language)
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessRenameRoadmap validates and applies a new roadmap name. done is
+// true once the "waiting for a new name" state should be cleared.
+func (m *Module) ProcessRenameRoadmap(ctx *tgctx.MsgContext, roadmapID int64) (done bool) {
+	name := strings.TrimSpace(ctx.Text)
+
+	if err := m.roadmapsvc.RenameRoadmap(ctx.Ctx, ctx.DBUserID, roadmapID, name); err != nil {
+		switch {
+		case errors.Is(err, models.ErrRoadmapInvalidName):
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonNameSingleLineInvalid)))
+			return false
+		case errors.Is(err, models.ErrRoadmapExists):
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapCreateExists)))
+			return false
+		}
+		log.Error().Err(err).Msg("rename roadmap failed")
+		hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapRenameFailed))
+		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		_, _ = m.bot.Send(hide)
+		m.ShowRoadmapDetail(ctx, roadmapID, false)
+		return true
+	}
+
+	hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapRenamed, name))
+	hide.ParseMode = "Markdown"
+	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(hide)
+	m.ShowRoadmapDetail(ctx, roadmapID, false)
+	return true
+}
+
+// PromptAddRoadmapCards asks the user to paste checklist lines. first is
+// true right after roadmap creation (slightly different copy).
+func (m *Module) PromptAddRoadmapCards(ctx *tgctx.MsgContext, roadmapID int64, first bool) {
+	key := i18n.KeyRoadmapAddCardsPromptMore
+	if first {
+		key = i18n.KeyRoadmapAddCardsPromptFirst
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, key))
+	msg.ReplyMarkup = roadmap.RoadmapAddCardsReplyMenu(ctx.Language)
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessAddRoadmapCards turns pasted lines into cards. The caller keeps the
+// "waiting for cards" state active afterward — the user may paste more, and
+// only exits via the "Done" button.
+func (m *Module) ProcessAddRoadmapCards(ctx *tgctx.MsgContext, roadmapID int64) {
+	added, skipped, err := m.roadmapsvc.AddCardsFromText(ctx.Ctx, ctx.DBUserID, roadmapID, ctx.Text)
+	if err != nil {
+		if errors.Is(err, models.ErrRoadmapNoCardsParsed) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapAddCardsNoneParsed)))
+			return
+		}
+		log.Error().Err(err).Msg("add roadmap cards failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapAddCardsFailed)))
+		return
+	}
+
+	text := i18n.T(ctx.Language, i18n.KeyRoadmapAddCardsAdded, added)
+	if skipped > 0 {
+		text += i18n.T(ctx.Language, i18n.KeyRoadmapAddCardsSkipped, skipped)
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
+}
+
+// HandleRoadmapCardToggle ticks/unticks one card and re-renders its
+// roadmap's checklist.
+func (m *Module) HandleRoadmapCardToggle(ctx *tgctx.MsgContext, cardID int64) {
+	roadmapID, err := m.roadmapsvc.ToggleCardDone(ctx.Ctx, ctx.DBUserID, cardID)
+	if err != nil {
+		log.Error().Err(err).Msg("toggle roadmap card failed")
+		return
+	}
+	m.ShowRoadmapDetail(ctx, roadmapID, true)
+}
+
+// HandleRoadmapDigestToggle ticks one card straight off a reminder push and
+// re-renders that same push message with whatever is still pending — so the
+// notification stays a live checklist instead of going stale.
+func (m *Module) HandleRoadmapDigestToggle(ctx *tgctx.MsgContext, cardID int64) {
+	if _, err := m.roadmapsvc.ToggleCardDone(ctx.Ctx, ctx.DBUserID, cardID); err != nil {
+		log.Error().Err(err).Msg("toggle roadmap card from digest failed")
+		return
+	}
+
+	text, menu, hasCards, err := m.buildRoadmapDigest(ctx.Ctx, ctx.DBUserID, ctx.Language)
+	if err != nil {
+		log.Error().Err(err).Msg("rebuild roadmap digest failed")
+		return
+	}
+	if !hasCards {
+		m.sendOrEditRoadmap(ctx, true, i18n.T(ctx.Language, i18n.KeyRoadmapDigestEmpty), nil)
+		return
+	}
+	m.sendOrEditRoadmap(ctx, true, text, &menu)
+}
+
+// HandleRoadmapCardDelete removes one card and re-renders its roadmap's
+// checklist.
+func (m *Module) HandleRoadmapCardDelete(ctx *tgctx.MsgContext, cardID, roadmapID int64) {
+	if err := m.roadmapsvc.DeleteCard(ctx.Ctx, ctx.DBUserID, cardID); err != nil {
+		log.Error().Err(err).Msg("delete roadmap card failed")
+	}
+	m.ShowRoadmapDetail(ctx, roadmapID, true)
+}
+
+// HandleRoadmapToggle flips whether a roadmap is included in reminder
+// digests and re-renders its checklist.
+func (m *Module) HandleRoadmapToggle(ctx *tgctx.MsgContext, roadmapID int64) {
+	if err := m.roadmapsvc.ToggleRoadmapActive(ctx.Ctx, ctx.DBUserID, roadmapID); err != nil {
+		log.Error().Err(err).Msg("toggle roadmap active failed")
+	}
+	m.ShowRoadmapDetail(ctx, roadmapID, true)
+}
+
+// HandleRoadmapArchive archives a roadmap and returns to the list.
+func (m *Module) HandleRoadmapArchive(ctx *tgctx.MsgContext, roadmapID int64) {
+	if err := m.roadmapsvc.ArchiveRoadmap(ctx.Ctx, ctx.DBUserID, roadmapID); err != nil {
+		log.Error().Err(err).Msg("archive roadmap failed")
+	}
+	m.ShowRoadmapList(ctx, true)
+}
+
+// ShowRoadmapArchiveMenu lists archived roadmaps.
+func (m *Module) ShowRoadmapArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
+	items, err := m.roadmapsvc.ListArchivedRoadmaps(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list archived roadmaps failed")
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyTrackArchiveLoadFailed), nil)
+		return
+	}
+	if len(items) == 0 {
+		menu := roadmap.RoadmapBackToMainInlineMenu(ctx.Language)
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyRoadmapArchiveEmpty), &menu)
+		return
+	}
+	menu := roadmap.RoadmapArchiveInlineMenu(ctx.Language, items)
+	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapArchiveTitle(ctx.Language, len(items)), &menu)
+}
+
+// RestoreArchivedRoadmap moves a roadmap back to the active list. Restoring
+// re-occupies one of the MaxRoadmapsPerUser slots, so a full list is
+// reported instead of silently doing nothing.
+func (m *Module) RestoreArchivedRoadmap(ctx *tgctx.MsgContext, roadmapID int64) {
+	if err := m.roadmapsvc.RestoreRoadmap(ctx.Ctx, ctx.DBUserID, roadmapID); err != nil {
+		if errors.Is(err, models.ErrRoadmapLimitReached) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapLimitReached, models.MaxRoadmapsPerUser)))
+			return
+		}
+		log.Error().Err(err).Msg("restore roadmap failed")
+	}
+	m.ShowRoadmapArchiveMenu(ctx, true)
+}
+
+// DeleteArchivedRoadmapForever permanently removes an archived roadmap.
+func (m *Module) DeleteArchivedRoadmapForever(ctx *tgctx.MsgContext, roadmapID int64) {
+	if err := m.roadmapsvc.DeleteRoadmapForever(ctx.Ctx, ctx.DBUserID, roadmapID); err != nil {
+		log.Error().Err(err).Msg("delete roadmap forever failed")
+	}
+	m.ShowRoadmapArchiveMenu(ctx, true)
+}
+
+// ShowRoadmapStatsDetail renders the full "📈 Progress" breakdown.
+func (m *Module) ShowRoadmapStatsDetail(ctx *tgctx.MsgContext, edit bool) {
+	detail, err := m.roadmapsvc.GetStatsDetail(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("get roadmap stats detail failed")
+		m.sendOrEditRoadmap(ctx, edit, i18n.T(ctx.Language, i18n.KeyRoadmapStatsLoadFailed), nil)
+		return
+	}
+	menu := roadmap.RoadmapBackToMainInlineMenu(ctx.Language)
+	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapStatsDetailText(ctx.Language, detail), &menu)
+}
+
+// ShowRoadmapIntervalPicker shows the reminder-interval picker. ok is false
+// when there's nothing to remind about yet (no active roadmap with pending
+// cards) — activating then would only send empty digests, so the user is
+// told instead.
+func (m *Module) ShowRoadmapIntervalPicker(ctx *tgctx.MsgContext) (ok bool) {
+	cards, err := m.roadmapsvc.PickDigestCards(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("pick roadmap digest cards failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapLoadFailed)))
+		return false
+	}
+	if len(cards) == 0 {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapPushNeedOne)))
+		return false
+	}
+
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapPushIntervalPrompt))
+	msg.ReplyMarkup = roadmap.RoadmapPushIntervalReplyMenu(ctx.Language, roadmap.BuiltInPushIntervals)
+	_, _ = m.bot.Send(msg)
+	return true
+}
+
+// ActivateRoadmapReminders enables periodic digest pushes at the given
+// interval.
+func (m *Module) ActivateRoadmapReminders(ctx *tgctx.MsgContext, intervalMin int) {
+	if err := m.roadmapsvc.Activate(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil {
+		log.Error().Err(err).Msg("activate roadmap reminders failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapPushActivateFailed)))
+		return
+	}
+	// Clear the interval-picker reply keyboard on the confirmation message
+	// itself, same reasoning as ActivateReviews.
+	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapPushActivated, intervalMin))
+	confirm.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+	_, _ = m.bot.Send(confirm)
+	m.ShowRoadmapMenu(ctx)
+}
+
+// StopRoadmapReminders disables periodic digest pushes.
+func (m *Module) StopRoadmapReminders(ctx *tgctx.MsgContext) {
+	if err := m.roadmapsvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
+		log.Error().Err(err).Msg("stop roadmap reminders failed")
+	}
+	m.ShowRoadmapMenu(ctx)
+}
+
+// buildRoadmapDigest assembles a reminder digest: the pending-card text plus
+// a keyboard with one tick button per card. hasCards is false when nothing
+// is pending, in which case there's nothing worth sending.
+func (m *Module) buildRoadmapDigest(ctx context.Context, userID int64, lang i18n.Lang) (string, tgbotapi.InlineKeyboardMarkup, bool, error) {
+	cards, err := m.roadmapsvc.PickDigestCards(ctx, userID)
+	if err != nil {
+		return "", tgbotapi.InlineKeyboardMarkup{}, false, err
+	}
+	if len(cards) == 0 {
+		return "", tgbotapi.InlineKeyboardMarkup{}, false, nil
+	}
+
+	// Per-roadmap done/total counts for the digest's group headers — the
+	// digest query itself only returns the pending cards.
+	byRoadmap := make(map[int64]models.RoadmapItem)
+	items, err := m.roadmapsvc.ListRoadmaps(ctx, userID)
+	if err != nil {
+		return "", tgbotapi.InlineKeyboardMarkup{}, false, err
+	}
+	for _, item := range items {
+		byRoadmap[item.ID] = item
+	}
+
+	return roadmap.RoadmapDigestText(lang, cards, byRoadmap), roadmap.RoadmapDigestInlineMenu(lang, cards), true, nil
+}
+
+// SendRoadmapDigestMessage sends one reminder digest of what's still pending
+// across the user's active roadmaps. Called off the scheduler, not a live
+// user request — mirrors SendLearningPromptMessage's language lookup.
+//
+// With nothing pending it returns nil without sending; the scheduler still
+// advances the schedule afterward, so an all-done user doesn't get retried
+// on every tick.
+func (m *Module) SendRoadmapDigestMessage(ctx context.Context, chatID int64, userID int64) error {
+	lang := i18n.Default
+	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err != nil {
+		log.Error().Err(err).Int64("user_id", userID).Msg("load language for roadmap digest failed")
+	} else if stats.Language != nil {
+		lang = i18n.Normalize(*stats.Language)
+	}
+
+	text, menu, hasCards, err := m.buildRoadmapDigest(ctx, userID, lang)
+	if err != nil {
+		return err
+	}
+	if !hasCards {
+		return nil
+	}
+
+	msg := tgbotapi.NewMessage(chatID, text)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = menu
+	if _, err := m.bot.Send(msg); err != nil {
+		// Same Markdown-vs-pasted-text hazard as sendRoadmapPlain covers,
+		// and here it matters more: a rejected digest is a reminder the user
+		// simply never gets, with the schedule advancing regardless.
+		log.Error().Err(err).Int64("user_id", userID).Msg("send roadmap digest failed, retrying as plain text")
+		plain := tgbotapi.NewMessage(chatID, text)
+		plain.ReplyMarkup = menu
+		_, err = m.bot.Send(plain)
+		return err
+	}
+	return nil
 }

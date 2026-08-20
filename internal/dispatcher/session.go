@@ -42,6 +42,15 @@ type userSession struct {
 	// used while waitingLearningWords is true.
 	learningCollectionID int64
 
+	waitingRoadmapName   bool
+	waitingRoadmapGoal   bool
+	waitingRoadmapRename bool
+	waitingRoadmapCards  bool
+	// roadmapID is the roadmap currently being edited — set when one is
+	// created or opened, and used while any of the waitingRoadmap* flags
+	// above is true (the typed text carries no id of its own).
+	roadmapID int64
+
 	waitingAdminBroadcastText bool
 	// pendingBroadcastText holds the typed broadcast message between the
 	// confirm-step prompt and the admin tapping Send/Cancel on it.

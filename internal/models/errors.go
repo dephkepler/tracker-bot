@@ -31,6 +31,36 @@ var (
 	ErrChallengeInvalidName  = errors.New("challenge name must be 2-60 characters, single line")
 	ErrChallengeInvalidRange = errors.New("challenge must be 1-100 days, end date on or after start date")
 	ErrChallengeDayNotFound  = errors.New("challenge day not found")
+
+	// Roadmap domain errors.
+	ErrRoadmapExists          = errors.New("roadmap already exists")
+	ErrRoadmapNotFound        = errors.New("roadmap not found")
+	ErrRoadmapCardNotFound    = errors.New("roadmap card not found")
+	ErrRoadmapNoCardsParsed   = errors.New("no non-empty card lines found")
+	ErrRoadmapInvalidInterval = errors.New("roadmap push interval must be between 1 and 1440 minutes")
+	ErrRoadmapInvalidName     = errors.New("roadmap name must be 2-60 characters, single line")
+	ErrRoadmapGoalTooLong     = errors.New("roadmap goal must be at most 200 characters")
+	ErrRoadmapLimitReached    = errors.New("roadmap limit reached")
+)
+
+// MaxRoadmapsPerUser caps how many non-archived roadmaps one user can keep
+// at once — the feature is deliberately "a few technologies at a time", and
+// the cap is what keeps the push digest and menus readable.
+const MaxRoadmapsPerUser = 5
+
+// Roadmap text limits, enforced in the service layer (the DB columns are
+// plain TEXT — same as learning_collections.name).
+const (
+	MaxRoadmapGoalLen     = 200
+	MaxRoadmapCardTextLen = 300
+)
+
+// Digest caps: at most RoadmapDigestPerRoadmapCap pending cards from any one
+// roadmap, and RoadmapDigestMaxCards overall, so no single roadmap
+// monopolizes a push and the message stays skimmable.
+const (
+	RoadmapDigestPerRoadmapCap = 3
+	RoadmapDigestMaxCards      = 8
 )
 
 // MaxCustomTimersPerUser caps how many custom intervals one user can keep at

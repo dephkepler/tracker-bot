@@ -259,6 +259,69 @@ type ChallengeDueUser struct {
 	EndDate       time.Time
 }
 
+// RoadmapItem is one roadmap (technology being learned) row in list/
+// selection UIs, with its card counts for the "done/total" display.
+type RoadmapItem struct {
+	ID         int64
+	Name       string
+	Goal       string
+	Active     bool // included in the push digest
+	IsArchived bool
+	TotalCards int
+	DoneCards  int
+}
+
+// RoadmapCardItem is one checklist card within a roadmap.
+type RoadmapCardItem struct {
+	ID     int64
+	Text   string
+	IsDone bool
+	DoneAt *time.Time // nil while pending
+}
+
+// RoadmapDueUser represents one user that should receive a roadmap digest
+// push now.
+type RoadmapDueUser struct {
+	DBUserID    int64
+	TgUserID    int64
+	IntervalMin int
+}
+
+// RoadmapDigestCard is one pending card picked for a digest push, with its
+// owning roadmap's name for display.
+type RoadmapDigestCard struct {
+	ID          int64
+	RoadmapID   int64
+	RoadmapName string
+	Text        string
+}
+
+// RoadmapCardStat is one roadmap's row in the detailed statistics
+// breakdown.
+type RoadmapCardStat struct {
+	Name       string
+	Goal       string
+	TotalCards int
+	DoneCards  int
+}
+
+// RoadmapStats contains values for the Roadmap dashboard.
+type RoadmapStats struct {
+	TotalRoadmaps int
+	TotalCards    int
+	DoneCards     int
+	PendingCards  int
+	TimerActive   bool
+	TimerInterval int
+	NextPushIn    string // human-readable, "" when the push isn't active
+}
+
+// RoadmapStatsDetail is the "📈 Statistics" screen's full view model.
+type RoadmapStatsDetail struct {
+	Overall  RoadmapStats
+	Roadmaps []RoadmapCardStat
+}
+
 // SubscriptionStats contains values for subscription screen.
 type SubscriptionStats struct {
 	ActivePlan string

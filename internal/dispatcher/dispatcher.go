@@ -11,6 +11,7 @@ import (
 	learningbtn "tracker-bot/internal/buttons/learning"
 	onboardingbtn "tracker-bot/internal/buttons/onboarding"
 	profilebtn "tracker-bot/internal/buttons/profile"
+	roadmapbtn "tracker-bot/internal/buttons/roadmap"
 	trackbtn "tracker-bot/internal/buttons/track"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
@@ -35,6 +36,7 @@ type Dispatcher struct {
 	entry        *handlers.Module
 	profile      *handlers.Module
 	learning     *handlers.Module
+	roadmap      *handlers.Module
 
 	reply   *h.ReplyModule
 	uistate service.UIStateService
@@ -62,6 +64,12 @@ const (
 	screenLearningTimer      = "learning_timer"
 	screenLearningReviewPick = "learning_review_pick"
 
+	screenRoadmapMain    = "roadmap_main"
+	screenRoadmapList    = "roadmap_list"
+	screenRoadmapCards   = "roadmap_cards"
+	screenRoadmapArchive = "roadmap_archive"
+	screenRoadmapTimer   = "roadmap_timer"
+
 	screenChallengeList     = "challenge_list"
 	screenChallengeCreate   = "challenge_create"
 	screenChallengeCalendar = "challenge_calendar"
@@ -80,6 +88,7 @@ func New(
 	entry *handlers.Module,
 	profile *handlers.Module,
 	learning *handlers.Module,
+	roadmap *handlers.Module,
 ) *Dispatcher {
 	if bot == nil {
 		log.Fatal().Msg("Dispatcher: nil bot interfaces.BotAPI")
@@ -100,10 +109,11 @@ func New(
 		entry:        entry,
 		profile:      profile,
 		learning:     learning,
+		roadmap:      roadmap,
 		sessions:     newSessionStore(),
 	}
 
-	d.reply = h.New(bot, track, subscription, entry, profile, learning)
+	d.reply = h.New(bot, track, subscription, entry, profile, learning, roadmap)
 	return d
 }
 
@@ -280,6 +290,9 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonLearning {
 		d.setScreen(mctx.UserID, screenLearningMain)
 	}
+	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonRoadmap {
+		d.setScreen(mctx.UserID, screenRoadmapMain)
+	}
 	if d.reply != nil && d.reply.HandleReplyButtons(mctx) {
 		return
 	}
@@ -349,6 +362,11 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 
 	if strings.HasPrefix(q.Data, "learning:") {
 		d.handleLearningCallback(mctx, q.Data)
+		return
+	}
+
+	if strings.HasPrefix(q.Data, "roadmap:") {
+		d.handleRoadmapCallback(mctx, q.Data)
 		return
 	}
 
@@ -564,6 +582,86 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		}
 		return true
 	}
+	if sess.waitingRoadmapName {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
+			sess.waitingRoadmapName = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.setScreen(ctx.UserID, screenRoadmapMain)
+			d.roadmap.ShowRoadmapMenu(ctx)
+			return true
+		}
+		id, done := d.roadmap.ProcessCreateRoadmapName(ctx)
+		if done {
+			sess.waitingRoadmapName = false
+			if id > 0 {
+				// Created — the name prompt chains straight into the goal
+				// prompt, which then chains into the card paste step.
+				sess.waitingRoadmapGoal = true
+				sess.roadmapID = id
+				d.setScreen(ctx.UserID, screenRoadmapCards)
+			} else {
+				d.setScreen(ctx.UserID, screenRoadmapMain)
+				d.roadmap.ShowRoadmapMenu(ctx)
+			}
+		}
+		return true
+	}
+	if sess.waitingRoadmapGoal {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok {
+			switch key {
+			case i18n.KeyCommonCancelX:
+				// Cancel here abandons the goal step only — the roadmap
+				// itself is already created, so land the user on it rather
+				// than back at the menu with no sign of what happened.
+				sess.waitingRoadmapGoal = false
+				hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
+				hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+				_, _ = d.bot.Send(hide)
+				d.roadmap.ShowRoadmapDetail(ctx, sess.roadmapID, false)
+				return true
+			case i18n.KeyRoadmapButtonSkipGoal:
+				sess.waitingRoadmapGoal = false
+				d.roadmap.NoticeRoadmapGoalSkipped(ctx)
+				sess.waitingRoadmapCards = true
+				d.roadmap.PromptAddRoadmapCards(ctx, sess.roadmapID, true)
+				return true
+			}
+		}
+		if d.roadmap.ProcessRoadmapGoal(ctx, sess.roadmapID) {
+			sess.waitingRoadmapGoal = false
+			sess.waitingRoadmapCards = true
+			d.roadmap.PromptAddRoadmapCards(ctx, sess.roadmapID, true)
+		}
+		return true
+	}
+	if sess.waitingRoadmapCards {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonDone {
+			sess.waitingRoadmapCards = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapAddCardsDoneNotice))
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.roadmap.ShowRoadmapDetail(ctx, sess.roadmapID, false)
+			return true
+		}
+		d.roadmap.ProcessAddRoadmapCards(ctx, sess.roadmapID)
+		return true
+	}
+	if sess.waitingRoadmapRename {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
+			sess.waitingRoadmapRename = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.roadmap.ShowRoadmapDetail(ctx, sess.roadmapID, false)
+			return true
+		}
+		if d.roadmap.ProcessRenameRoadmap(ctx, sess.roadmapID) {
+			sess.waitingRoadmapRename = false
+		}
+		return true
+	}
 	if sess.waitingPeriodRange {
 		from, to, err := parseDateRange(ctx.Text)
 		if err != nil {
@@ -653,6 +751,23 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.learning.ShowLearningMenu(ctx)
+			return
+		}
+	}
+
+	// Roadmap reminder-interval picker.
+	if d.isScreen(ctx.UserID, screenRoadmapTimer) {
+		if minutes, ok := roadmapbtn.ParsePushIntervalButtonMinutes(ctx.Text); ok {
+			d.setScreen(ctx.UserID, screenRoadmapMain)
+			d.roadmap.ActivateRoadmapReminders(ctx, minutes)
+			return
+		}
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonBack {
+			d.setScreen(ctx.UserID, screenRoadmapMain)
+			hide := tgbotapi.NewMessage(ctx.ChatID, " ")
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.roadmap.ShowRoadmapMenu(ctx)
 			return
 		}
 	}
@@ -763,6 +878,9 @@ func (d *Dispatcher) handleTranslatedButton(ctx *tgctx.MsgContext, key string) b
 		case d.isScreen(ctx.UserID, screenAdmin):
 			d.setScreen(ctx.UserID, screenHome)
 			d.entry.ShowHomeMenu(ctx)
+		case d.isScreen(ctx.UserID, screenRoadmapList, screenRoadmapCards, screenRoadmapArchive):
+			d.setScreen(ctx.UserID, screenRoadmapMain)
+			d.roadmap.ShowRoadmapMenu(ctx)
 		case d.isScreen(ctx.UserID, screenTrackManage, screenTrackArchive, screenTrackTimer):
 			d.setScreen(ctx.UserID, screenTrackMain)
 			d.track.ShowTrackingMenu(ctx)
@@ -1096,6 +1214,118 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 			return
 		}
 		d.learning.RecordReviewGrade(ctx, id, models.LearningGradeEasy)
+	}
+}
+
+// handleRoadmapCallback routes roadmap-related inline callbacks.
+//
+// Case order matters: the "roadmap:archive:this:" arm must be distinguishable
+// from the archive-screen prefixes, which is why it carries the extra
+// ":this:" segment (see internal/buttons/roadmap/constants_menu.go).
+func (d *Dispatcher) handleRoadmapCallback(ctx *tgctx.MsgContext, data string) {
+	sess := d.sessions.get(ctx.UserID)
+
+	switch {
+	case data == roadmapbtn.RoadmapCBBackMain:
+		d.setScreen(ctx.UserID, screenRoadmapMain)
+		d.roadmap.ShowRoadmapMenu(ctx)
+	case data == roadmapbtn.RoadmapCBCreate:
+		if d.roadmap.PromptCreateRoadmap(ctx) {
+			sess.waitingRoadmapName = true
+		}
+	case data == roadmapbtn.RoadmapCBList:
+		d.setScreen(ctx.UserID, screenRoadmapList)
+		d.roadmap.ShowRoadmapList(ctx, true)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBOpen):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBOpen)
+		if !ok {
+			return
+		}
+		d.setScreen(ctx.UserID, screenRoadmapCards)
+		sess.roadmapID = id
+		d.roadmap.ShowRoadmapDetail(ctx, id, true)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBToggle):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBToggle)
+		if !ok {
+			return
+		}
+		d.roadmap.HandleRoadmapToggle(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBAddCards):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBAddCards)
+		if !ok {
+			return
+		}
+		sess.waitingRoadmapCards = true
+		sess.roadmapID = id
+		d.roadmap.PromptAddRoadmapCards(ctx, id, false)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBSetGoal):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBSetGoal)
+		if !ok {
+			return
+		}
+		sess.waitingRoadmapGoal = true
+		sess.roadmapID = id
+		d.roadmap.PromptRoadmapGoal(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBRename):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBRename)
+		if !ok {
+			return
+		}
+		sess.waitingRoadmapRename = true
+		sess.roadmapID = id
+		d.roadmap.PromptRenameRoadmap(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBArchiveThis):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBArchiveThis)
+		if !ok {
+			return
+		}
+		d.setScreen(ctx.UserID, screenRoadmapList)
+		d.roadmap.HandleRoadmapArchive(ctx, id)
+	case data == roadmapbtn.RoadmapCBArchiveOpen:
+		d.setScreen(ctx.UserID, screenRoadmapArchive)
+		d.roadmap.ShowRoadmapArchiveMenu(ctx, true)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBArchiveRestore):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBArchiveRestore)
+		if !ok {
+			return
+		}
+		d.roadmap.RestoreArchivedRoadmap(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBArchiveDelete):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBArchiveDelete)
+		if !ok {
+			return
+		}
+		d.roadmap.DeleteArchivedRoadmapForever(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBCardToggle):
+		// Standalone on purpose — no screen requirement, since the card id
+		// resolves its own roadmap.
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBCardToggle)
+		if !ok {
+			return
+		}
+		d.roadmap.HandleRoadmapCardToggle(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBDigestToggle):
+		// Same flip, but tapped on a reminder push — re-renders that push
+		// instead of a checklist screen.
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBDigestToggle)
+		if !ok {
+			return
+		}
+		d.roadmap.HandleRoadmapDigestToggle(ctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBCardDelete):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBCardDelete)
+		if !ok {
+			return
+		}
+		d.roadmap.HandleRoadmapCardDelete(ctx, id, sess.roadmapID)
+	case data == roadmapbtn.RoadmapCBStats:
+		d.roadmap.ShowRoadmapStatsDetail(ctx, true)
+	case data == roadmapbtn.RoadmapCBPushOpen:
+		if d.roadmap.ShowRoadmapIntervalPicker(ctx) {
+			d.setScreen(ctx.UserID, screenRoadmapTimer)
+		}
+	case data == roadmapbtn.RoadmapCBPushStop:
+		d.roadmap.StopRoadmapReminders(ctx)
 	}
 }
 

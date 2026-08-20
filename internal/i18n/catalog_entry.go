@@ -24,6 +24,13 @@ var catalogEntry = map[string]entry{
 		UK: "🧠Навчання",
 		AR: "🧠التعلّم",
 	},
+	KeyEntryButtonRoadmap: {
+		RU: "🗺Роадмапы",
+		EN: "🗺Roadmaps",
+		DE: "🗺Roadmaps",
+		UK: "🗺Роадмапи",
+		AR: "🗺خطط التعلّم",
+	},
 	KeyEntryButtonSubscription: {
 		RU: "💳Подписка",
 		EN: "💳Subscription",

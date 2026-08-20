@@ -16,9 +16,10 @@ type ReplyModule struct {
 	entry        *handlers.Module
 	profile      *handlers.Module
 	learning     *handlers.Module
+	roadmap      *handlers.Module
 }
 
-func New(bot tgclient.BotAPI, track *handlers.Module, subscription *handlers.Module, entry *handlers.Module, profile *handlers.Module, learning *handlers.Module) *ReplyModule {
+func New(bot tgclient.BotAPI, track *handlers.Module, subscription *handlers.Module, entry *handlers.Module, profile *handlers.Module, learning *handlers.Module, roadmap *handlers.Module) *ReplyModule {
 	return &ReplyModule{
 		bot:          bot,
 		track:        track,
@@ -26,6 +27,7 @@ func New(bot tgclient.BotAPI, track *handlers.Module, subscription *handlers.Mod
 		entry:        entry,
 		profile:      profile,
 		learning:     learning,
+		roadmap:      roadmap,
 	}
 }
 
@@ -38,6 +40,7 @@ func (r *ReplyModule) replyButtonsByKey() map[string]func(*tgctx.MsgContext) {
 		i18n.KeyEntryButtonProfile:      r.handleShowProfileMenu,
 		i18n.KeyEntryButtonTrack:        r.handleShowTrackingMenu,
 		i18n.KeyEntryButtonLearning:     r.handleShowLearningMenu,
+		i18n.KeyEntryButtonRoadmap:      r.handleShowRoadmapMenu,
 		i18n.KeyEntryButtonSubscription: r.handleShowSubscriptionMenu,
 	}
 }
@@ -67,6 +70,10 @@ func (r *ReplyModule) handleShowTrackingMenu(ctx *tgctx.MsgContext) {
 
 func (r *ReplyModule) handleShowLearningMenu(ctx *tgctx.MsgContext) {
 	r.learning.ShowLearningMenu(ctx)
+}
+
+func (r *ReplyModule) handleShowRoadmapMenu(ctx *tgctx.MsgContext) {
+	r.roadmap.ShowRoadmapMenu(ctx)
 }
 
 func (r *ReplyModule) handleShowSubscriptionMenu(ctx *tgctx.MsgContext) {
