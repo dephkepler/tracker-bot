@@ -1477,7 +1477,7 @@ func percentOf(part, total time.Duration) string {
 
 // ShowLearningMenu loads learning stats and renders learning screen.
 func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
-	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID)
+	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("GetLearningStats failed")
 		msg := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load learning data. Please try again.")
@@ -1498,7 +1498,7 @@ func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 
 // ShowLearningStatsDetail renders the full "📈 Statistics" breakdown.
 func (m *Module) ShowLearningStatsDetail(ctx *tgctx.MsgContext, edit bool) {
-	detail, err := m.learningsvc.GetStatsDetail(ctx.Ctx, ctx.DBUserID)
+	detail, err := m.learningsvc.GetStatsDetail(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("get learning stats detail failed")
 		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load statistics.", nil)
@@ -1632,7 +1632,7 @@ func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 		}
 	}
 
-	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID)
+	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("get learning stats for review picker failed")
 	}

@@ -540,7 +540,7 @@ func TestLearningService_GetStatsDetail_AggregatesEverything(t *testing.T) {
 	}
 	repo.reviewDates[1] = []time.Time{time.Now().UTC()}
 
-	detail, err := svc.GetStatsDetail(ctx, 1)
+	detail, err := svc.GetStatsDetail(ctx, 1, time.UTC)
 	if err != nil {
 		t.Fatalf("get stats detail: %v", err)
 	}
@@ -668,11 +668,45 @@ func TestComputeStreak_ExpiredTwoDaysAgo(t *testing.T) {
 	}
 }
 
+// TestComputeStreak_BucketsByUserLocalDayNotUTC is a regression test for a
+// bug where computeStreak bucketed reviews by their raw UTC calendar day
+// instead of the caller's own timezone (now.Location()): two reviews made on
+// the *same* local calendar day, but on opposite sides of the UTC midnight
+// that falls in the middle of that local day (common far from UTC, e.g.
+// UTC+14), used to land in two different UTC-day buckets and inflate the
+// streak. Calls computeStreak directly (unlike mustStreak below) so the
+// review/now instants can be pinned exactly — real wall-clock time can't
+// deterministically hit this case.
+func TestComputeStreak_BucketsByUserLocalDayNotUTC(t *testing.T) {
+	repo, svc := newTestLearningService()
+	ls := svc.(*learningService)
+
+	loc := time.FixedZone("UTC+14", 14*60*60)
+	// Same local day (2024-03-10) for both, but review1's instant is before
+	// that day's UTC midnight-in-local-time (08:00 local = 2024-03-09 18:00
+	// UTC) while review2's is after (22:00 local = 2024-03-10 08:00 UTC).
+	// .UTC() mirrors how pgx actually hands back TIMESTAMPTZ rows in
+	// production — without it, both instants already carry loc and the bug
+	// this test targets can't reproduce.
+	review1 := time.Date(2024, 3, 10, 8, 0, 0, 0, loc).UTC()
+	review2 := time.Date(2024, 3, 10, 22, 0, 0, 0, loc).UTC()
+	repo.reviewDates[1] = []time.Time{review2, review1} // most-recent-first
+
+	now := time.Date(2024, 3, 10, 23, 0, 0, 0, loc)
+	got, err := ls.computeStreak(context.Background(), 1, now)
+	if err != nil {
+		t.Fatalf("compute streak: %v", err)
+	}
+	if got != 1 {
+		t.Fatalf("streak = %d, want 1 (both reviews fall on the same local calendar day)", got)
+	}
+}
+
 // mustStreak reads the streak back out via GetLearningStats (computeStreak
 // is unexported and only reachable through the service's public surface).
 func mustStreak(t *testing.T, svc LearningService, _ *fakeLearningRepo, userID int64) int {
 	t.Helper()
-	stats, err := svc.GetLearningStats(context.Background(), userID)
+	stats, err := svc.GetLearningStats(context.Background(), userID, time.UTC)
 	if err != nil {
 		t.Fatalf("get learning stats: %v", err)
 	}

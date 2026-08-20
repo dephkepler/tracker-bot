@@ -7,6 +7,7 @@ import (
 	"time"
 	"tracker-bot/internal/models"
 	"tracker-bot/internal/repo"
+	"tracker-bot/pkg/apptime"
 )
 
 // LearningService contains word-learning use-cases: collections of word
@@ -48,10 +49,10 @@ type LearningService interface {
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.LearningDueUser, error)
 	MarkPushSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error
 
-	GetLearningStats(ctx context.Context, userID int64) (models.LearningStats, error)
+	GetLearningStats(ctx context.Context, userID int64, loc *time.Location) (models.LearningStats, error)
 	// GetStatsDetail returns the full breakdown behind the "📈 Statistics"
 	// screen: overall numbers, per-collection counts, and answer accuracy.
-	GetStatsDetail(ctx context.Context, userID int64) (models.LearningStatsDetail, error)
+	GetStatsDetail(ctx context.Context, userID int64, loc *time.Location) (models.LearningStatsDetail, error)
 }
 
 type learningService struct {
@@ -326,13 +327,13 @@ func (srv *learningService) MarkPushSent(ctx context.Context, userID int64, inte
 }
 
 // GetLearningStats aggregates the learning dashboard's numbers.
-func (srv *learningService) GetLearningStats(ctx context.Context, userID int64) (models.LearningStats, error) {
+func (srv *learningService) GetLearningStats(ctx context.Context, userID int64, loc *time.Location) (models.LearningStats, error) {
 	total, dueToday, learned, err := srv.repo.CountWords(ctx, userID)
 	if err != nil {
 		return models.LearningStats{}, err
 	}
 
-	streak, err := srv.computeStreak(ctx, userID)
+	streak, err := srv.computeStreak(ctx, userID, apptime.NowIn(loc))
 	if err != nil {
 		return models.LearningStats{}, err
 	}
@@ -362,8 +363,8 @@ func (srv *learningService) GetLearningStats(ctx context.Context, userID int64) 
 
 // GetStatsDetail builds the full "📈 Statistics" breakdown: overall numbers
 // plus a per-collection table and answer accuracy.
-func (srv *learningService) GetStatsDetail(ctx context.Context, userID int64) (models.LearningStatsDetail, error) {
-	overall, err := srv.GetLearningStats(ctx, userID)
+func (srv *learningService) GetStatsDetail(ctx context.Context, userID int64, loc *time.Location) (models.LearningStatsDetail, error) {
+	overall, err := srv.GetLearningStats(ctx, userID, loc)
 	if err != nil {
 		return models.LearningStatsDetail{}, err
 	}
@@ -386,10 +387,13 @@ func (srv *learningService) GetStatsDetail(ctx context.Context, userID int64) (m
 	}, nil
 }
 
-// computeStreak counts consecutive UTC calendar days (ending today or
-// yesterday) with at least one recorded review.
-func (srv *learningService) computeStreak(ctx context.Context, userID int64) (int, error) {
-	since := time.Now().UTC().AddDate(0, 0, -90)
+// computeStreak counts consecutive calendar days, in now's timezone, (ending
+// today or yesterday) with at least one recorded review. now is expected to
+// already be resolved to the user's own timezone (see apptime.NowIn), since
+// its Location determines every day boundary below.
+func (srv *learningService) computeStreak(ctx context.Context, userID int64, now time.Time) (int, error) {
+	loc := now.Location()
+	since := now.AddDate(0, 0, -90)
 	dates, err := srv.repo.ListReviewDates(ctx, userID, since)
 	if err != nil {
 		return 0, err
@@ -398,13 +402,13 @@ func (srv *learningService) computeStreak(ctx context.Context, userID int64) (in
 		return 0, nil
 	}
 
-	today := truncDay(time.Now().UTC())
+	today := truncDayIn(now, loc)
 	cursor := today
-	if !truncDay(dates[0]).Equal(today) {
+	if !truncDayIn(dates[0], loc).Equal(today) {
 		// Streak isn't "live" today — allow it to still count if the most
 		// recent review was yesterday, otherwise it's broken.
 		yesterday := today.AddDate(0, 0, -1)
-		if !truncDay(dates[0]).Equal(yesterday) {
+		if !truncDayIn(dates[0], loc).Equal(yesterday) {
 			return 0, nil
 		}
 		cursor = yesterday
@@ -413,7 +417,7 @@ func (srv *learningService) computeStreak(ctx context.Context, userID int64) (in
 	streak := 0
 	idx := 0
 	for idx < len(dates) {
-		d := truncDay(dates[idx])
+		d := truncDayIn(dates[idx], loc)
 		if d.Equal(cursor) {
 			streak++
 			cursor = cursor.AddDate(0, 0, -1)
@@ -428,6 +432,15 @@ func (srv *learningService) computeStreak(ctx context.Context, userID int64) (in
 	return streak, nil
 }
 
+// truncDayIn truncates t to midnight of its calendar day in loc.
+func truncDayIn(t time.Time, loc *time.Location) time.Time {
+	y, m, d := t.In(loc).Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, loc)
+}
+
+// truncDay truncates t to midnight UTC of its calendar day — used by
+// challenge.go where days are already plain calendar dates (DATE columns,
+// parsed in a fixed location), not instants needing timezone conversion.
 func truncDay(t time.Time) time.Time {
 	y, m, d := t.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
