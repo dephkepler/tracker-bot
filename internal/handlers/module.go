@@ -11,6 +11,7 @@ import (
 	"tracker-bot/internal/buttons/challenge"
 	"tracker-bot/internal/buttons/entry"
 	"tracker-bot/internal/buttons/learning"
+	"tracker-bot/internal/buttons/onboarding"
 	"tracker-bot/internal/buttons/profile"
 	"tracker-bot/internal/buttons/subscription"
 	"tracker-bot/internal/buttons/track"
@@ -90,9 +91,34 @@ func (m *Module) ShowEntryMenu(ctx *tgctx.MsgContext) {
 }
 
 // ShowWelcome renders the first-time greeting (only meant for a user's very
-// first /start).
+// first /start), followed immediately by the onboarding tour.
 func (m *Module) ShowWelcome(ctx *tgctx.MsgContext) {
 	m.sendEntryMenu(ctx, entry.WelcomeText(ctx.Language))
+	m.ShowOnboardingStep(ctx, 0, false)
+}
+
+// ShowOnboardingStep renders one step of the "here's what you can do" tour
+// — reached automatically on a user's first /start (see ShowWelcome), and
+// revisitable anytime via Profile's "🎓 How it works".
+func (m *Module) ShowOnboardingStep(ctx *tgctx.MsgContext, step int, edit bool) {
+	text := onboarding.StepText(step)
+	menu := onboarding.StepInlineMenu(step)
+
+	if edit && ctx.MessageID > 0 {
+		out := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, menu)
+		out.ParseMode = "Markdown"
+		if _, err := m.bot.Send(out); err != nil {
+			log.Error().Err(err).Msg("edit onboarding step failed, sending fresh message instead")
+			m.ShowOnboardingStep(ctx, step, false)
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = menu
+	if _, err := m.bot.Send(msg); err != nil {
+		log.Error().Err(err).Msg("send onboarding step failed")
+	}
 }
 
 // ShowHomeMenu renders the entry screen for a user who already knows the

@@ -1,7 +1,9 @@
 package profile
 
 import (
+	"fmt"
 	"tracker-bot/internal/buttons/challenge"
+	"tracker-bot/internal/buttons/onboarding"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/pkg/buttonbuilder"
 
@@ -31,6 +33,9 @@ func ProfileEntryInlineMenu(lang i18n.Lang, isAdmin bool) tgbotapi.InlineKeyboar
 		),
 		buttonbuilder.IR(
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonChallenges), challenge.CBBackList),
+		),
+		buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonOnboarding), fmt.Sprintf("%s0", onboarding.CBGoto)),
 		),
 	}
 	return buttonbuilder.IK(rows...)

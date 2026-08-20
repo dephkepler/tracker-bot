@@ -20,6 +20,7 @@ const (
 	KeyCommonCancelled      = "common.cancelled"
 	KeyCommonAdmin          = "common.admin"      // "👑 Admin" — identical button in Entry and Profile
 	KeyCommonChallenges     = "common.challenges" // "🎯 Challenges" entry point (Profile screen)
+	KeyCommonOnboarding     = "common.onboarding" // "🎓 How it works" entry point (Profile screen)
 	KeyCommonUnknownCommand = "common.unknown_command"
 	KeyCommonHelpText       = "common.help_text"
 	KeyCommonFallback       = "common.fallback" // catch-all "I don't know what to do with that"

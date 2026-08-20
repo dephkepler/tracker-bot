@@ -9,6 +9,7 @@ import (
 	adminbtn "tracker-bot/internal/buttons/admin"
 	challengebtn "tracker-bot/internal/buttons/challenge"
 	learningbtn "tracker-bot/internal/buttons/learning"
+	onboardingbtn "tracker-bot/internal/buttons/onboarding"
 	profilebtn "tracker-bot/internal/buttons/profile"
 	trackbtn "tracker-bot/internal/buttons/track"
 	"tracker-bot/internal/i18n"
@@ -353,6 +354,11 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 
 	if strings.HasPrefix(q.Data, "challenge:") {
 		d.handleChallengeCallback(mctx, q.Data)
+		return
+	}
+
+	if strings.HasPrefix(q.Data, "onboarding:") {
+		d.handleOnboardingCallback(mctx, q.Data)
 		return
 	}
 
@@ -1083,6 +1089,23 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 }
 
 // handleChallengeCallback routes challenge-related inline callbacks.
+// handleOnboardingCallback routes the "here's what you can do" tour's
+// navigation. Stateless — the step lives entirely in the callback data, no
+// session field needed.
+func (d *Dispatcher) handleOnboardingCallback(ctx *tgctx.MsgContext, data string) {
+	switch {
+	case strings.HasPrefix(data, onboardingbtn.CBGoto):
+		step, ok := parseCallbackID(data, onboardingbtn.CBGoto)
+		if !ok {
+			return
+		}
+		d.entry.ShowOnboardingStep(ctx, int(step), true)
+	case data == onboardingbtn.CBSkip:
+		d.setScreen(ctx.UserID, screenHome)
+		d.entry.ShowHomeMenu(ctx)
+	}
+}
+
 func (d *Dispatcher) handleChallengeCallback(ctx *tgctx.MsgContext, data string) {
 	sess := d.sessions.get(ctx.UserID)
 
