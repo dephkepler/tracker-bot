@@ -439,8 +439,14 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 
 	if sess.waitingActivityName {
 		if d.isTrackButtonText(ctx) {
-			_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreatePromptBlocked)))
-			return true
+			// A tap on a real nav/action button (Back, Home, ...) means the
+			// user changed their mind about typing a name — cancel the
+			// prompt and let it act like a normal button press, rather than
+			// blocking it with no way out. screenTrackManage is where
+			// "Create activity" was launched from, so Back lands there.
+			sess.waitingActivityName = false
+			d.setScreen(ctx.UserID, screenTrackManage)
+			return false
 		}
 		done := d.track.ProcessCreateActivity(ctx)
 		if done {
@@ -451,8 +457,12 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 	}
 	if sess.waitingCustomTimerMinutes {
 		if d.isTrackButtonText(ctx) {
-			_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerPromptBlocked)))
-			return true
+			// Same reasoning as waitingActivityName above — let a real nav
+			// button tap cancel the prompt instead of dead-ending on it.
+			// Screen is already screenTrackTimer, which Back/Home both
+			// already handle correctly.
+			sess.waitingCustomTimerMinutes = false
+			return false
 		}
 		if d.track.ProcessCreateCustomTimer(ctx) {
 			sess.waitingCustomTimerMinutes = false

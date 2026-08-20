@@ -29,28 +29,34 @@ func (r *sessionRepository) CreateRetroSession(ctx context.Context, userID, acti
 		return fmt.Errorf("create retro session: invalid input")
 	}
 
+	var activityExists bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM activities WHERE id = $1 AND user_id = $2 AND is_archived = FALSE);`,
+		activityID, userID,
+	).Scan(&activityExists)
+	if err != nil {
+		return fmt.Errorf("create retro session check activity: %w", err)
+	}
+	if !activityExists {
+		return errlocal.ErrActivityNotFound
+	}
+
 	q := `
 	INSERT INTO activity_sessions (user_id, activity_id, start_at, end_at, planned_min, source)
-	SELECT
-		$1,
-		$2,
-		now() - make_interval(mins => $3),
-		now(),
-		$3,
-		$4
-	WHERE EXISTS (
+	SELECT $1, $2, now() - make_interval(mins => $3), now(), $3, $4
+	-- Guards against a burst of duplicate inserts from the same prompt round
+	-- (e.g. the user tapping an answer button several times before Telegram
+	-- deletes it, or a client retry) — a real second answer is always at
+	-- least one full interval later, far outside this window. Silently
+	-- absorbed rather than erroring: the first tap already recorded it.
+	WHERE NOT EXISTS (
 		SELECT 1
-		FROM activities
-		WHERE id = $2 AND user_id = $1 AND is_archived = FALSE
+		FROM activity_sessions
+		WHERE user_id = $1 AND source = $4 AND end_at > now() - interval '30 seconds'
 	);
 	`
-	// INSERT ... WHERE EXISTS prevents writing sessions for foreign or archived activities.
-	tag, err := r.db.Exec(ctx, q, userID, activityID, intervalMin, source)
-	if err != nil {
+	if _, err := r.db.Exec(ctx, q, userID, activityID, intervalMin, source); err != nil {
 		return fmt.Errorf("create retro session exec: %w", err)
-	}
-	if tag.RowsAffected() == 0 {
-		return errlocal.ErrActivityNotFound
 	}
 	return nil
 }
