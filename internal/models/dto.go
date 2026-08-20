@@ -2,7 +2,6 @@ package models
 
 import "time"
 
-// UserInput is used by entry flow to create or update user profile fields.
 type UserInput struct {
 	TgUserID    int64
 	UserName    *string
@@ -12,7 +11,6 @@ type UserInput struct {
 	TimeZone    *string
 }
 
-// ProfileStats is a lightweight profile view model.
 type ProfileStats struct {
 	TgUserID    int64
 	UserName    *string
@@ -22,7 +20,6 @@ type ProfileStats struct {
 	TimeZone    *string
 }
 
-// MainStats contains summary values for tracking home screen.
 type MainStats struct {
 	CurrentActivityName string
 	TodayTracked        time.Duration
@@ -30,7 +27,6 @@ type MainStats struct {
 	StreakDays          int
 }
 
-// TrackActivityItem is an activity row used in selection UIs.
 type TrackActivityItem struct {
 	ID       int64
 	Name     string
@@ -38,13 +34,10 @@ type TrackActivityItem struct {
 	Selected bool
 }
 
-// CustomTimerOption is one user-defined timer interval shown next to the
-// built-in 15/30 min choices in the timer picker.
 type CustomTimerOption struct {
 	IntervalMin int
 }
 
-// AdminUserRow is one row in the admin "who's using the bot" listing.
 type AdminUserRow struct {
 	DBID      int64
 	TgUserID  int64
@@ -52,8 +45,6 @@ type AdminUserRow struct {
 	CreatedAt time.Time
 }
 
-// AdminOverviewStats aggregates bot-wide usage numbers for the admin
-// "📊 Overview" screen.
 type AdminOverviewStats struct {
 	TotalUsers         int
 	ActiveTrackTimers  int
@@ -63,8 +54,6 @@ type AdminOverviewStats struct {
 	TotalLearningWords int
 }
 
-// AdminUserDetail is the admin's per-user drill-down view — profile fields
-// plus cross-domain usage counts.
 type AdminUserDetail struct {
 	DBID             int64
 	TgUserID         int64
@@ -79,19 +68,14 @@ type AdminUserDetail struct {
 	ReviewsActive    bool
 }
 
-// TimerDueUser represents one user that should receive timer prompt now.
 type TimerDueUser struct {
 	DBUserID    int64
 	TgUserID    int64
 	IntervalMin int
-	// NextPingAt is when this prompt was actually due — embedded in the
-	// prompt's buttons so a late answer still credits the original
-	// interval window instead of "now minus interval" (see
-	// handlers.Module.RecordPromptAnswer).
+	// kept so a late reply still credits the original due window, not "now minus interval"
 	NextPingAt time.Time
 }
 
-// ActivityDurationStat is one activity aggregate line in reports.
 type ActivityDurationStat struct {
 	ActivityID int64
 	Name       string
@@ -100,14 +84,12 @@ type ActivityDurationStat struct {
 	Sessions   int
 }
 
-// ReportTodayStats is a daily aggregate report.
 type ReportTodayStats struct {
 	TotalTracked  time.Duration
 	TotalSessions int
 	TopActivities []ActivityDurationStat
 }
 
-// ReportPeriodStats is an aggregate report for arbitrary date range.
 type ReportPeriodStats struct {
 	From          time.Time
 	To            time.Time
@@ -117,16 +99,12 @@ type ReportPeriodStats struct {
 	Monthly       []MonthDurationStat
 }
 
-// MonthDurationStat stores total duration for one month bucket.
 type MonthDurationStat struct {
 	Month    time.Time
 	Duration time.Duration
 }
 
-// HourActivityDuration is one (hour bucket, activity) total — lets the
-// "By hours" report line show which activity(ies) filled each hour instead
-// of just a total. Rows for the same BucketStart are adjacent, ordered by
-// Duration descending.
+// rows sharing BucketStart are adjacent, sorted by Duration descending
 type HourActivityDuration struct {
 	BucketStart time.Time
 	Name        string
@@ -134,21 +112,16 @@ type HourActivityDuration struct {
 	Duration    time.Duration
 }
 
-// LearningGrade is an Anki-style review answer: how well the user recalled
-// the word, driving how much the next interval grows or shrinks (see
-// service.gradeSchedule). Distinct from a plain correct/incorrect boolean —
-// Hard and Easy both count as "correct" for accuracy stats but move the
-// schedule differently than Good.
+// Hard and Easy both count as "correct" for accuracy stats, but shift the schedule differently than Good
 type LearningGrade string
 
 const (
-	LearningGradeAgain LearningGrade = "again" // forgot it — interval resets
-	LearningGradeHard  LearningGrade = "hard"  // recalled, but it was a struggle
-	LearningGradeGood  LearningGrade = "good"  // recalled comfortably
-	LearningGradeEasy  LearningGrade = "easy"  // trivially easy — grow the interval faster
+	LearningGradeAgain LearningGrade = "again"
+	LearningGradeHard  LearningGrade = "hard"
+	LearningGradeGood  LearningGrade = "good"
+	LearningGradeEasy  LearningGrade = "easy"
 )
 
-// LearningStats contains values for learning dashboard.
 type LearningStats struct {
 	TotalWords    int
 	DueTodayWords int
@@ -159,7 +132,6 @@ type LearningStats struct {
 	NextPushIn    string // human-readable, "" when timer isn't active
 }
 
-// LearningCollectionItem is one collection row in list/selection UIs.
 type LearningCollectionItem struct {
 	ID         int64
 	Name       string
@@ -168,7 +140,6 @@ type LearningCollectionItem struct {
 	IsArchived bool
 }
 
-// LearningWordItem is one word pair row within a collection's word list.
 type LearningWordItem struct {
 	ID           int64
 	Term         string
@@ -179,8 +150,6 @@ type LearningWordItem struct {
 	Repetitions  int
 }
 
-// LearningDueWord is a word picked for review delivery, with its owning
-// collection name for display.
 type LearningDueWord struct {
 	ID             int64
 	CollectionName string
@@ -188,15 +157,12 @@ type LearningDueWord struct {
 	Translation    string
 }
 
-// LearningDueUser represents one user that should receive a review push now.
 type LearningDueUser struct {
 	DBUserID    int64
 	TgUserID    int64
 	IntervalMin int
 }
 
-// LearningCollectionStat is one collection's row in the detailed
-// statistics breakdown.
 type LearningCollectionStat struct {
 	Name         string
 	TotalWords   int
@@ -204,8 +170,6 @@ type LearningCollectionStat struct {
 	LearnedWords int
 }
 
-// LearningReviewEntry is one answered review, for the heatmap day
-// drill-down ("what words did I study that day").
 type LearningReviewEntry struct {
 	Term        string
 	Translation string
@@ -213,7 +177,6 @@ type LearningReviewEntry struct {
 	ReviewedAt  time.Time
 }
 
-// LearningStatsDetail is the "📈 Statistics" screen's full view model.
 type LearningStatsDetail struct {
 	Overall        LearningStats
 	Collections    []LearningCollectionStat
@@ -221,7 +184,6 @@ type LearningStatsDetail struct {
 	ReviewsCorrect int
 }
 
-// ChallengeDayStatus is one day's mark within a challenge.
 type ChallengeDayStatus string
 
 const (
@@ -230,7 +192,6 @@ const (
 	ChallengeDaySkipped ChallengeDayStatus = "skipped"
 )
 
-// ChallengeItem is one challenge row in list/selection UIs.
 type ChallengeItem struct {
 	ID          int64
 	Name        string
@@ -242,14 +203,11 @@ type ChallengeItem struct {
 	SkippedDays int
 }
 
-// ChallengeDay is one square in a challenge's grid.
 type ChallengeDay struct {
 	Date   time.Time
 	Status ChallengeDayStatus
 }
 
-// ChallengeDueUser represents one user whose challenge is due for its
-// daily evening push.
 type ChallengeDueUser struct {
 	ChallengeID   int64
 	DBUserID      int64
@@ -259,24 +217,73 @@ type ChallengeDueUser struct {
 	EndDate       time.Time
 }
 
-// RoadmapItem is one roadmap (technology being learned) row in list/
-// selection UIs, with its card counts for the "done/total" display.
-type RoadmapItem struct {
-	ID         int64
-	Name       string
-	Goal       string
-	Active     bool // included in the push digest
-	IsArchived bool
-	TotalCards int
-	DoneCards  int
+// ChallengeDayDetail is the view model behind a day-square tap: that day's
+// own status plus streak/trend context. Total/done/skipped/pending counts
+// aren't duplicated here — callers already have them via ChallengeItem.
+type ChallengeDayDetail struct {
+	Day           time.Time
+	Status        ChallengeDayStatus
+	CurrentStreak int
+	BestStreak    int
+	// Trend holds up to a fixed lookback window of days ending at Day,
+	// oldest first, clipped to the challenge's own start.
+	Trend []ChallengeDayStatus
 }
 
-// RoadmapCardItem is one checklist card within a roadmap.
+// RoadmapCardKind is what a card actually is — a topic to study, or a
+// concrete resource. Freeform text stays the card's body; this only drives
+// the icon and lets the user see at a glance what a checklist is made of.
+type RoadmapCardKind string
+
+const (
+	RoadmapCardTopic   RoadmapCardKind = "topic"
+	RoadmapCardArticle RoadmapCardKind = "article"
+	RoadmapCardBook    RoadmapCardKind = "book"
+	RoadmapCardLecture RoadmapCardKind = "lecture"
+)
+
+// Card difficulty, 1-3 (kept in sync with chk_roadmap_card_difficulty).
+// This is what makes the plan walkable easiest-first instead of in paste
+// order — the digest offers the simplest pending card next.
+const (
+	RoadmapCardEasy   = 1
+	RoadmapCardMedium = 2
+	RoadmapCardHard   = 3
+)
+
+// RoadmapGoalItem is one outcome the user is working toward ("reach
+// mid-level"), aggregating every technology and card underneath it.
+type RoadmapGoalItem struct {
+	ID            int64
+	Name          string
+	IsArchived    bool
+	TotalRoadmaps int
+	TotalCards    int
+	DoneCards     int
+}
+
+// RoadmapItem is one technology inside a goal, with its card counts for the
+// "done/total" display. GoalID is nil for a technology not attached to any
+// goal (a v1 leftover, or one whose goal was deleted).
+type RoadmapItem struct {
+	ID              int64
+	GoalID          *int64
+	Name            string
+	MasteryCriteria string // free text: what "I know this" means for the user
+	Active          bool   // included in the push digest
+	IsArchived      bool
+	TotalCards      int
+	DoneCards       int
+}
+
+// RoadmapCardItem is one checklist card within a technology.
 type RoadmapCardItem struct {
-	ID     int64
-	Text   string
-	IsDone bool
-	DoneAt *time.Time // nil while pending
+	ID         int64
+	Text       string
+	Kind       RoadmapCardKind
+	Difficulty int
+	IsDone     bool
+	DoneAt     *time.Time // nil while pending
 }
 
 // RoadmapDueUser represents one user that should receive a roadmap digest
@@ -288,25 +295,28 @@ type RoadmapDueUser struct {
 }
 
 // RoadmapDigestCard is one pending card picked for a digest push, with its
-// owning roadmap's name for display.
+// owning technology's name for display.
 type RoadmapDigestCard struct {
 	ID          int64
 	RoadmapID   int64
 	RoadmapName string
 	Text        string
+	Kind        RoadmapCardKind
+	Difficulty  int
 }
 
-// RoadmapCardStat is one roadmap's row in the detailed statistics
-// breakdown.
+// RoadmapCardStat is one technology's row in the statistics breakdown.
 type RoadmapCardStat struct {
-	Name       string
-	Goal       string
-	TotalCards int
-	DoneCards  int
+	GoalName        string
+	Name            string
+	MasteryCriteria string
+	TotalCards      int
+	DoneCards       int
 }
 
 // RoadmapStats contains values for the Roadmap dashboard.
 type RoadmapStats struct {
+	TotalGoals    int
 	TotalRoadmaps int
 	TotalCards    int
 	DoneCards     int
@@ -316,13 +326,13 @@ type RoadmapStats struct {
 	NextPushIn    string // human-readable, "" when the push isn't active
 }
 
-// RoadmapStatsDetail is the "📈 Statistics" screen's full view model.
+// RoadmapStatsDetail is the progress screen's full view model.
 type RoadmapStatsDetail struct {
 	Overall  RoadmapStats
+	Goals    []RoadmapGoalItem
 	Roadmaps []RoadmapCardStat
 }
 
-// SubscriptionStats contains values for subscription screen.
 type SubscriptionStats struct {
 	ActivePlan string
 	DaysEnd    int

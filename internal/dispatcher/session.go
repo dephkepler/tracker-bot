@@ -42,14 +42,18 @@ type userSession struct {
 	// used while waitingLearningWords is true.
 	learningCollectionID int64
 
-	waitingRoadmapName   bool
-	waitingRoadmapGoal   bool
-	waitingRoadmapRename bool
-	waitingRoadmapCards  bool
-	// roadmapID is the roadmap currently being edited — set when one is
-	// created or opened, and used while any of the waitingRoadmap* flags
-	// above is true (the typed text carries no id of its own).
-	roadmapID int64
+	waitingRoadmapGoalName   bool
+	waitingRoadmapGoalRename bool
+	waitingRoadmapName       bool
+	waitingRoadmapCriteria   bool
+	waitingRoadmapRename     bool
+	waitingRoadmapCards      bool
+	// roadmapID / roadmapGoalID are whichever technology and goal the user is
+	// currently working inside — set when one is created or opened, and read
+	// while any waitingRoadmap* flag above is true (the typed text carries no
+	// id of its own).
+	roadmapID     int64
+	roadmapGoalID int64
 
 	waitingAdminBroadcastText bool
 	// pendingBroadcastText holds the typed broadcast message between the

@@ -6,12 +6,13 @@ import (
 	"tracker-bot/internal/models"
 )
 
-// RoadmapMenuText renders the main Roadmap screen's stats block.
 func RoadmapMenuText(lang i18n.Lang, stats models.RoadmapStats) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTitle))
 	b.WriteString("\n\n")
-	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalRoadmaps, stats.TotalRoadmaps, models.MaxRoadmapsPerUser))
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalGoals, stats.TotalGoals, models.MaxRoadmapGoalsPerUser))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalRoadmaps, stats.TotalRoadmaps))
 	b.WriteString("\n")
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalCards, stats.TotalCards))
 	b.WriteString("\n")
@@ -28,21 +29,46 @@ func RoadmapMenuText(lang i18n.Lang, stats models.RoadmapStats) string {
 	return b.String()
 }
 
-// RoadmapListTitle renders the roadmap-list screen's header.
-func RoadmapListTitle(lang i18n.Lang, count int) string {
-	return i18n.T(lang, i18n.KeyRoadmapListTitle, count, models.MaxRoadmapsPerUser)
+func RoadmapGoalsTitle(lang i18n.Lang, count int) string {
+	return i18n.T(lang, i18n.KeyRoadmapGoalsTitle, count, models.MaxRoadmapGoalsPerUser)
 }
 
-// RoadmapDetailText renders one roadmap's header: name, done/total, its
-// mastery goal, and a hint about ticking cards.
+// RoadmapGoalDetailText renders a goal's header: its name, how many
+// technologies and cards it holds, and how far along it is.
+func RoadmapGoalDetailText(lang i18n.Lang, goal models.RoadmapGoalItem) string {
+	var b strings.Builder
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapGoalDetailTitle, goal.Name))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapGoalDetailCounts,
+		goal.TotalRoadmaps, models.MaxRoadmapsPerGoal,
+		goal.DoneCards, goal.TotalCards, PercentDone(goal.DoneCards, goal.TotalCards)))
+	b.WriteString("\n\n")
+	if goal.TotalRoadmaps == 0 {
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapGoalDetailNoTech))
+	} else {
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapGoalDetailHint))
+	}
+	return b.String()
+}
+
+func RoadmapListTitle(lang i18n.Lang, count int) string {
+	return i18n.T(lang, i18n.KeyRoadmapListTitle, count, models.MaxRoadmapsPerGoal)
+}
+
+func RoadmapOrphansTitle(lang i18n.Lang, count int) string {
+	return i18n.T(lang, i18n.KeyRoadmapOrphansTitle, count)
+}
+
+// RoadmapDetailText renders one technology's header: name, done/total, its
+// mastery criteria, and a hint about the card row's buttons.
 func RoadmapDetailText(lang i18n.Lang, item models.RoadmapItem, cardCount int) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailTitle, item.Name, item.DoneCards, item.TotalCards))
 	b.WriteString("\n")
-	if strings.TrimSpace(item.Goal) == "" {
-		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailNoGoal))
+	if strings.TrimSpace(item.MasteryCriteria) == "" {
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailNoCriteria))
 	} else {
-		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailGoal, item.Goal))
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailCriteria, item.MasteryCriteria))
 	}
 	b.WriteString("\n\n")
 	if cardCount == 0 {
@@ -53,25 +79,41 @@ func RoadmapDetailText(lang i18n.Lang, item models.RoadmapItem, cardCount int) s
 	return b.String()
 }
 
-// RoadmapArchiveTitle renders the archive screen's header.
-func RoadmapArchiveTitle(lang i18n.Lang, count int) string {
-	return i18n.T(lang, i18n.KeyRoadmapArchiveTitle, count)
+func RoadmapCriteriaPromptText(lang i18n.Lang, name string) string {
+	return i18n.T(lang, i18n.KeyRoadmapCriteriaPrompt, name, models.MaxRoadmapCriteriaLen)
 }
 
-// RoadmapGoalPromptText asks for a roadmap's mastery goal.
-func RoadmapGoalPromptText(lang i18n.Lang, name string) string {
-	return i18n.T(lang, i18n.KeyRoadmapGoalPrompt, name, models.MaxRoadmapGoalLen)
-}
-
-// RoadmapRenamePromptText asks for a new name for a roadmap.
 func RoadmapRenamePromptText(lang i18n.Lang, currentName string) string {
 	return i18n.T(lang, i18n.KeyRoadmapRenamePrompt, currentName)
 }
 
-// RoadmapDigestText renders a reminder push: pending cards grouped by
-// roadmap, in the order PickDigestCards returned them. Each card also gets
-// its own tick button (see RoadmapDigestInlineMenu) — the text is the
-// readable version, the buttons are the actionable one.
+func RoadmapGoalRenamePromptText(lang i18n.Lang, currentName string) string {
+	return i18n.T(lang, i18n.KeyRoadmapGoalRenamePrompt, currentName)
+}
+
+func RoadmapAssignPromptText(lang i18n.Lang, name string) string {
+	return i18n.T(lang, i18n.KeyRoadmapAssignPrompt, name)
+}
+
+// RoadmapArchiveText renders the archive header plus a section label for
+// whichever of goals/technologies is actually present.
+func RoadmapArchiveText(lang i18n.Lang, goals []models.RoadmapGoalItem, items []models.RoadmapItem) string {
+	var b strings.Builder
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapArchiveTitle))
+	b.WriteString("\n")
+	if len(goals) > 0 {
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapArchiveGoalsHdr))
+		b.WriteString("\n")
+	}
+	if len(items) > 0 {
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapArchiveTechHdr))
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// RoadmapDigestText renders a reminder push: the pending cards grouped by
+// technology, in the easiest-first order PickDigestCards returned them.
 func RoadmapDigestText(lang i18n.Lang, cards []models.RoadmapDigestCard, byRoadmap map[int64]models.RoadmapItem) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapDigestTitle))
@@ -84,49 +126,64 @@ func RoadmapDigestText(lang i18n.Lang, cards []models.RoadmapDigestCard, byRoadm
 			b.WriteString(i18n.T(lang, i18n.KeyRoadmapDigestRoadmapLine, c.RoadmapName, item.DoneCards, item.TotalCards))
 			lastRoadmapID = c.RoadmapID
 		}
-		b.WriteString("• ")
+		b.WriteString(difficultyIcon(c.Difficulty))
+		b.WriteString(kindIcon(c.Kind))
+		b.WriteString(" ")
 		b.WriteString(c.Text)
 		b.WriteString("\n")
 	}
 	return b.String()
 }
 
-// RoadmapStatsDetailText renders the "📈 Progress" breakdown: overall
-// numbers plus a per-technology line with its completion percentage and
-// goal.
+// RoadmapStatsDetailText renders the progress breakdown: overall numbers,
+// then each goal with the technologies underneath it. Grouping is done off
+// the per-technology rows' GoalName, which the repo already returns ordered
+// by goal.
 func RoadmapStatsDetailText(lang i18n.Lang, d models.RoadmapStatsDetail) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsTitle))
 	b.WriteString("\n\n")
 
-	if len(d.Roadmaps) == 0 {
+	if len(d.Roadmaps) == 0 && len(d.Goals) == 0 {
 		b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsEmpty))
 		return b.String()
 	}
 
-	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalRoadmaps, d.Overall.TotalRoadmaps, models.MaxRoadmapsPerUser))
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalGoals, d.Overall.TotalGoals, models.MaxRoadmapGoalsPerUser))
 	b.WriteString("\n")
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuTotalCards, d.Overall.TotalCards))
 	b.WriteString("\n")
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuDone, d.Overall.DoneCards))
 	b.WriteString("\n")
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapMenuPending, d.Overall.PendingCards))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
+	goalTotals := make(map[string][2]int)
+	order := make([]string, 0)
 	for _, r := range d.Roadmaps {
-		b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsRoadmapLine, r.Name, r.DoneCards, r.TotalCards, percentDone(r.DoneCards, r.TotalCards)))
-		if strings.TrimSpace(r.Goal) != "" {
-			b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsGoalLine, r.Goal))
+		if _, seen := goalTotals[r.GoalName]; !seen {
+			order = append(order, r.GoalName)
+		}
+		t := goalTotals[r.GoalName]
+		goalTotals[r.GoalName] = [2]int{t[0] + r.DoneCards, t[1] + r.TotalCards}
+	}
+
+	for _, goalName := range order {
+		totals := goalTotals[goalName]
+		if goalName == "" {
+			b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsNoGoalHeader))
+		} else {
+			b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsGoalLine, goalName, totals[0], totals[1], PercentDone(totals[0], totals[1])))
+		}
+		for _, r := range d.Roadmaps {
+			if r.GoalName != goalName {
+				continue
+			}
+			b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsRoadmapLine, r.Name, r.DoneCards, r.TotalCards, PercentDone(r.DoneCards, r.TotalCards)))
+			if strings.TrimSpace(r.MasteryCriteria) != "" {
+				b.WriteString(i18n.T(lang, i18n.KeyRoadmapStatsCriteriaLine, r.MasteryCriteria))
+			}
 		}
 	}
 	return b.String()
-}
-
-// percentDone is done/total as a whole percentage, 0 for an empty roadmap
-// (rather than a division by zero).
-func percentDone(done, total int) int {
-	if total <= 0 {
-		return 0
-	}
-	return done * 100 / total
 }
