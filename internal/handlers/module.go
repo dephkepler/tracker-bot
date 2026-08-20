@@ -1914,20 +1914,20 @@ func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
 
 // RecordReviewGrade applies the user's answer to a word's SRS schedule and
 // replaces the review card with a confirmation.
-func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, correct bool) {
+func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, grade models.LearningGrade) {
 	_, term, _, err := m.learningsvc.PeekWord(ctx.Ctx, ctx.DBUserID, wordID)
 	if err != nil {
 		log.Error().Err(err).Msg("peek word before grading failed")
 		return
 	}
 
-	nextIntervalDays, learned, err := m.learningsvc.GradeAnswer(ctx.Ctx, ctx.DBUserID, wordID, correct)
+	nextIntervalDays, learned, err := m.learningsvc.GradeAnswer(ctx.Ctx, ctx.DBUserID, wordID, grade)
 	if err != nil {
 		log.Error().Err(err).Msg("grade answer failed")
 		return
 	}
 
-	edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, learning.LearningReviewGradedText(ctx.Language, term, correct, nextIntervalDays, learned))
+	edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, learning.LearningReviewGradedText(ctx.Language, term, grade, nextIntervalDays, learned))
 	edit.ParseMode = "Markdown"
 	if _, err := m.bot.Send(edit); err != nil {
 		log.Error().Err(err).Msg("record review grade failed")

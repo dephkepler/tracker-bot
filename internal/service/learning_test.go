@@ -359,24 +359,24 @@ func newTestLearningService() (*fakeLearningRepo, LearningService) {
 	return repo, NewLearningService(repo)
 }
 
-// --- gradeSchedule (SM-2-lite core) --------------------------------------
+// --- gradeSchedule (Anki-style four-grade SM-2 variant) ------------------
 
-func TestGradeSchedule_FirstCorrect(t *testing.T) {
-	ease, interval, reps, learned := gradeSchedule(2.5, 0, 0, true)
+func TestGradeSchedule_FirstGood(t *testing.T) {
+	ease, interval, reps, learned := gradeSchedule(2.5, 0, 0, models.LearningGradeGood)
 	if interval != 1 || reps != 1 || learned {
 		t.Fatalf("got (ease=%v interval=%d reps=%d learned=%v), want interval=1 reps=1 learned=false", ease, interval, reps, learned)
 	}
 }
 
-func TestGradeSchedule_SecondCorrect(t *testing.T) {
-	_, interval, reps, learned := gradeSchedule(2.6, 1, 1, true)
+func TestGradeSchedule_SecondGood(t *testing.T) {
+	_, interval, reps, learned := gradeSchedule(2.6, 1, 1, models.LearningGradeGood)
 	if interval != 6 || reps != 2 || learned {
 		t.Fatalf("got (interval=%d reps=%d learned=%v), want interval=6 reps=2 learned=false", interval, reps, learned)
 	}
 }
 
-func TestGradeSchedule_GrowsWithEase(t *testing.T) {
-	_, interval, reps, _ := gradeSchedule(2.5, 6, 2, true)
+func TestGradeSchedule_GoodGrowsWithEase(t *testing.T) {
+	_, interval, reps, _ := gradeSchedule(2.5, 6, 2, models.LearningGradeGood)
 	if interval <= 6 {
 		t.Fatalf("interval = %d, want > 6 (must grow past the previous interval)", interval)
 	}
@@ -386,39 +386,78 @@ func TestGradeSchedule_GrowsWithEase(t *testing.T) {
 }
 
 func TestGradeSchedule_GraduatesToLearned(t *testing.T) {
-	// Interval already at 15 days with a high ease factor — the next correct
+	// Interval already at 15 days with a high ease factor — the next Good
 	// answer should push it past the 21-day learned threshold.
-	_, interval, _, learned := gradeSchedule(2.5, 15, 3, true)
+	_, interval, _, learned := gradeSchedule(2.5, 15, 3, models.LearningGradeGood)
 	if interval < 21 || !learned {
 		t.Fatalf("got (interval=%d learned=%v), want interval>=21 learned=true", interval, learned)
 	}
 }
 
-func TestGradeSchedule_IncorrectResets(t *testing.T) {
-	ease, interval, reps, learned := gradeSchedule(2.5, 40, 5, false)
+func TestGradeSchedule_AgainResets(t *testing.T) {
+	ease, interval, reps, learned := gradeSchedule(2.5, 40, 5, models.LearningGradeAgain)
 	if interval != 1 || reps != 0 || learned {
 		t.Fatalf("got (interval=%d reps=%d learned=%v), want interval=1 reps=0 learned=false", interval, reps, learned)
 	}
 	if ease >= 2.5 {
-		t.Fatalf("ease = %v, want lower than before a miss", ease)
+		t.Fatalf("ease = %v, want lower than before Again", ease)
+	}
+}
+
+func TestGradeSchedule_HardGrowsSlowerThanGood(t *testing.T) {
+	_, hardInterval, hardReps, _ := gradeSchedule(2.5, 10, 3, models.LearningGradeHard)
+	_, goodInterval, _, _ := gradeSchedule(2.5, 10, 3, models.LearningGradeGood)
+	if hardInterval >= goodInterval {
+		t.Fatalf("hard interval = %d, want < good interval %d", hardInterval, goodInterval)
+	}
+	if hardInterval <= 10 {
+		t.Fatalf("hard interval = %d, want to still grow past the previous interval", hardInterval)
+	}
+	if hardReps != 4 {
+		t.Fatalf("hard reps = %d, want 4", hardReps)
+	}
+}
+
+func TestGradeSchedule_HardOnNewWordStaysShort(t *testing.T) {
+	_, interval, _, _ := gradeSchedule(2.5, 0, 0, models.LearningGradeHard)
+	if interval != 1 {
+		t.Fatalf("hard interval on a brand-new word = %d, want 1", interval)
+	}
+}
+
+func TestGradeSchedule_EasyGrowsFasterThanGood(t *testing.T) {
+	_, easyInterval, easyReps, _ := gradeSchedule(2.5, 10, 3, models.LearningGradeEasy)
+	_, goodInterval, _, _ := gradeSchedule(2.5, 10, 3, models.LearningGradeGood)
+	if easyInterval <= goodInterval {
+		t.Fatalf("easy interval = %d, want > good interval %d", easyInterval, goodInterval)
+	}
+	if easyReps != 4 {
+		t.Fatalf("easy reps = %d, want 4", easyReps)
+	}
+}
+
+func TestGradeSchedule_EasyOnNewWordSkipsAhead(t *testing.T) {
+	_, interval, _, _ := gradeSchedule(2.5, 0, 0, models.LearningGradeEasy)
+	if interval != 4 {
+		t.Fatalf("easy interval on a brand-new word = %d, want 4", interval)
 	}
 }
 
 func TestGradeSchedule_EaseFactorBounds(t *testing.T) {
-	// Many consecutive misses must not push ease below SM-2's floor.
+	// Many consecutive Again grades must not push ease below SM-2's floor.
 	ease := float32(1.3)
 	for i := 0; i < 10; i++ {
-		ease, _, _, _ = gradeSchedule(ease, 10, 3, false)
+		ease, _, _, _ = gradeSchedule(ease, 10, 3, models.LearningGradeAgain)
 	}
 	if ease < 1.3 {
 		t.Fatalf("ease = %v, want >= 1.3 (SM-2 floor)", ease)
 	}
 
-	// Many consecutive hits must not push ease above the cap.
+	// Many consecutive Easy grades must not push ease above the cap.
 	ease = 2.5
 	interval, reps := 1, 0
 	for i := 0; i < 10; i++ {
-		ease, interval, reps, _ = gradeSchedule(ease, interval, reps, true)
+		ease, interval, reps, _ = gradeSchedule(ease, interval, reps, models.LearningGradeEasy)
 	}
 	if ease > 2.5 {
 		t.Fatalf("ease = %v, want <= 2.5 (cap)", ease)
@@ -729,12 +768,12 @@ func TestLearningService_GradeAnswer_UpdatesScheduleAndRecordsReview(t *testing.
 		wordID = wid
 	}
 
-	nextInterval, learned, err := svc.GradeAnswer(ctx, 1, wordID, true)
+	nextInterval, learned, err := svc.GradeAnswer(ctx, 1, wordID, models.LearningGradeGood)
 	if err != nil {
 		t.Fatalf("grade answer: %v", err)
 	}
 	if nextInterval != 1 || learned {
-		t.Fatalf("got (interval=%d learned=%v), want interval=1 learned=false for a first correct answer", nextInterval, learned)
+		t.Fatalf("got (interval=%d learned=%v), want interval=1 learned=false for a first Good answer", nextInterval, learned)
 	}
 	if len(repo.reviewDates[1]) != 1 {
 		t.Fatalf("review history has %d entries, want 1", len(repo.reviewDates[1]))

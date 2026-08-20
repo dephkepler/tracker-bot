@@ -151,13 +151,19 @@ func LearningReviewRevealInlineMenu(lang i18n.Lang, wordID int64) tgbotapi.Inlin
 	)
 }
 
-// LearningReviewGradeInlineMenu is the revealed state: user grades whether
-// they knew the word.
+// LearningReviewGradeInlineMenu is the revealed state: user grades how well
+// they recalled the word, Anki-style (Again/Hard/Good/Easy — see
+// models.LearningGrade) — this drives how much the next interval grows or
+// shrinks, not just whether it counts as "correct".
 func LearningReviewGradeInlineMenu(lang i18n.Lang, wordID int64) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonKnewIt), fmt.Sprintf("%s%d", LearningCBReviewKnew, wordID)),
-			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonMissedIt), fmt.Sprintf("%s%d", LearningCBReviewMissed, wordID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonAgain), fmt.Sprintf("%s%d", LearningCBReviewAgain, wordID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonHard), fmt.Sprintf("%s%d", LearningCBReviewHard, wordID)),
+		),
+		buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonGood), fmt.Sprintf("%s%d", LearningCBReviewGood, wordID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonEasy), fmt.Sprintf("%s%d", LearningCBReviewEasy, wordID)),
 		),
 	)
 }

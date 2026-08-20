@@ -46,11 +46,17 @@ var catalogLearning = map[string]entry{
 	KeyLearningButtonShowAnswer: {
 		RU: "👁 Показать ответ", EN: "👁 Show answer", DE: "👁 Antwort zeigen", UK: "👁 Показати відповідь", AR: "👁 إظهار الإجابة",
 	},
-	KeyLearningButtonKnewIt: {
-		RU: "✅ Знал(а)", EN: "✅ I knew it", DE: "✅ Wusste ich", UK: "✅ Знав(-ла)", AR: "✅ كنت أعرفها",
+	KeyLearningButtonAgain: {
+		RU: "🔴 Забыл(а)", EN: "🔴 Again", DE: "🔴 Nochmal", UK: "🔴 Забув(-ла)", AR: "🔴 مرة أخرى",
 	},
-	KeyLearningButtonMissedIt: {
-		RU: "🔁 Не знал(а)", EN: "🔁 Didn't know", DE: "🔁 Wusste ich nicht", UK: "🔁 Не знав(-ла)", AR: "🔁 لم أكن أعرفها",
+	KeyLearningButtonHard: {
+		RU: "🟠 Сложно", EN: "🟠 Hard", DE: "🟠 Schwer", UK: "🟠 Складно", AR: "🟠 صعب",
+	},
+	KeyLearningButtonGood: {
+		RU: "🟢 Хорошо", EN: "🟢 Good", DE: "🟢 Gut", UK: "🟢 Добре", AR: "🟢 جيد",
+	},
+	KeyLearningButtonEasy: {
+		RU: "🔵 Легко", EN: "🔵 Easy", DE: "🔵 Leicht", UK: "🔵 Легко", AR: "🔵 سهل",
 	},
 	KeyLearningLabelIncludedInReviews: {
 		RU: "🟢 Участвует в повторениях", EN: "🟢 Included in reviews", DE: "🟢 In Wiederholungen enthalten", UK: "🟢 Бере участь у повтореннях", AR: "🟢 مشمولة في المراجعات",
@@ -252,7 +258,13 @@ var catalogLearning = map[string]entry{
 	KeyLearningReviewCorrect: {
 		RU: "✅ Отлично! Следующее повторение *%s* через %d дн.", EN: "✅ Nice! Next review of *%s* in %d day(s).", DE: "✅ Gut gemacht! Nächste Wiederholung von *%s* in %d Tag(en).", UK: "✅ Чудово! Наступне повторення *%s* через %d дн.", AR: "✅ رائع! المراجعة التالية لـ *%s* خلال %d يوم.",
 	},
+	KeyLearningReviewHardConfirm: {
+		RU: "🟠 Записал — следующее повторение *%s* через %d дн.", EN: "🟠 Noted — next review of *%s* in %d day(s).", DE: "🟠 Notiert — nächste Wiederholung von *%s* in %d Tag(en).", UK: "🟠 Записав — наступне повторення *%s* через %d дн.", AR: "🟠 تم التسجيل — المراجعة التالية لـ *%s* خلال %d يوم.",
+	},
+	KeyLearningReviewEasyConfirm: {
+		RU: "🔵 Легко! Следующее повторение *%s* через %d дн.", EN: "🔵 Easy! Next review of *%s* in %d day(s).", DE: "🔵 Leicht! Nächste Wiederholung von *%s* in %d Tag(en).", UK: "🔵 Легко! Наступне повторення *%s* через %d дн.", AR: "🔵 سهل! المراجعة التالية لـ *%s* خلال %d يوم.",
+	},
 	KeyLearningReviewMissed: {
-		RU: "🔁 Не страшно — *%s* снова в очереди, следующее повторение завтра.", EN: "🔁 No worries — *%s* is back in the rotation, next review tomorrow.", DE: "🔁 Kein Problem — *%s* ist wieder in der Rotation, nächste Wiederholung morgen.", UK: "🔁 Нічого страшного — *%s* знову в черзі, наступне повторення завтра.", AR: "🔁 لا بأس — *%s* عادت إلى الدورة، المراجعة التالية غدًا.",
+		RU: "🔴 Не страшно — *%s* снова в очереди, следующее повторение завтра.", EN: "🔴 No worries — *%s* is back in the rotation, next review tomorrow.", DE: "🔴 Kein Problem — *%s* ist wieder in der Rotation, nächste Wiederholung morgen.", UK: "🔴 Нічого страшного — *%s* знову в черзі, наступне повторення завтра.", AR: "🔴 لا بأس — *%s* عادت إلى الدورة، المراجعة التالية غدًا.",
 	},
 }

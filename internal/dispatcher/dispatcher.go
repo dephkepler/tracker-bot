@@ -1072,18 +1072,30 @@ func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) 
 			return
 		}
 		d.learning.ShowReviewReveal(ctx, id)
-	case strings.HasPrefix(data, learningbtn.LearningCBReviewKnew):
-		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewKnew)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewAgain):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewAgain)
 		if !ok {
 			return
 		}
-		d.learning.RecordReviewGrade(ctx, id, true)
-	case strings.HasPrefix(data, learningbtn.LearningCBReviewMissed):
-		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewMissed)
+		d.learning.RecordReviewGrade(ctx, id, models.LearningGradeAgain)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewHard):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewHard)
 		if !ok {
 			return
 		}
-		d.learning.RecordReviewGrade(ctx, id, false)
+		d.learning.RecordReviewGrade(ctx, id, models.LearningGradeHard)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewGood):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewGood)
+		if !ok {
+			return
+		}
+		d.learning.RecordReviewGrade(ctx, id, models.LearningGradeGood)
+	case strings.HasPrefix(data, learningbtn.LearningCBReviewEasy):
+		id, ok := parseCallbackID(data, learningbtn.LearningCBReviewEasy)
+		if !ok {
+			return
+		}
+		d.learning.RecordReviewGrade(ctx, id, models.LearningGradeEasy)
 	}
 }
 

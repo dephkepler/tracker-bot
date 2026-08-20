@@ -105,13 +105,21 @@ func LearningReviewRevealedText(lang i18n.Lang, collectionName, term, translatio
 	return i18n.T(lang, i18n.KeyLearningReviewRevealed, collectionName, term, translation)
 }
 
-// LearningReviewGradedText renders the confirmation after grading.
-func LearningReviewGradedText(lang i18n.Lang, term string, correct bool, nextIntervalDays int, learned bool) string {
+// LearningReviewGradedText renders the confirmation after grading. Reaching
+// "learned" takes priority over the grade-specific message, regardless of
+// which grade (Good/Easy) triggered it.
+func LearningReviewGradedText(lang i18n.Lang, term string, grade models.LearningGrade, nextIntervalDays int, learned bool) string {
 	if learned {
 		return i18n.T(lang, i18n.KeyLearningReviewLearned, term)
 	}
-	if correct {
+	switch grade {
+	case models.LearningGradeAgain:
+		return i18n.T(lang, i18n.KeyLearningReviewMissed, term)
+	case models.LearningGradeHard:
+		return i18n.T(lang, i18n.KeyLearningReviewHardConfirm, term, nextIntervalDays)
+	case models.LearningGradeEasy:
+		return i18n.T(lang, i18n.KeyLearningReviewEasyConfirm, term, nextIntervalDays)
+	default: // models.LearningGradeGood
 		return i18n.T(lang, i18n.KeyLearningReviewCorrect, term, nextIntervalDays)
 	}
-	return i18n.T(lang, i18n.KeyLearningReviewMissed, term)
 }

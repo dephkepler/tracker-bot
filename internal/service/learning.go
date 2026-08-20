@@ -38,7 +38,9 @@ type LearningService interface {
 	// translation) without touching its SRS state — used to render the
 	// "reveal" step of a review card before the user grades it.
 	PeekWord(ctx context.Context, userID, wordID int64) (collectionName, term, translation string, err error)
-	GradeAnswer(ctx context.Context, userID, wordID int64, correct bool) (nextIntervalDays int, learned bool, err error)
+	// GradeAnswer applies an Anki-style Again/Hard/Good/Easy grade to a
+	// word's schedule (see gradeSchedule) and records the review.
+	GradeAnswer(ctx context.Context, userID, wordID int64, grade models.LearningGrade) (nextIntervalDays int, learned bool, err error)
 	// ListReviewsOnDay returns every review the user answered within
 	// [from, to) — used by the tracking heatmap's day drill-down.
 	ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error)
@@ -207,21 +209,24 @@ func (srv *learningService) PeekWord(ctx context.Context, userID, wordID int64) 
 	return collectionName, term, translation, nil
 }
 
-// GradeAnswer applies a simplified SM-2 update after the user answers
-// whether they knew a word, and records the review for stats/streak.
-func (srv *learningService) GradeAnswer(ctx context.Context, userID, wordID int64, correct bool) (int, bool, error) {
+// GradeAnswer applies an Anki-style Again/Hard/Good/Easy update (see
+// gradeSchedule) and records the review for stats/streak. A word counts as
+// "correct" for accuracy stats whenever the grade isn't Again — Hard still
+// means they recalled it, just with effort.
+func (srv *learningService) GradeAnswer(ctx context.Context, userID, wordID int64, grade models.LearningGrade) (int, bool, error) {
 	_, _, _, easeFactor, intervalDays, repetitions, err := srv.repo.GetWordForGrading(ctx, userID, wordID)
 	if err != nil {
 		return 0, false, err
 	}
 
-	newEase, newInterval, newReps, learned := gradeSchedule(easeFactor, intervalDays, repetitions, correct)
+	newEase, newInterval, newReps, learned := gradeSchedule(easeFactor, intervalDays, repetitions, grade)
 	now := time.Now().UTC()
 	nextReviewAt := now.Add(time.Duration(newInterval) * 24 * time.Hour)
 
 	if err := srv.repo.UpdateWordSchedule(ctx, wordID, newEase, newInterval, newReps, nextReviewAt, learned); err != nil {
 		return 0, false, err
 	}
+	correct := grade != models.LearningGradeAgain
 	if err := srv.repo.RecordReview(ctx, wordID, userID, correct, now); err != nil {
 		return 0, false, err
 	}
@@ -233,36 +238,76 @@ func (srv *learningService) ListReviewsOnDay(ctx context.Context, userID int64, 
 	return srv.repo.ListReviewsOnDay(ctx, userID, from, to)
 }
 
-// gradeSchedule is a simplified SM-2: quality is binary (knew it / didn't),
-// intervals grow 1 -> 6 -> interval*easeFactor days on consecutive correct
-// answers, ease factor nudges up/down within SM-2's usual [1.3, 2.5] bounds,
-// and a word graduates to "learned" once its interval reaches 3 weeks.
-func gradeSchedule(easeFactor float32, intervalDays, repetitions int, correct bool) (newEase float32, newInterval, newReps int, learned bool) {
+// gradeSchedule is an Anki-style SM-2 variant with four grades instead of a
+// plain correct/incorrect:
+//
+//   - Again: forgot it — interval resets to 1 day, repetitions reset to 0,
+//     ease drops. Never counts as "learned".
+//   - Hard: recalled, but it was a struggle — interval grows slowly (~1.2x),
+//     ease drops slightly.
+//   - Good: recalled comfortably — the original growth curve (1 -> 6 ->
+//     interval*ease days), ease unchanged. This is the old binary
+//     "correct" path.
+//   - Easy: trivially easy — skips straight to a longer interval (4 days
+//     for a brand-new word) and grows faster (1.3x bonus), ease rises.
+//
+// Ease factor stays within SM-2's usual [1.3, 2.5] bounds throughout. A
+// word graduates to "learned" once its interval reaches 3 weeks via
+// anything but Again.
+func gradeSchedule(easeFactor float32, intervalDays, repetitions int, grade models.LearningGrade) (newEase float32, newInterval, newReps int, learned bool) {
 	const (
 		minEase          = 1.3
 		maxEase          = 2.5
 		learnedThreshold = 21 // days
 	)
 
-	if !correct {
-		return maxf32(easeFactor-0.2, minEase), 1, 0, false
+	switch grade {
+	case models.LearningGradeAgain:
+		return maxf32(easeFactor-0.20, minEase), 1, 0, false
+
+	case models.LearningGradeHard:
+		newReps = repetitions + 1
+		newInterval = maxInt(intervalDays+1, roundf32(float32(intervalDays)*1.2))
+		if repetitions == 0 {
+			newInterval = 1
+		}
+		newEase = maxf32(easeFactor-0.15, minEase)
+
+	case models.LearningGradeEasy:
+		newReps = repetitions + 1
+		if repetitions == 0 {
+			newInterval = 4
+		} else {
+			newInterval = maxInt(intervalDays+1, roundf32(float32(intervalDays)*easeFactor*1.3))
+		}
+		newEase = minf32(easeFactor+0.15, maxEase)
+
+	default: // models.LearningGradeGood
+		newReps = repetitions + 1
+		switch newReps {
+		case 1:
+			newInterval = 1
+		case 2:
+			newInterval = 6
+		default:
+			newInterval = maxInt(intervalDays+1, roundf32(float32(intervalDays)*easeFactor))
+		}
+		newEase = easeFactor
 	}
 
-	newReps = repetitions + 1
-	switch newReps {
-	case 1:
-		newInterval = 1
-	case 2:
-		newInterval = 6
-	default:
-		newInterval = int(float32(intervalDays) * easeFactor)
-		if newInterval <= intervalDays {
-			newInterval = intervalDays + 1
-		}
-	}
-	newEase = minf32(easeFactor+0.1, maxEase)
 	learned = newInterval >= learnedThreshold
 	return newEase, newInterval, newReps, learned
+}
+
+func roundf32(v float32) int {
+	return int(v + 0.5)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func minf32(a, b float32) float32 {

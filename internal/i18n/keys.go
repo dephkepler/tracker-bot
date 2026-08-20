@@ -282,8 +282,12 @@ const (
 	KeyLearningButtonToggleOnFmt      = "learning.button.toggle_on_fmt"  // "🟢 %s — %d words"
 	KeyLearningButtonToggleOffFmt     = "learning.button.toggle_off_fmt" // "⚪ %s — %d words"
 	KeyLearningButtonShowAnswer       = "learning.button.show_answer"
-	KeyLearningButtonKnewIt           = "learning.button.knew_it"
-	KeyLearningButtonMissedIt         = "learning.button.missed_it"
+	// Anki-style four-level grading (see models.LearningGrade), replacing a
+	// plain knew-it/missed-it binary.
+	KeyLearningButtonAgain            = "learning.button.grade_again"
+	KeyLearningButtonHard             = "learning.button.grade_hard"
+	KeyLearningButtonGood             = "learning.button.grade_good"
+	KeyLearningButtonEasy             = "learning.button.grade_easy"
 	KeyLearningLabelIncludedInReviews = "learning.label.included_in_reviews"
 	KeyLearningLabelExcludedReviews   = "learning.label.excluded_from_reviews"
 	KeyLearningArchiveItemFmt         = "learning.label.archive_item_fmt" // "📦 %s — %d words"
@@ -345,6 +349,8 @@ const (
 	KeyLearningReviewCardTitle      = "learning.review.card_title" // "🧠 *%s*\n\n%s"
 	KeyLearningReviewRevealed       = "learning.review.revealed"   // "🧠 *%s*\n\n%s\n→ *%s*"
 	KeyLearningReviewLearned        = "learning.review.graded_learned"
-	KeyLearningReviewCorrect        = "learning.review.graded_correct"
-	KeyLearningReviewMissed         = "learning.review.graded_missed"
+	KeyLearningReviewCorrect        = "learning.review.graded_correct" // Good
+	KeyLearningReviewHardConfirm    = "learning.review.graded_hard"
+	KeyLearningReviewEasyConfirm    = "learning.review.graded_easy"
+	KeyLearningReviewMissed         = "learning.review.graded_missed" // Again
 )

@@ -25,10 +25,14 @@ const (
 	LearningCBReviewContinue   = "learning:review:pick:continue"
 
 	// Review-card callbacks, sent standalone (scheduler push or on-demand),
-	// not gated by screen — carry the word id in the payload.
+	// not gated by screen — carry the word id in the payload. Grading is
+	// Anki-style: four levels instead of a binary knew-it/missed-it (see
+	// models.LearningGrade).
 	LearningCBReviewReveal = "learning:review:reveal:"
-	LearningCBReviewKnew   = "learning:review:grade:knew:"
-	LearningCBReviewMissed = "learning:review:grade:missed:"
+	LearningCBReviewAgain  = "learning:review:grade:again:"
+	LearningCBReviewHard   = "learning:review:grade:hard:"
+	LearningCBReviewGood   = "learning:review:grade:good:"
+	LearningCBReviewEasy   = "learning:review:grade:easy:"
 )
 
 // BuiltInPushIntervals are the always-available review-push interval

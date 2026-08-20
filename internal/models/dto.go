@@ -134,6 +134,20 @@ type HourActivityDuration struct {
 	Duration    time.Duration
 }
 
+// LearningGrade is an Anki-style review answer: how well the user recalled
+// the word, driving how much the next interval grows or shrinks (see
+// service.gradeSchedule). Distinct from a plain correct/incorrect boolean —
+// Hard and Easy both count as "correct" for accuracy stats but move the
+// schedule differently than Good.
+type LearningGrade string
+
+const (
+	LearningGradeAgain LearningGrade = "again" // forgot it — interval resets
+	LearningGradeHard  LearningGrade = "hard"  // recalled, but it was a struggle
+	LearningGradeGood  LearningGrade = "good"  // recalled comfortably
+	LearningGradeEasy  LearningGrade = "easy"  // trivially easy — grow the interval faster
+)
+
 // LearningStats contains values for learning dashboard.
 type LearningStats struct {
 	TotalWords    int
