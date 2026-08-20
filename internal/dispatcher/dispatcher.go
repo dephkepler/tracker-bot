@@ -515,9 +515,9 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		return true
 	}
 	if sess.waitingLearningCollectionName {
-		if ctx.Text == learningbtn.LearningButtonCancel {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
 			sess.waitingLearningCollectionName = false
-			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Cancelled.")
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.setScreen(ctx.UserID, screenLearningMain)
@@ -539,9 +539,9 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		return true
 	}
 	if sess.waitingLearningWords {
-		if ctx.Text == learningbtn.LearningButtonDone {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonDone {
 			sess.waitingLearningWords = false
-			hide := tgbotapi.NewMessage(ctx.ChatID, "✅ Done adding words.")
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningAddWordsDoneNotice))
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.learning.ShowCollectionDetail(ctx, sess.learningCollectionID, false)
@@ -551,9 +551,9 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		return true
 	}
 	if sess.waitingLearningRenameCollection {
-		if ctx.Text == learningbtn.LearningButtonCancel {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
 			sess.waitingLearningRenameCollection = false
-			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Cancelled.")
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.learning.ShowCollectionDetail(ctx, sess.learningCollectionID, false)
@@ -640,17 +640,16 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 	}
 
-	// Learning review-push interval picker (plain reply buttons, not yet
-	// localized — see internal/buttons/learning).
+	// Learning review-push interval picker.
 	if d.isScreen(ctx.UserID, screenLearningTimer) {
 		if minutes, ok := learningbtn.ParsePushIntervalButtonMinutes(ctx.Text); ok {
 			d.setScreen(ctx.UserID, screenLearningMain)
 			d.learning.ActivateReviews(ctx, minutes)
 			return
 		}
-		if ctx.Text == learningbtn.LearningButtonBack {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonBack {
 			d.setScreen(ctx.UserID, screenLearningMain)
-			hide := tgbotapi.NewMessage(ctx.ChatID, "◀ Back to Learning menu.")
+			hide := tgbotapi.NewMessage(ctx.ChatID, " ")
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.learning.ShowLearningMenu(ctx)

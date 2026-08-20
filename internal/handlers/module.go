@@ -1480,16 +1480,16 @@ func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("GetLearningStats failed")
-		msg := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load learning data. Please try again.")
+		msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningLoadFailed))
 		_, _ = m.bot.Send(msg)
 		return
 	}
 
-	text := learning.LearningMenuText(stats)
+	text := learning.LearningMenuText(ctx.Language, stats)
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = learning.LearningEntryInlineMenu(stats.TimerActive)
+	msg.ReplyMarkup = learning.LearningEntryInlineMenu(ctx.Language, stats.TimerActive)
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send learning menu failed")
@@ -1501,17 +1501,17 @@ func (m *Module) ShowLearningStatsDetail(ctx *tgctx.MsgContext, edit bool) {
 	detail, err := m.learningsvc.GetStatsDetail(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
 		log.Error().Err(err).Msg("get learning stats detail failed")
-		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load statistics.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningStatsLoadFailed), nil)
 		return
 	}
-	menu := learning.LearningBackToMainInlineMenu()
-	m.sendOrEditLearning(ctx, edit, learning.LearningStatsDetailText(detail), &menu)
+	menu := learning.LearningBackToMainInlineMenu(ctx.Language)
+	m.sendOrEditLearning(ctx, edit, learning.LearningStatsDetailText(ctx.Language, detail), &menu)
 }
 
 // PromptCreateCollection asks the user to type a name for a new collection.
 func (m *Module) PromptCreateCollection(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, "✏️ Send a short one-line name for the new collection (e.g. \"Travel words\"). You'll paste the actual word list on the next step.")
-	msg.ReplyMarkup = learning.LearningWaitingReplyMenu()
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreatePrompt))
+	msg.ReplyMarkup = learning.LearningWaitingReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -1526,32 +1526,32 @@ func (m *Module) ProcessCreateCollectionName(ctx *tgctx.MsgContext) (collectionI
 	// it becomes a garbage multi-line collection name (see the bug report
 	// this guards against: a whole word list swallowed as one giant name).
 	if strings.Contains(name, "\n") {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ That looks like a word list, not a name. Send a short one-line name first (e.g. \"Travel words\") — you'll paste the word list on the next step."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateNotAList)))
 		return 0, false
 	}
 	if len(name) < 2 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be at least 2 characters. Try again:"))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateTooShort)))
 		return 0, false
 	}
 	if len(name) > 60 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name is too long (max 60 characters). Try a shorter one:"))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateTooLong)))
 		return 0, false
 	}
 
 	id, err := m.learningsvc.CreateCollection(ctx.Ctx, ctx.DBUserID, name)
 	if err != nil {
 		if errors.Is(err, models.ErrLearningCollectionExists) {
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ You already have a collection with that name. Try another:"))
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateExists)))
 			return 0, false
 		}
 		log.Error().Err(err).Msg("create collection failed")
-		hide := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to create collection. Please try again later.")
+		hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateFailed))
 		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 		_, _ = m.bot.Send(hide)
 		return 0, true
 	}
 
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("📚 Collection *%s* created!", name)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateConfirmed, name)))
 	m.PromptAddWords(ctx, id, true)
 	return id, true
 }
@@ -1559,12 +1559,12 @@ func (m *Module) ProcessCreateCollectionName(ctx *tgctx.MsgContext) (collectionI
 // PromptAddWords asks the user to paste word lines for a collection. First
 // is true right after collection creation (slightly different copy).
 func (m *Module) PromptAddWords(ctx *tgctx.MsgContext, collectionID int64, first bool) {
-	text := "➕ Now send words as \"word - translation\", one per line. You can paste several at once. Tap ✅ Done when finished."
-	if !first {
-		text = "➕ Send more words as \"word - translation\", one per line. Tap ✅ Done when finished."
+	key := i18n.KeyLearningAddWordsPromptMore
+	if first {
+		key = i18n.KeyLearningAddWordsPromptFirst
 	}
-	msg := tgbotapi.NewMessage(ctx.ChatID, text)
-	msg.ReplyMarkup = learning.LearningAddWordsReplyMenu()
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, key))
+	msg.ReplyMarkup = learning.LearningAddWordsReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -1575,17 +1575,17 @@ func (m *Module) ProcessAddWords(ctx *tgctx.MsgContext, collectionID int64) {
 	added, skipped, err := m.learningsvc.AddWordsFromText(ctx.Ctx, ctx.DBUserID, collectionID, ctx.Text)
 	if err != nil {
 		if errors.Is(err, models.ErrLearningNoWordsParsed) {
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Couldn't find any \"word - translation\" lines. Try again, e.g.:\napple - яблоко"))
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningAddWordsNoneParsed)))
 			return
 		}
 		log.Error().Err(err).Msg("add words failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to save words. Please try again."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningAddWordsFailed)))
 		return
 	}
 
-	text := fmt.Sprintf("✅ Added %d word(s).", added)
+	text := i18n.T(ctx.Language, i18n.KeyLearningAddWordsAdded, added)
 	if skipped > 0 {
-		text += fmt.Sprintf(" (%d line(s) skipped — couldn't parse.)", skipped)
+		text += i18n.T(ctx.Language, i18n.KeyLearningAddWordsSkipped, skipped)
 	}
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
 }
@@ -1597,15 +1597,15 @@ func (m *Module) ShowWordBase(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list learning collections failed")
-		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load collections.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningCollectionsFailed), nil)
 		return
 	}
 	if len(items) == 0 {
-		m.sendOrEditLearning(ctx, edit, "🗂 No collections yet. Create one from the Learning menu.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningWordBaseEmpty), nil)
 		return
 	}
-	menu := learning.LearningWordBaseInlineMenu(items)
-	m.sendOrEditLearning(ctx, edit, learning.LearningWordBaseTitle(len(items)), &menu)
+	menu := learning.LearningWordBaseInlineMenu(ctx.Language, items)
+	m.sendOrEditLearning(ctx, edit, learning.LearningWordBaseTitle(ctx.Language, len(items)), &menu)
 }
 
 // ShowReviewCollectionPicker lets the user choose which collections feed
@@ -1617,11 +1617,11 @@ func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list learning collections for review picker failed")
-		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load collections.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningCollectionsFailed), nil)
 		return
 	}
 	if len(items) == 0 {
-		m.sendOrEditLearning(ctx, edit, "🗂 No collections yet. Create one from the Learning menu first, add some words, then come back to start reviews.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningReviewPickEmptyTitle), nil)
 		return
 	}
 
@@ -1637,8 +1637,8 @@ func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 		log.Error().Err(err).Msg("get learning stats for review picker failed")
 	}
 
-	menu := learning.LearningReviewPickInlineMenu(items, stats.TimerActive)
-	m.sendOrEditLearning(ctx, edit, learning.LearningReviewPickTitle(active, stats.TimerActive, stats.TimerInterval), &menu)
+	menu := learning.LearningReviewPickInlineMenu(ctx.Language, items, stats.TimerActive)
+	m.sendOrEditLearning(ctx, edit, learning.LearningReviewPickTitle(ctx.Language, active, stats.TimerActive, stats.TimerInterval), &menu)
 }
 
 // HandleReviewPickToggle flips a collection's review-rotation flag and
@@ -1665,8 +1665,9 @@ func (m *Module) HandleReviewContinue(ctx *tgctx.MsgContext) (ok bool) {
 			return true
 		}
 	}
-	menu := learning.LearningReviewPickInlineMenu(items, false)
-	m.sendOrEditLearning(ctx, true, "⚠️ Select at least one collection first.\n\n"+learning.LearningReviewPickTitle(0, false, 0), &menu)
+	menu := learning.LearningReviewPickInlineMenu(ctx.Language, items, false)
+	text := i18n.T(ctx.Language, i18n.KeyLearningReviewPickNeedOne) + "\n\n" + learning.LearningReviewPickTitle(ctx.Language, 0, false, 0)
+	m.sendOrEditLearning(ctx, true, text, &menu)
 	return false
 }
 
@@ -1674,13 +1675,13 @@ func (m *Module) HandleReviewContinue(ctx *tgctx.MsgContext) (ok bool) {
 func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64, edit bool) {
 	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)
 	if err != nil {
-		m.sendOrEditLearning(ctx, edit, "⚠️ Collection not found.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningCollectionNotFound), nil)
 		return
 	}
 	words, err := m.learningsvc.ListWords(ctx.Ctx, ctx.DBUserID, collectionID)
 	if err != nil {
 		log.Error().Err(err).Msg("list words failed")
-		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load words.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningWordsLoadFailed), nil)
 		return
 	}
 
@@ -1694,20 +1695,20 @@ func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64,
 		}
 	}
 
-	menu := learning.LearningCollectionDetailInlineMenu(collectionID, active, words)
-	m.sendOrEditLearning(ctx, edit, learning.LearningCollectionDetailTitle(name, len(words)), &menu)
+	menu := learning.LearningCollectionDetailInlineMenu(ctx.Language, collectionID, active, words)
+	m.sendOrEditLearning(ctx, edit, learning.LearningCollectionDetailTitle(ctx.Language, name, len(words)), &menu)
 }
 
 // PromptRenameCollection asks the user to type a new name for a collection.
 func (m *Module) PromptRenameCollection(ctx *tgctx.MsgContext, collectionID int64) {
 	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)
 	if err != nil {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Collection not found."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCollectionNotFound)))
 		return
 	}
-	msg := tgbotapi.NewMessage(ctx.ChatID, learning.LearningRenamePromptText(name))
+	msg := tgbotapi.NewMessage(ctx.ChatID, learning.LearningRenamePromptText(ctx.Language, name))
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = learning.LearningWaitingReplyMenu()
+	msg.ReplyMarkup = learning.LearningWaitingReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -1716,24 +1717,24 @@ func (m *Module) PromptRenameCollection(ctx *tgctx.MsgContext, collectionID int6
 func (m *Module) ProcessRenameCollection(ctx *tgctx.MsgContext, collectionID int64) (done bool) {
 	name := strings.TrimSpace(ctx.Text)
 	if strings.Contains(name, "\n") || len(name) < 2 || len(name) > 60 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be a single line, 2-60 characters. Try again:"))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonNameSingleLineInvalid)))
 		return false
 	}
 
 	if err := m.learningsvc.RenameCollection(ctx.Ctx, ctx.DBUserID, collectionID, name); err != nil {
 		if errors.Is(err, models.ErrLearningCollectionExists) {
-			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ You already have a collection with that name. Try another:"))
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateExists)))
 			return false
 		}
 		log.Error().Err(err).Msg("rename collection failed")
-		hide := tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to rename collection. Please try again later.")
+		hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningRenameFailed))
 		hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 		_, _ = m.bot.Send(hide)
 		m.ShowCollectionDetail(ctx, collectionID, false)
 		return true
 	}
 
-	hide := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("✅ Renamed to *%s*.", name))
+	hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningRenamed, name))
 	hide.ParseMode = "Markdown"
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
@@ -1771,15 +1772,15 @@ func (m *Module) ShowLearningArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListArchivedCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list archived collections failed")
-		m.sendOrEditLearning(ctx, edit, "⚠️ Failed to load archive.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyTrackArchiveLoadFailed), nil)
 		return
 	}
 	if len(items) == 0 {
-		m.sendOrEditLearning(ctx, edit, "🔁 No archived collections.", nil)
+		m.sendOrEditLearning(ctx, edit, i18n.T(ctx.Language, i18n.KeyLearningArchiveEmpty), nil)
 		return
 	}
-	menu := learning.LearningArchiveInlineMenu(items)
-	m.sendOrEditLearning(ctx, edit, learning.LearningArchiveTitle(len(items)), &menu)
+	menu := learning.LearningArchiveInlineMenu(ctx.Language, items)
+	m.sendOrEditLearning(ctx, edit, learning.LearningArchiveTitle(ctx.Language, len(items)), &menu)
 }
 
 // RestoreArchivedCollection moves a collection back to the active list.
@@ -1835,8 +1836,8 @@ func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text strin
 
 // ShowReviewIntervalPicker shows the review-push interval picker.
 func (m *Module) ShowReviewIntervalPicker(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, "🎲 How often should the bot send you a word to review?")
-	msg.ReplyMarkup = learning.LearningPushIntervalReplyMenu(learning.BuiltInPushIntervals)
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningReviewIntervalPrompt))
+	msg.ReplyMarkup = learning.LearningPushIntervalReplyMenu(ctx.Language, learning.BuiltInPushIntervals)
 	_, _ = m.bot.Send(msg)
 }
 
@@ -1844,14 +1845,14 @@ func (m *Module) ShowReviewIntervalPicker(ctx *tgctx.MsgContext) {
 func (m *Module) ActivateReviews(ctx *tgctx.MsgContext, intervalMin int) {
 	if err := m.learningsvc.Activate(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil {
 		log.Error().Err(err).Msg("activate learning reviews failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to activate reviews. Please try again."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningReviewActivateFailed)))
 		return
 	}
 	// Clear the interval-picker reply keyboard on the confirmation message
 	// itself (rather than a separate blank message) so there's no window
 	// where a stray tap on the old keyboard can land as stray text on
 	// whatever screen comes next.
-	confirm := tgbotapi.NewMessage(ctx.ChatID, fmt.Sprintf("🎲 Reviews activated — a word every %d min.", intervalMin))
+	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningReviewActivated, intervalMin))
 	confirm.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(confirm)
 	m.ShowLearningMenu(ctx)
@@ -1877,9 +1878,16 @@ func (m *Module) SendLearningPromptMessage(ctx context.Context, chatID int64, us
 		return nil
 	}
 
-	msg := tgbotapi.NewMessage(chatID, learning.LearningReviewCardText(due.CollectionName, due.Term))
+	lang := i18n.Default
+	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err != nil {
+		log.Error().Err(err).Int64("user_id", userID).Msg("load language for learning prompt failed")
+	} else if stats.Language != nil {
+		lang = i18n.Normalize(*stats.Language)
+	}
+
+	msg := tgbotapi.NewMessage(chatID, learning.LearningReviewCardText(lang, due.CollectionName, due.Term))
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = learning.LearningReviewRevealInlineMenu(due.ID)
+	msg.ReplyMarkup = learning.LearningReviewRevealInlineMenu(lang, due.ID)
 	_, err = m.bot.Send(msg)
 	return err
 }
@@ -1895,8 +1903,8 @@ func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
 		ctx.ChatID,
 		ctx.MessageID,
-		learning.LearningReviewRevealedText(collectionName, term, translation),
-		learning.LearningReviewGradeInlineMenu(wordID),
+		learning.LearningReviewRevealedText(ctx.Language, collectionName, term, translation),
+		learning.LearningReviewGradeInlineMenu(ctx.Language, wordID),
 	)
 	edit.ParseMode = "Markdown"
 	if _, err := m.bot.Send(edit); err != nil {
@@ -1919,7 +1927,7 @@ func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, correct 
 		return
 	}
 
-	edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, learning.LearningReviewGradedText(term, correct, nextIntervalDays, learned))
+	edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, learning.LearningReviewGradedText(ctx.Language, term, correct, nextIntervalDays, learned))
 	edit.ParseMode = "Markdown"
 	if _, err := m.bot.Send(edit); err != nil {
 		log.Error().Err(err).Msg("record review grade failed")

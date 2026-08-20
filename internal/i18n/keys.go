@@ -26,6 +26,19 @@ const (
 	KeyCommonFallback       = "common.fallback" // catch-all "I don't know what to do with that"
 	KeyCommonGenericError   = "common.generic_error"
 	KeyCommonUseButtons     = "common.use_buttons"
+
+	// KeyCommonCancelX/KeyCommonDone are shared by the Learning/Challenge/
+	// Admin screens added after the original i18n phases — same ❌/✅ style
+	// buttons, reused here rather than redefined per domain to avoid text
+	// collisions (see TestCatalog_NoTextCollisionsWithinLanguage).
+	KeyCommonCancelX = "common.cancel_x" // "❌ Cancel" — distinct from KeyCommonCancel's "✖️ Cancel"
+	KeyCommonDone    = "common.done"     // "✅ Done"
+
+	// KeyCommonNameSingleLineInvalid is a shared generic message reused
+	// verbatim by Learning and Challenge. "Failed to load archive." is
+	// likewise shared, but reuses the pre-existing KeyTrackArchiveLoadFailed
+	// rather than a new key (identical text, avoids a collision).
+	KeyCommonNameSingleLineInvalid = "common.name_single_line_invalid"
 )
 
 // Entry (Home) screen.
@@ -250,4 +263,88 @@ const (
 	KeyTrackPeriodRangeInvalidFmt = "track.reports.period.invalid_format"
 	KeyTrackPeriodRangeSetConfirm = "track.reports.period.range_set" // "Range set: %s..%s"
 	KeyTrackCalendarPickBothDays  = "track.reports.calendar.pick_both_days"
+)
+
+// Learning — collections of word pairs reviewed on a spaced-repetition
+// schedule. Phase 4a.
+const (
+	KeyLearningButtonCreateCollection = "learning.button.create_collection"
+	KeyLearningButtonStartReviews     = "learning.button.start_reviews"
+	KeyLearningButtonManageReviews    = "learning.button.manage_reviews"
+	KeyLearningButtonStopReviews      = "learning.button.stop_reviews"
+	KeyLearningButtonArchive          = "learning.button.archive"
+	KeyLearningButtonStatistics       = "learning.button.statistics"
+	KeyLearningButtonWordBase         = "learning.button.word_base"
+	KeyLearningButtonContinue         = "learning.button.continue"
+	KeyLearningButtonAddWords         = "learning.button.add_words"
+	KeyLearningButtonRename           = "learning.button.rename"
+	KeyLearningButtonArchiveThis      = "learning.button.archive_this"
+	KeyLearningButtonToggleOnFmt      = "learning.button.toggle_on_fmt"  // "🟢 %s — %d words"
+	KeyLearningButtonToggleOffFmt     = "learning.button.toggle_off_fmt" // "⚪ %s — %d words"
+	KeyLearningButtonShowAnswer       = "learning.button.show_answer"
+	KeyLearningButtonKnewIt           = "learning.button.knew_it"
+	KeyLearningButtonMissedIt         = "learning.button.missed_it"
+	KeyLearningLabelIncludedInReviews = "learning.label.included_in_reviews"
+	KeyLearningLabelExcludedReviews   = "learning.label.excluded_from_reviews"
+	KeyLearningArchiveItemFmt         = "learning.label.archive_item_fmt" // "📦 %s — %d words"
+
+	KeyLearningMenuTitle           = "learning.menu.title"
+	KeyLearningMenuTotalWords      = "learning.menu.total_words"
+	KeyLearningMenuDueToday        = "learning.menu.due_today"
+	KeyLearningMenuLearned         = "learning.menu.learned"
+	KeyLearningMenuStreak          = "learning.menu.streak"         // "🔥 Streak: *%d* day(s)"
+	KeyLearningMenuReviewsActive   = "learning.menu.reviews_active" // "🕐 Reviews: every *%d* min (next in %s)"
+	KeyLearningMenuReviewsInactive = "learning.menu.reviews_inactive"
+	KeyLearningLoadFailed          = "learning.load_failed"
+
+	KeyLearningReviewPickManageTitle = "learning.review_pick.manage_title" // "🔧 *Manage reviews*\n\nRunning every *%d* min. %d collection(s) selected — tap to include/exclude, changes apply immediately."
+	KeyLearningReviewPickEmptyTitle  = "learning.review_pick.empty_title"
+	KeyLearningReviewPickTitle       = "learning.review_pick.title" // "🎲 *Pick collections for reviews*\n\n%d selected. Tap to include/exclude, then Continue."
+	KeyLearningReviewPickNeedOne     = "learning.review_pick.need_one"
+
+	KeyLearningStatsTitle          = "learning.stats.title"
+	KeyLearningStatsAccuracy       = "learning.stats.accuracy" // "🎯 Accuracy: *%.0f%%* (%d/%d reviews)"
+	KeyLearningStatsNoReviews      = "learning.stats.no_reviews"
+	KeyLearningStatsByCollection   = "learning.stats.by_collection"
+	KeyLearningStatsCollectionLine = "learning.stats.collection_line" // "• %s — %d words, %d due, %d learned\n"
+	KeyLearningStatsLoadFailed     = "learning.stats.load_failed"
+
+	KeyLearningRenamePrompt = "learning.rename.prompt"    // "✏️ Send a new name for *%s* (2-60 characters, single line):"
+	KeyLearningRenamed      = "learning.rename.confirmed" // "✅ Renamed to *%s*."
+	KeyLearningRenameFailed = "learning.rename.failed"
+
+	KeyLearningWordBaseTitle      = "learning.word_base.title"
+	KeyLearningWordBaseEmpty      = "learning.word_base.empty"
+	KeyLearningCollectionDetail   = "learning.collection.detail_title" // "📚 *%s* — %d word(s)"
+	KeyLearningCollectionNotFound = "learning.collection.not_found"
+	KeyLearningCollectionsFailed  = "learning.collection.load_failed"
+	KeyLearningWordsLoadFailed    = "learning.word.load_failed"
+
+	KeyLearningCreatePrompt    = "learning.create.prompt"
+	KeyLearningCreateNotAList  = "learning.create.not_a_list"
+	KeyLearningCreateTooShort  = "learning.create.too_short"
+	KeyLearningCreateTooLong   = "learning.create.too_long"
+	KeyLearningCreateExists    = "learning.create.exists"
+	KeyLearningCreateFailed    = "learning.create.failed"
+	KeyLearningCreateConfirmed = "learning.create.confirmed" // "📚 Collection *%s* created!"
+
+	KeyLearningAddWordsPromptFirst = "learning.add_words.prompt_first"
+	KeyLearningAddWordsPromptMore  = "learning.add_words.prompt_more"
+	KeyLearningAddWordsNoneParsed  = "learning.add_words.none_parsed"
+	KeyLearningAddWordsFailed      = "learning.add_words.failed"
+	KeyLearningAddWordsAdded       = "learning.add_words.added"   // "✅ Added %d word(s)."
+	KeyLearningAddWordsSkipped     = "learning.add_words.skipped" // " (%d line(s) skipped — couldn't parse.)"
+	KeyLearningAddWordsDoneNotice  = "learning.add_words.done_notice"
+
+	KeyLearningArchiveTitle = "learning.archive.title"
+	KeyLearningArchiveEmpty = "learning.archive.empty"
+
+	KeyLearningReviewIntervalPrompt = "learning.review.interval_prompt"
+	KeyLearningReviewActivateFailed = "learning.review.activate_failed"
+	KeyLearningReviewActivated      = "learning.review.activated"  // "🎲 Reviews activated — a word every %d min."
+	KeyLearningReviewCardTitle      = "learning.review.card_title" // "🧠 *%s*\n\n%s"
+	KeyLearningReviewRevealed       = "learning.review.revealed"   // "🧠 *%s*\n\n%s\n→ *%s*"
+	KeyLearningReviewLearned        = "learning.review.graded_learned"
+	KeyLearningReviewCorrect        = "learning.review.graded_correct"
+	KeyLearningReviewMissed         = "learning.review.graded_missed"
 )

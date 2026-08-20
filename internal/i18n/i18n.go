@@ -83,6 +83,7 @@ var catalog = mergeCatalogs(
 	catalogProfile,
 	catalogTrack,
 	catalogTrackReports,
+	catalogLearning,
 )
 
 func mergeCatalogs(parts ...map[string]entry) map[string]entry {

@@ -1,103 +1,117 @@
 package learning
 
 import (
-	"fmt"
 	"strings"
+	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 )
 
 // LearningMenuText renders the main Learning screen's stats block.
-func LearningMenuText(stats models.LearningStats) string {
+func LearningMenuText(lang i18n.Lang, stats models.LearningStats) string {
 	var b strings.Builder
-	b.WriteString("🧠 *Learning*\n\n")
-	fmt.Fprintf(&b, "📊 Total words: *%d*\n", stats.TotalWords)
-	fmt.Fprintf(&b, "📘 Due today: *%d*\n", stats.DueTodayWords)
-	fmt.Fprintf(&b, "✅ Learned: *%d*\n", stats.LearnedWords)
-	fmt.Fprintf(&b, "🔥 Streak: *%d* day(s)\n", stats.StreakDays)
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuTitle))
+	b.WriteString("\n\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuTotalWords, stats.TotalWords))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuDueToday, stats.DueTodayWords))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuLearned, stats.LearnedWords))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuStreak, stats.StreakDays))
+	b.WriteString("\n")
 	if stats.TimerActive {
-		fmt.Fprintf(&b, "🕐 Reviews: every *%d* min (next in %s)\n", stats.TimerInterval, stats.NextPushIn)
+		b.WriteString(i18n.T(lang, i18n.KeyLearningMenuReviewsActive, stats.TimerInterval, stats.NextPushIn))
 	} else {
-		b.WriteString("🕐 Reviews: not active\n")
+		b.WriteString(i18n.T(lang, i18n.KeyLearningMenuReviewsInactive))
 	}
+	b.WriteString("\n")
 	return b.String()
 }
 
 // LearningReviewPickTitle renders the review collection-picker's header.
 // When reviews are already running, toggling here applies immediately —
 // no need to stop and restart the schedule to change what's in rotation.
-func LearningReviewPickTitle(activeCount int, reviewsActive bool, intervalMin int) string {
+func LearningReviewPickTitle(lang i18n.Lang, activeCount int, reviewsActive bool, intervalMin int) string {
 	if reviewsActive {
-		return fmt.Sprintf("🔧 *Manage reviews*\n\nRunning every *%d* min. %d collection(s) selected — tap to include/exclude, changes apply immediately.", intervalMin, activeCount)
+		return i18n.T(lang, i18n.KeyLearningReviewPickManageTitle, intervalMin, activeCount)
 	}
 	if activeCount == 0 {
-		return "🎲 *Pick collections for reviews*\n\nTap to include/exclude — none selected yet. Select at least one, then tap Continue."
+		return i18n.T(lang, i18n.KeyLearningReviewPickEmptyTitle)
 	}
-	return fmt.Sprintf("🎲 *Pick collections for reviews*\n\n%d selected. Tap to include/exclude, then Continue.", activeCount)
+	return i18n.T(lang, i18n.KeyLearningReviewPickTitle, activeCount)
 }
 
 // LearningStatsDetailText renders the full "📈 Statistics" breakdown: overall
 // numbers, per-collection counts, and answer accuracy.
-func LearningStatsDetailText(d models.LearningStatsDetail) string {
+func LearningStatsDetailText(lang i18n.Lang, d models.LearningStatsDetail) string {
 	var b strings.Builder
-	b.WriteString("📈 *Statistics*\n\n")
-	fmt.Fprintf(&b, "📊 Total words: *%d*\n", d.Overall.TotalWords)
-	fmt.Fprintf(&b, "📘 Due today: *%d*\n", d.Overall.DueTodayWords)
-	fmt.Fprintf(&b, "✅ Learned: *%d*\n", d.Overall.LearnedWords)
-	fmt.Fprintf(&b, "🔥 Streak: *%d* day(s)\n", d.Overall.StreakDays)
+	b.WriteString(i18n.T(lang, i18n.KeyLearningStatsTitle))
+	b.WriteString("\n\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuTotalWords, d.Overall.TotalWords))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuDueToday, d.Overall.DueTodayWords))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuLearned, d.Overall.LearnedWords))
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuStreak, d.Overall.StreakDays))
+	b.WriteString("\n")
 	if d.ReviewsTotal > 0 {
 		accuracy := float64(d.ReviewsCorrect) / float64(d.ReviewsTotal) * 100
-		fmt.Fprintf(&b, "🎯 Accuracy: *%.0f%%* (%d/%d reviews)\n", accuracy, d.ReviewsCorrect, d.ReviewsTotal)
+		b.WriteString(i18n.T(lang, i18n.KeyLearningStatsAccuracy, accuracy, d.ReviewsCorrect, d.ReviewsTotal))
 	} else {
-		b.WriteString("🎯 Accuracy: no reviews answered yet\n")
+		b.WriteString(i18n.T(lang, i18n.KeyLearningStatsNoReviews))
 	}
+	b.WriteString("\n")
 
 	if len(d.Collections) > 0 {
-		b.WriteString("\n*By collection:*\n")
+		b.WriteString("\n")
+		b.WriteString(i18n.T(lang, i18n.KeyLearningStatsByCollection))
+		b.WriteString("\n")
 		for _, c := range d.Collections {
-			fmt.Fprintf(&b, "• %s — %d words, %d due, %d learned\n", c.Name, c.TotalWords, c.DueWords, c.LearnedWords)
+			b.WriteString(i18n.T(lang, i18n.KeyLearningStatsCollectionLine, c.Name, c.TotalWords, c.DueWords, c.LearnedWords))
 		}
 	}
 	return b.String()
 }
 
 // LearningRenamePromptText asks the user to type a new name for a collection.
-func LearningRenamePromptText(currentName string) string {
-	return fmt.Sprintf("✏️ Send a new name for *%s* (2-60 characters, single line):", currentName)
+func LearningRenamePromptText(lang i18n.Lang, currentName string) string {
+	return i18n.T(lang, i18n.KeyLearningRenamePrompt, currentName)
 }
 
 // LearningWordBaseTitle renders the word-base screen's header.
-func LearningWordBaseTitle(count int) string {
-	return fmt.Sprintf("🗂 *Word base* — %d collection(s)\n\nTap a collection to view its words.", count)
+func LearningWordBaseTitle(lang i18n.Lang, count int) string {
+	return i18n.T(lang, i18n.KeyLearningWordBaseTitle, count)
 }
 
 // LearningCollectionDetailTitle renders one collection's detail header.
-func LearningCollectionDetailTitle(name string, wordCount int) string {
-	return fmt.Sprintf("📚 *%s* — %d word(s)", name, wordCount)
+func LearningCollectionDetailTitle(lang i18n.Lang, name string, wordCount int) string {
+	return i18n.T(lang, i18n.KeyLearningCollectionDetail, name, wordCount)
 }
 
 // LearningArchiveTitle renders the archive screen's header.
-func LearningArchiveTitle(count int) string {
-	return fmt.Sprintf("🔁 *Archived collections* — %d", count)
+func LearningArchiveTitle(lang i18n.Lang, count int) string {
+	return i18n.T(lang, i18n.KeyLearningArchiveTitle, count)
 }
 
 // LearningReviewCardText renders the term-only side of a review card.
-func LearningReviewCardText(collectionName, term string) string {
-	return fmt.Sprintf("🧠 *%s*\n\n%s", collectionName, term)
+func LearningReviewCardText(lang i18n.Lang, collectionName, term string) string {
+	return i18n.T(lang, i18n.KeyLearningReviewCardTitle, collectionName, term)
 }
 
 // LearningReviewRevealedText renders the revealed (term + translation) side
 // of a review card.
-func LearningReviewRevealedText(collectionName, term, translation string) string {
-	return fmt.Sprintf("🧠 *%s*\n\n%s\n→ *%s*", collectionName, term, translation)
+func LearningReviewRevealedText(lang i18n.Lang, collectionName, term, translation string) string {
+	return i18n.T(lang, i18n.KeyLearningReviewRevealed, collectionName, term, translation)
 }
 
 // LearningReviewGradedText renders the confirmation after grading.
-func LearningReviewGradedText(term string, correct bool, nextIntervalDays int, learned bool) string {
+func LearningReviewGradedText(lang i18n.Lang, term string, correct bool, nextIntervalDays int, learned bool) string {
 	if learned {
-		return fmt.Sprintf("🎉 *%s* — learned! No more reviews needed.", term)
+		return i18n.T(lang, i18n.KeyLearningReviewLearned, term)
 	}
 	if correct {
-		return fmt.Sprintf("✅ Nice! Next review of *%s* in %d day(s).", term, nextIntervalDays)
+		return i18n.T(lang, i18n.KeyLearningReviewCorrect, term, nextIntervalDays)
 	}
-	return fmt.Sprintf("🔁 No worries — *%s* is back in the rotation, next review tomorrow.", term)
+	return i18n.T(lang, i18n.KeyLearningReviewMissed, term)
 }

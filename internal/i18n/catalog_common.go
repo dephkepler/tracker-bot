@@ -89,4 +89,13 @@ var catalogCommon = map[string]entry{
 		UK: "Використовуй кнопки меню.",
 		AR: "استخدم أزرار القائمة.",
 	},
+	KeyCommonCancelX: {
+		RU: "❌ Отмена", EN: "❌ Cancel", DE: "❌ Abbrechen", UK: "❌ Скасувати", AR: "❌ إلغاء",
+	},
+	KeyCommonDone: {
+		RU: "✅ Готово", EN: "✅ Done", DE: "✅ Fertig", UK: "✅ Готово", AR: "✅ تم",
+	},
+	KeyCommonNameSingleLineInvalid: {
+		RU: "⚠️ Имя должно быть в одну строку, 2-60 символов. Попробуй ещё раз:", EN: "⚠️ Name must be a single line, 2-60 characters. Try again:", DE: "⚠️ Der Name muss einzeilig sein, 2-60 Zeichen. Versuch es noch einmal:", UK: "⚠️ Ім'я має бути в один рядок, 2-60 символів. Спробуй ще раз:", AR: "⚠️ يجب أن يكون الاسم في سطر واحد، 2-60 حرفًا. حاول مرة أخرى:",
+	},
 }
