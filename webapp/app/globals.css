@@ -1,0 +1,114 @@
+@import 'tailwindcss';
+
+/* Telegram's own setting decides light/dark, not the OS: people run Telegram
+   dark on a light system all the time. lib/telegram.ts stamps data-theme on
+   <html>; nothing here keys off prefers-color-scheme. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme inline {
+  --color-plane: var(--plane);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
+
+  /* 12px cards: rounder reads as "app", sharper as "dashboard", and this lives
+     inside a phone app. */
+  --radius-card: 12px;
+  --radius-control: 8px;
+  --radius-mark: 4px;
+
+  /* 15px body, not 16: Telegram's own message text is 15–16px, and 15 is what
+     lets a two-column tile grid fit a 360px phone without clipping labels. */
+  --text-hero: 2.125rem;
+  --text-hero--line-height: 2.5rem;
+  --text-h1: 1.25rem;
+  --text-h1--line-height: 1.75rem;
+  --text-h2: 1.0625rem;
+  --text-h2--line-height: 1.5rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.375rem;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.125rem;
+  --text-micro: 0.6875rem;
+  --text-micro--line-height: 0.875rem;
+}
+
+/* Both palettes below were validated with the dataviz skill's checker against
+   these exact surfaces — #ffffff light, #212226 dark — not against the skill's
+   defaults. The dark steps are chosen, not an automatic flip of the light ones.
+   Re-run the validator before changing any value here. */
+:root {
+  color-scheme: light;
+  --plane: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #eef0f3; /* inset tracks, empty heatmap cells */
+  --ink: #0f1115; /* 18.9:1 */
+  --ink-2: #4b5158; /* 8.0:1 */
+  --ink-3: #868d95; /* 3.36:1 — the axis/label floor */
+  --line: rgba(15, 17, 21, 0.08);
+  --grid: #e8eaee;
+  /* 2.82:1 against white — below 3:1, which the validator flags. The relief is
+     mandatory, not optional: every accent mark carries a visible direct label
+     and the composition also has a table view. Darkening it to clear contrast
+     drops CVD separation from orange into the warning band, so this is the
+     better trade. */
+  --accent: #1baf7a;
+  --accent-soft: #e6f6ef;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --bad: #d03b3b;
+  /* Sequential, low→high. Magnitude is the only thing activities encode with
+     colour; identity is their own emoji. */
+  --seq-1: #5fcaa4;
+  --seq-2: #1baf7a;
+  --seq-3: #14855c;
+  --seq-4: #0d5c3f;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --plane: #17181b;
+  --surface: #212226;
+  --surface-2: #2b2d33;
+  --ink: #f2f4f7; /* 14.4:1 */
+  --ink-2: #a9b0b8; /* 7.3:1 */
+  --ink-3: #7c848d; /* 4.19:1 */
+  --line: rgba(255, 255, 255, 0.1);
+  --grid: #2b2d33;
+  --accent: #199e70;
+  --accent-soft: #16342a;
+  --good: #0ca30c;
+  --warn: #fab219;
+  --bad: #d03b3b;
+  --seq-1: #1a6a4f;
+  --seq-2: #17805d;
+  --seq-3: #199e70;
+  --seq-4: #5ad9a8;
+}
+
+html,
+body {
+  background: var(--plane);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  /* The WebView's rubber-band scroll gets read as swipe-to-close. */
+  overscroll-behavior-y: none;
+}
+
+/* Lay out against the *stable* viewport height, which lib/telegram.ts keeps in
+   --tg-vh. 100dvh is the fallback for a plain browser; plain 100vh in the iOS
+   Telegram WebView is the pre-collapse height and overflows. */
+.tg-shell {
+  min-height: var(--tg-vh, 100dvh);
+  padding-top: var(--tg-safe-top, 0px);
+  padding-bottom: max(var(--tg-safe-bottom, 0px), 2rem);
+}

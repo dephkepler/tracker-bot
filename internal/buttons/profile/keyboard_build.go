@@ -11,7 +11,10 @@ import (
 )
 
 // Inline labels are callback-routed, not text-matched, so translating them carries no routing risk (unlike reply buttons).
-func ProfileEntryInlineMenu(lang i18n.Lang, isAdmin bool) tgbotapi.InlineKeyboardMarkup {
+// miniAppURL empty hides the dashboard row entirely. That is the state before
+// the Mini App is registered with BotFather, and a button that opens nothing is
+// worse than no button.
+func ProfileEntryInlineMenu(lang i18n.Lang, isAdmin bool, miniAppURL string) tgbotapi.InlineKeyboardMarkup {
 	_ = isAdmin // kept for signature stability; Admin no longer shown here.
 	rows := [][]tgbotapi.InlineKeyboardButton{
 		buttonbuilder.IR(
@@ -31,6 +34,13 @@ func ProfileEntryInlineMenu(lang i18n.Lang, isAdmin bool) tgbotapi.InlineKeyboar
 		buttonbuilder.IR(
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonOnboarding), fmt.Sprintf("%s0", onboarding.CBGoto)),
 		),
+	}
+	if miniAppURL != "" {
+		// A URL button, not a callback: Telegram opens the link itself, so this
+		// never reaches the dispatcher and needs no routing.
+		rows = append(rows, buttonbuilder.IR(
+			buttonbuilder.IBURL(i18n.T(lang, i18n.KeyProfileButtonDashboard), miniAppURL),
+		))
 	}
 	return buttonbuilder.IK(rows...)
 }

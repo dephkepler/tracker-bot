@@ -96,16 +96,17 @@ const (
 )
 
 const (
-	KeyProfileTitle          = "profile.title"
-	KeyProfileLabelID        = "profile.label.id"
-	KeyProfileLabelName      = "profile.label.name"
-	KeyProfileLabelLanguage  = "profile.label.language"
-	KeyProfileLabelTimezone  = "profile.label.timezone"
-	KeyProfileLabelEmail     = "profile.label.email"
-	KeyProfileButtonTimezone = "profile.button.timezone"
-	KeyProfileButtonContact  = "profile.button.contact"
-	KeyProfileButtonRefresh  = "profile.button.refresh"
-	KeyProfileLoadFailed     = "profile.load_failed"
+	KeyProfileTitle           = "profile.title"
+	KeyProfileLabelID         = "profile.label.id"
+	KeyProfileLabelName       = "profile.label.name"
+	KeyProfileLabelLanguage   = "profile.label.language"
+	KeyProfileLabelTimezone   = "profile.label.timezone"
+	KeyProfileLabelEmail      = "profile.label.email"
+	KeyProfileButtonDashboard = "profile.button.dashboard"
+	KeyProfileButtonTimezone  = "profile.button.timezone"
+	KeyProfileButtonContact   = "profile.button.contact"
+	KeyProfileButtonRefresh   = "profile.button.refresh"
+	KeyProfileLoadFailed      = "profile.load_failed"
 
 	KeyProfileLanguagePrompt     = "profile.language.prompt"
 	KeyProfileLanguageInvalid    = "profile.language.invalid"

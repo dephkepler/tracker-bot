@@ -1,3 +1,13 @@
+# migrate and app share one image that only app used to build, so anything but
+# a full `up` (a lone `up migrate`, a `pull`) tried to fetch tracker-bot-app
+# from a registry and failed. Compose de-duplicates identical build blocks, so
+# naming it once here makes every consumer self-sufficient.
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: tracker-bot-app:latest
+
 services:
   db:
     image: postgres:16
@@ -14,7 +24,7 @@ services:
       retries: 10
 
   migrate:
-    image: tracker-bot-app:latest
+    <<: *app-image
     depends_on:
       db:
         condition: service_healthy
@@ -28,10 +38,7 @@ services:
     restart: "no"
 
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: tracker-bot-app:latest
+    <<: *app-image
     container_name: tracker-bot
     env_file:
       - .env
@@ -47,7 +54,44 @@ services:
       PASSWORD_DB: "tracker"
       NAME_DB: "tracker"
       TELEGRAM_BOT_DEBUG: "false"
+      WEB_ENABLED: "true"
+      WEB_ADDR: ":8090"
+      WEB_PUBLIC_ORIGIN: "https://${DASHBOARD_SITE:-132-243-194-137.sslip.io}:8443"
+      WEB_BOT_USERNAME: "${WEB_BOT_USERNAME:-stepbystep_trackerbot}"
+      WEB_MINIAPP_SHORT_NAME: "${WEB_MINIAPP_SHORT_NAME:-dashboard}"
+    # Documentation only: deliberately no `ports:` here. The dashboard API must
+    # be reachable through Caddy and nowhere else — publishing it would put an
+    # unauthenticated-looking HTTP surface straight on the public internet.
+    expose:
+      - "8090"
+    restart: unless-stopped
+
+  webapp:
+    build:
+      context: ./webapp
+      args:
+        NEXT_PUBLIC_API_BASE: /api
+        NEXT_PUBLIC_TG_LINK: "https://t.me/${WEB_BOT_USERNAME:-stepbystep_trackerbot}/${WEB_MINIAPP_SHORT_NAME:-dashboard}"
+    image: tracker-bot-webapp:latest
+    container_name: tracker-bot-webapp
+    depends_on:
+      - app
+    environment:
+      DASHBOARD_SITE: "${DASHBOARD_SITE:-132-243-194-137.sslip.io}"
+      CADDY_ACME_EMAIL: "${CADDY_ACME_EMAIL:-}"
+    ports:
+      # 80 is only for the ACME HTTP-01 challenge; 443 on this host belongs to
+      # an unrelated service, so TLS is served on 8443.
+      - "80:80"
+      - "8443:8443"
+    volumes:
+      # Must persist: issued certificates live here, and losing them re-issues
+      # on every recreate against Let's Encrypt's duplicate-certificate limit.
+      - caddy_data:/data
+      - caddy_config:/config
     restart: unless-stopped
 
 volumes:
   db_data:
+  caddy_data:
+  caddy_config:

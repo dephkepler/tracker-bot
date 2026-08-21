@@ -90,7 +90,7 @@ func (app *Application) Build(ctx context.Context) error {
 	}
 	roadmapaisvc := service.NewRoadmapAIService(roadmapRepo, llmRegistry)
 
-	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, adminsvc, challengesvc, roadmapsvc, roadmapaisvc, app.cfg.AdminUsername)
+	module := handlers.New(app.bot, entrysvc, provilesvc, tracksvc, timersvc, learningsvc, subscriptionsvc, adminsvc, challengesvc, roadmapsvc, roadmapaisvc, app.cfg.MiniAppURL(), app.cfg.AdminUsername)
 	app.dispatcher = dispatcher.New(app.bot, ctx, entrysvc, provilesvc, uistatesvc, module, module, module, module, module, module, module)
 	app.timerScheduler = scheduler.NewTimerScheduler(ctx, timersvc, module)
 	app.learningScheduler = scheduler.NewLearningScheduler(ctx, learningsvc, module)

@@ -143,4 +143,8 @@ var catalogProfile = map[string]entry{
 		UK: "✅ Часовий пояс встановлено: %s",
 		AR: "✅ تم ضبط المنطقة الزمنية على %s",
 	},
+
+	KeyProfileButtonDashboard: {
+		RU: "📊 Веб-версия", EN: "📊 Web version", DE: "📊 Web-Version", UK: "📊 Веб-версія", AR: "📊 نسخة الويب",
+	},
 }

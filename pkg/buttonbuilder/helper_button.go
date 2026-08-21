@@ -18,6 +18,14 @@ func RB(text string) tgbotapi.KeyboardButton {
 	return tgbotapi.NewKeyboardButton(text)
 }
 
+// IBURL opens a link instead of firing a callback. Telegram handles the tap
+// itself, so such a button never reaches the dispatcher and needs no callback
+// constant — which is what makes it the cheapest way to hang the Mini App off
+// an existing menu.
+func IBURL(text, url string) tgbotapi.InlineKeyboardButton {
+	return tgbotapi.NewInlineKeyboardButtonURL(text, url)
+}
+
 // sets RequestLocation so Telegram prompts the user to share their location when tapped
 func RBLocation(text string) tgbotapi.KeyboardButton {
 	btn := tgbotapi.NewKeyboardButton(text)

@@ -1,0 +1,63 @@
+# Deployed config. For a local preview of the static build, mount a simpler
+# Caddyfile with a bare ":port" site address instead — the ACME setup below only
+# makes sense against a real hostname.
+{
+	# Port 443 on this host belongs to an unrelated service, so TLS listens on
+	# 8443. The certificate is still a normal Let's Encrypt one: ACME validates
+	# over HTTP-01 on port 80, which is free, and a certificate is not tied to
+	# the port it is later served on. TLS-ALPN has to be disabled explicitly
+	# below, because that challenge would try 443.
+	http_port {$CADDY_HTTP_PORT:80}
+	https_port {$CADDY_HTTPS_PORT:8443}
+}
+
+{$DASHBOARD_SITE} {
+	tls {
+		issuer acme {
+			email {$CADDY_ACME_EMAIL}
+			disable_tlsalpn_challenge
+		}
+	}
+
+	encode zstd gzip
+
+	# The dashboard API lives in the bot process. Same origin as the page, so
+	# no CORS preflight doubles every request on a phone and no API URL is baked
+	# into the static bundle.
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:app:8090}
+	}
+	handle /healthz {
+		reverse_proxy {$API_UPSTREAM:app:8090}
+	}
+
+	handle {
+		root * /srv
+		# The export writes /track/index.html. Without try_files a hard load of
+		# a section path — which every Telegram deep link is — would 404.
+		try_files {path} {path}/index.html {path}.html /index.html
+		file_server
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		# Telegram Desktop and Web render Mini Apps in an iframe, so framing
+		# must stay allowed for Telegram's origins — X-Frame-Options DENY or
+		# frame-ancestors 'none' here yields a blank app with no error.
+		Content-Security-Policy "frame-ancestors https://web.telegram.org https://*.telegram.org"
+	}
+
+	# Hashed chunks are immutable; HTML never is, or a deploy leaves the old app
+	# running inside a WebView that caches aggressively.
+	@immutable path /_next/static/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+	@html path *.html /
+	header @html Cache-Control "no-cache"
+
+	log {
+		output stdout
+		format console
+	}
+}

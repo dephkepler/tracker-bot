@@ -43,13 +43,16 @@ type Module struct {
 	challengesvc    service.ChallengeService
 	roadmapsvc      service.RoadmapService
 	roadmapaisvc    service.RoadmapAIService
+	// empty miniAppURL means the Mini App is not registered yet, which hides
+	// the dashboard button rather than showing a dead one.
+	miniAppURL string
 	// empty adminUsername disables the admin feature entirely, not "matches everyone" — see IsAdmin.
 	adminUsername string
 }
 
 const adminUsersPageSize = 15
 
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, roadmapsvc service.RoadmapService, roadmapaisvc service.RoadmapAIService, adminUsername string) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, roadmapsvc service.RoadmapService, roadmapaisvc service.RoadmapAIService, miniAppURL, adminUsername string) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -62,6 +65,7 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		challengesvc:    challengesvc,
 		roadmapsvc:      roadmapsvc,
 		roadmapaisvc:    roadmapaisvc,
+		miniAppURL:      strings.TrimSpace(miniAppURL),
 		adminUsername:   strings.TrimPrefix(strings.TrimSpace(adminUsername), "@"),
 	}
 }
@@ -343,7 +347,7 @@ func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	text := profile.ProfileMenuText(ctx.Language, stats)
 
 	msg := tgbotapi.NewMessage(ctx.ChatID, text)
-	msg.ReplyMarkup = profile.ProfileEntryInlineMenu(ctx.Language, m.IsAdmin(ctx))
+	msg.ReplyMarkup = profile.ProfileEntryInlineMenu(ctx.Language, m.IsAdmin(ctx), m.miniAppURL)
 
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send profile menu failed")
