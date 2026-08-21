@@ -9,9 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// AdminRepository serves cross-domain reporting queries for the admin
-// screens (bot-wide overview, per-user drill-down) — deliberately separate
-// from EntryRepository, which only ever touches the users table.
+// deliberately separate from EntryRepository, which only ever touches the users table.
 type AdminRepository interface {
 	GetOverviewStats(ctx context.Context) (models.AdminOverviewStats, error)
 	GetUserDetail(ctx context.Context, dbUserID int64) (models.AdminUserDetail, error)
@@ -21,13 +19,11 @@ type adminRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewAdminRepository creates repository backed by pgx pool.
 func NewAdminRepository(db *pgxpool.Pool) AdminRepository {
 	return &adminRepository{db: db}
 }
 
-// GetOverviewStats aggregates bot-wide usage numbers with a handful of
-// simple counts — admin-only, low traffic, not worth a fancier single query.
+// admin-only, low traffic — not worth a fancier single query than these simple counts.
 func (r *adminRepository) GetOverviewStats(ctx context.Context) (models.AdminOverviewStats, error) {
 	var s models.AdminOverviewStats
 
@@ -50,8 +46,6 @@ func (r *adminRepository) GetOverviewStats(ctx context.Context) (models.AdminOve
 	return s, nil
 }
 
-// GetUserDetail loads one user's profile fields plus cross-domain usage
-// counts, for the admin's per-user drill-down.
 func (r *adminRepository) GetUserDetail(ctx context.Context, dbUserID int64) (models.AdminUserDetail, error) {
 	var d models.AdminUserDetail
 	q := `

@@ -9,25 +9,18 @@ import (
 	"tracker-bot/internal/repo"
 )
 
-// TimerService contains timer-related use-cases.
 type TimerService interface {
 	Activate(ctx context.Context, userID int64, intervalMin int) error
 	Stop(ctx context.Context, userID int64) error
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error)
 	MarkPromptSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error
 	RecordPromptAnswer(ctx context.Context, userID, activityID int64) error
-	// RecordPromptAnswerWithInterval stores the prompt answer as a session
-	// ending at endAt (the prompt's actual due time), not "now" — so a late
-	// answer still credits the window it was originally due for.
+	// credits the session to endAt (the prompt's original due time), not now — so a late answer still counts for the right window
 	RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int, endAt time.Time) error
 
-	// AddCustomInterval saves a user-defined timer interval (in addition to
-	// the built-in 15/30 min choices) so it shows up in the picker next to
-	// them. Adding an interval that already exists is a no-op.
+	// adding an interval that already exists is a no-op (enforced in the repo)
 	AddCustomInterval(ctx context.Context, userID int64, intervalMin int) error
-	// ListCustomIntervals returns the user's custom intervals, ascending.
 	ListCustomIntervals(ctx context.Context, userID int64) ([]int, error)
-	// RemoveCustomInterval deletes one previously added custom interval.
 	RemoveCustomInterval(ctx context.Context, userID int64, intervalMin int) error
 }
 
@@ -37,7 +30,6 @@ type timerService struct {
 	customTimerRepo repo.CustomTimerRepository
 }
 
-// NewTimerService creates timer service.
 func NewTimerService(timerRepo repo.TimerRepository, sessionRepo repo.SessionRepository, customTimerRepo repo.CustomTimerRepository) TimerService {
 	return &timerService{
 		timerRepo:       timerRepo,
@@ -46,11 +38,7 @@ func NewTimerService(timerRepo repo.TimerRepository, sessionRepo repo.SessionRep
 	}
 }
 
-// Activate enables timer and schedules next prompt. If a timer is already
-// running with the same interval, the existing schedule is kept as-is
-// instead of being restarted — this lets a newly selected activity join the
-// already-running countdown (e.g. adding a 4th activity mid-day) rather than
-// pushing every previously scheduled prompt back by a full interval.
+// if already running with the same interval, keeps the existing schedule instead of restarting it
 func (s *timerService) Activate(ctx context.Context, userID int64, intervalMin int) error {
 	if userID <= 0 {
 		return fmt.Errorf("activate timer: invalid userID")
@@ -73,7 +61,6 @@ func (s *timerService) Activate(ctx context.Context, userID int64, intervalMin i
 	return s.timerRepo.UpsertInterval(ctx, userID, intervalMin, nextPingAt)
 }
 
-// Stop disables timer for user.
 func (s *timerService) Stop(ctx context.Context, userID int64) error {
 	if userID <= 0 {
 		return fmt.Errorf("stop timer: invalid userID")
@@ -81,7 +68,6 @@ func (s *timerService) Stop(ctx context.Context, userID int64) error {
 	return s.timerRepo.Disable(ctx, userID)
 }
 
-// ListDueUsers returns users that should receive prompt now.
 func (s *timerService) ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error) {
 	if limit <= 0 {
 		limit = 100
@@ -89,16 +75,12 @@ func (s *timerService) ListDueUsers(ctx context.Context, now time.Time, limit in
 	return s.timerRepo.ListDueUsers(ctx, now.UTC(), limit)
 }
 
-// MarkPromptSent moves next prompt time forward by interval.
 func (s *timerService) MarkPromptSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error {
 	nextPingAt := now.UTC().Add(time.Duration(intervalMin) * time.Minute)
 	return s.timerRepo.SetNextPing(ctx, userID, nextPingAt)
 }
 
-// RecordPromptAnswer stores prompt answer using current timer interval from
-// settings, credited as ending now. Unused by the live prompt flow (which
-// always knows its own due time — see RecordPromptAnswerWithInterval) but
-// kept for interface completeness.
+// unused by the live prompt flow (see RecordPromptAnswerWithInterval); kept for interface completeness
 func (s *timerService) RecordPromptAnswer(ctx context.Context, userID, activityID int64) error {
 	intervalMin, err := s.timerRepo.GetInterval(ctx, userID)
 	if err != nil {
@@ -107,8 +89,6 @@ func (s *timerService) RecordPromptAnswer(ctx context.Context, userID, activityI
 	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt", time.Now().UTC())
 }
 
-// RecordPromptAnswerWithInterval stores prompt answer for explicit interval,
-// credited as ending at endAt (the prompt's actual due time).
 func (s *timerService) RecordPromptAnswerWithInterval(ctx context.Context, userID, activityID int64, intervalMin int, endAt time.Time) error {
 	if intervalMin <= 0 {
 		return fmt.Errorf("invalid interval")
@@ -119,7 +99,6 @@ func (s *timerService) RecordPromptAnswerWithInterval(ctx context.Context, userI
 	return s.sessionRepo.CreateRetroSession(ctx, userID, activityID, intervalMin, "prompt", endAt)
 }
 
-// AddCustomInterval validates and stores a new custom timer interval.
 func (s *timerService) AddCustomInterval(ctx context.Context, userID int64, intervalMin int) error {
 	if userID <= 0 {
 		return fmt.Errorf("add custom interval: invalid userID")
@@ -139,7 +118,6 @@ func (s *timerService) AddCustomInterval(ctx context.Context, userID int64, inte
 	return s.customTimerRepo.Create(ctx, userID, intervalMin)
 }
 
-// ListCustomIntervals returns the user's custom intervals, ascending.
 func (s *timerService) ListCustomIntervals(ctx context.Context, userID int64) ([]int, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf("list custom intervals: invalid userID")
@@ -152,7 +130,6 @@ func (s *timerService) ListCustomIntervals(ctx context.Context, userID int64) ([
 	return items, nil
 }
 
-// RemoveCustomInterval deletes one previously added custom interval.
 func (s *timerService) RemoveCustomInterval(ctx context.Context, userID int64, intervalMin int) error {
 	if userID <= 0 || intervalMin <= 0 {
 		return fmt.Errorf("remove custom interval: invalid args")

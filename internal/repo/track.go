@@ -21,6 +21,9 @@ type Activity struct {
 	Emoji      string
 	IsArchived bool
 	CreatedAt  time.Time
+	// TargetMinutes is nil until the user configures a daily target for
+	// this activity.
+	TargetMinutes *int
 }
 type TrackerRepository interface {
 	Create(ctx context.Context, userID int64, name, emoji string) (Activity, error)
@@ -32,6 +35,8 @@ type TrackerRepository interface {
 	ArchiveSelected(ctx context.Context, userID int64) (int64, error)
 	RestoreArchived(ctx context.Context, userID, activityID int64) error
 	DeleteArchivedForever(ctx context.Context, userID, activityID int64) error
+	// SetActivityTarget sets or updates one activity's daily time target.
+	SetActivityTarget(ctx context.Context, userID, activityID int64, minutes int) error
 	GetTodayStats(ctx context.Context, userID int64, tzName string) (time.Duration, int, error)
 	GetTodayActivities(ctx context.Context, userID int64, tzName string) ([]Activity, []time.Duration, []int, error)
 	GetPeriodActivities(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64) ([]Activity, []time.Duration, []int, time.Duration, int, error)
@@ -99,7 +104,7 @@ func (r *trackRepository) ListActive(ctx context.Context, userID int64) ([]Activ
 	}
 
 	q := `
-	SELECT id, user_id, name, emoji, is_archived, created_at
+	SELECT id, user_id, name, emoji, is_archived, created_at, target_minutes
 	FROM activities
 	WHERE user_id = $1 AND is_archived = false
 	ORDER BY lower(name), id;
@@ -115,7 +120,7 @@ func (r *trackRepository) ListActive(ctx context.Context, userID int64) ([]Activ
 	for rows.Next() {
 		var a Activity
 		if err := rows.Scan(
-			&a.ID, &a.UserID, &a.Name, &a.Emoji, &a.IsArchived, &a.CreatedAt,
+			&a.ID, &a.UserID, &a.Name, &a.Emoji, &a.IsArchived, &a.CreatedAt, &a.TargetMinutes,
 		); err != nil {
 			return nil, fmt.Errorf("list active scan: %w", err)
 		}
@@ -191,8 +196,9 @@ func (r *trackRepository) ListArchived(ctx context.Context, userID int64) ([]Act
 	return out, nil
 }
 
-// ToggleSelectedActive toggles one activity in user_selected_activities.
-// A transaction keeps ownership check and toggle operation atomic.
+// ToggleSelectedActive toggles by deleting first and inserting only if
+// nothing was deleted — avoids a separate read of current state. The
+// ownership check and the toggle share one tx to avoid a race between them.
 func (r *trackRepository) ToggleSelectedActive(ctx context.Context, userID, activityID int64) error {
 	if userID <= 0 || activityID <= 0 {
 		return fmt.Errorf("toggle selected: invalid ids")
@@ -204,7 +210,6 @@ func (r *trackRepository) ToggleSelectedActive(ctx context.Context, userID, acti
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	// 1) Ensure the activity belongs to this user and is active.
 	ownQ := `
 	SELECT EXISTS(
 		SELECT 1
@@ -219,7 +224,6 @@ func (r *trackRepository) ToggleSelectedActive(ctx context.Context, userID, acti
 		return errlocal.ErrActivityNotFound
 	}
 
-	// 2) Try to unselect first.
 	delQ := `
 	DELETE FROM user_selected_activities
 	WHERE user_id = $1 AND activity_id = $2;`
@@ -231,7 +235,6 @@ func (r *trackRepository) ToggleSelectedActive(ctx context.Context, userID, acti
 		return tx.Commit(ctx)
 	}
 
-	// 3) If nothing was deleted, select it.
 	insQ := `
 	INSERT INTO user_selected_activities(user_id, activity_id)
 	VALUES ($1, $2)
@@ -310,6 +313,29 @@ func (r *trackRepository) RestoreArchived(ctx context.Context, userID, activityI
 	tag, err := r.db.Exec(ctx, q, activityID, userID)
 	if err != nil {
 		return fmt.Errorf("restore archived exec: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errlocal.ErrActivityNotFound
+	}
+	return nil
+}
+
+func (r *trackRepository) SetActivityTarget(ctx context.Context, userID, activityID int64, minutes int) error {
+	if userID <= 0 || activityID <= 0 {
+		return fmt.Errorf("set activity target: invalid input")
+	}
+	q := `
+	UPDATE activities
+	SET target_minutes = $3
+	WHERE id = $1 AND user_id = $2;
+	`
+	tag, err := r.db.Exec(ctx, q, activityID, userID, minutes)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23514" { // check_violation
+			return errlocal.ErrActivityTargetInvalid
+		}
+		return fmt.Errorf("set activity target exec: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return errlocal.ErrActivityNotFound
@@ -592,10 +618,9 @@ func (r *trackRepository) GetPeriodBuckets(ctx context.Context, userID int64, fr
 	return buckets, durs, nil
 }
 
-// GetHourlyBucketsByActivity returns per-hour totals broken down by
-// activity, so a "By hours" report can show *what* was tracked in each
-// hour instead of just a total minute count. Rows are ordered by hour, then
-// by duration descending within that hour.
+// GetHourlyBucketsByActivity orders rows by hour, then duration descending
+// within each hour — callers rely on this order for display, it isn't
+// re-sorted downstream.
 func (r *trackRepository) GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, tzName string) ([]errlocal.HourActivityDuration, error) {
 	if userID <= 0 || len(activityIDs) == 0 {
 		return nil, nil
@@ -640,7 +665,7 @@ func (r *trackRepository) GetLastTrackedActiveActivity(ctx context.Context, user
 		return Activity{}, false, fmt.Errorf("last tracked active activity: invalid userID")
 	}
 	q := `
-	SELECT a.id, a.user_id, a.name, COALESCE(a.emoji, ''), a.is_archived, a.created_at
+	SELECT a.id, a.user_id, a.name, COALESCE(a.emoji, ''), a.is_archived, a.created_at, a.target_minutes
 	FROM activity_sessions s
 	JOIN activities a ON a.id = s.activity_id
 	WHERE s.user_id = $1
@@ -649,7 +674,7 @@ func (r *trackRepository) GetLastTrackedActiveActivity(ctx context.Context, user
 	LIMIT 1;
 	`
 	var a Activity
-	err := r.db.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.Name, &a.Emoji, &a.IsArchived, &a.CreatedAt)
+	err := r.db.QueryRow(ctx, q, userID).Scan(&a.ID, &a.UserID, &a.Name, &a.Emoji, &a.IsArchived, &a.CreatedAt, &a.TargetMinutes)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Activity{}, false, nil
 	}
@@ -711,9 +736,6 @@ func (r *trackRepository) GetTrackedDaysDescByActivity(ctx context.Context, user
 	return out, nil
 }
 
-// GetTrackedDaysInRange returns distinct local calendar days (across all
-// non-archived activities) that have at least one completed session
-// starting within [from, to) — used to build the "🔥 Heatmap" report.
 func (r *trackRepository) GetTrackedDaysInRange(ctx context.Context, userID int64, from, to time.Time, tzName string) ([]time.Time, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf("tracked days in range: invalid userID")

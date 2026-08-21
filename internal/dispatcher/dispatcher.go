@@ -12,6 +12,7 @@ import (
 	onboardingbtn "tracker-bot/internal/buttons/onboarding"
 	profilebtn "tracker-bot/internal/buttons/profile"
 	roadmapbtn "tracker-bot/internal/buttons/roadmap"
+	subscriptionbtn "tracker-bot/internal/buttons/subscription"
 	trackbtn "tracker-bot/internal/buttons/track"
 	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
@@ -37,12 +38,14 @@ type Dispatcher struct {
 	profile      *handlers.Module
 	learning     *handlers.Module
 	roadmap      *handlers.Module
+	// quizzes holds AI questions awaiting an answer — see quizstore.go for
+	// why this is not a userSession field.
+	quizzes   *pendingQuizzes
+	challenge *handlers.Module
 
 	reply   *h.ReplyModule
 	uistate service.UIStateService
 
-	// sessions holds all per-user in-memory state (screen, timezone, pending
-	// "waiting for X" flags, report scratch state) — see session.go.
 	sessions *sessionStore
 }
 
@@ -91,6 +94,7 @@ func New(
 	profile *handlers.Module,
 	learning *handlers.Module,
 	roadmap *handlers.Module,
+	challenge *handlers.Module,
 ) *Dispatcher {
 	if bot == nil {
 		log.Fatal().Msg("Dispatcher: nil bot interfaces.BotAPI")
@@ -112,14 +116,15 @@ func New(
 		profile:      profile,
 		learning:     learning,
 		roadmap:      roadmap,
+		challenge:    challenge,
 		sessions:     newSessionStore(),
+		quizzes:      newPendingQuizzes(),
 	}
 
-	d.reply = h.New(bot, track, subscription, entry, profile, learning, roadmap)
+	d.reply = h.New(bot, track, subscription, entry, profile, learning, roadmap, challenge)
 	return d
 }
 
-// Run listens for Telegram updates and routes them by update type.
 func (d *Dispatcher) Run() {
 	go d.sweepSessionsLoop()
 
@@ -139,8 +144,7 @@ func (d *Dispatcher) Run() {
 	}
 }
 
-// sweepSessionsLoop periodically evicts sessions for users who haven't
-// messaged the bot in a while, so this process's memory doesn't grow forever.
+// evicts sessions idle past maxIdle so this process's memory doesn't grow unbounded.
 func (d *Dispatcher) sweepSessionsLoop() {
 	const (
 		interval = time.Hour
@@ -158,7 +162,6 @@ func (d *Dispatcher) sweepSessionsLoop() {
 	}
 }
 
-// ensureUser creates/loads user in DB and stores DB id in context.
 func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbotapi.User) bool {
 	if from == nil {
 		return false
@@ -173,9 +176,7 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 	dbID, isNew, err := d.entrysvc.EnsureUser(ctx.Ctx, in)
 	if err != nil {
 		log.Error().Err(err).Msg("ensure user failed")
-		// Language isn't known yet at this point (loading it is further
-		// down, and failed here before we got there) — Default is the best
-		// we can do for this rare DB-error path.
+		// language isn't resolved yet at this failure point, so fall back to Default.
 		out := tgbotapi.NewMessage(chatID, i18n.T(i18n.Default, i18n.KeyCommonGenericError))
 		_, _ = d.bot.Send(out)
 		return false
@@ -186,9 +187,7 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 	sess := d.sessions.get(ctx.UserID)
 	sess.dbID = dbID
 
-	// Cold session (first message since process start/restart, or after an
-	// idle eviction) — restore the screen the user was actually on instead
-	// of defaulting to "".
+	// restore the persisted screen once per cold session; skip on every later message.
 	if !sess.screenLoaded && d.uistate != nil {
 		if screen, err := d.uistate.GetScreen(ctx.Ctx, dbID); err != nil {
 			log.Error().Err(err).Int64("user_id", dbID).Msg("load screen failed")
@@ -198,8 +197,6 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 		}
 	}
 
-	// Same cold-session treatment for the user's detected timezone and
-	// interface language — one GetProfileStats call covers both.
 	if (!sess.tzLoaded || !sess.langLoaded) && d.profilesvc != nil {
 		if stats, err := d.profilesvc.GetProfileStats(ctx.Ctx, ctx.UserID); err != nil {
 			log.Error().Err(err).Int64("user_id", ctx.UserID).Msg("load profile timezone/language failed")
@@ -219,13 +216,11 @@ func (d *Dispatcher) ensureUser(ctx *tgctx.MsgContext, chatID int64, from *tgbot
 	return true
 }
 
-// userLocation returns the resolved timezone for a user, falling back to
-// apptime.Location if they haven't shared their location yet.
+// falls back to apptime's default location until the user shares their real one.
 func (d *Dispatcher) userLocation(userID int64) *time.Location {
 	return apptime.Resolve(d.sessions.get(userID).tz)
 }
 
-// newMessageContext converts Telegram message into internal context.
 func (d *Dispatcher) newMessageContext(msg *tgbotapi.Message) *tgctx.MsgContext {
 	ctx := &tgctx.MsgContext{
 		Ctx:    d.appCtx,
@@ -240,7 +235,6 @@ func (d *Dispatcher) newMessageContext(msg *tgbotapi.Message) *tgctx.MsgContext 
 	return ctx
 }
 
-// handleMessage processes incoming text/command updates.
 func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 	if msg == nil || msg.From == nil {
 		return
@@ -252,13 +246,11 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 		return
 	}
 
-	// Waiting for a shared location to detect timezone (from ProfileCBEditTimeZone).
 	if sess := d.sessions.get(mctx.UserID); sess.waitingLocation {
 		if msg.Location != nil {
 			sess.waitingLocation = false
 			d.profile.ProcessLocationTimeZone(mctx, msg.Location.Latitude, msg.Location.Longitude)
-			// Timezone just changed — force the next message to re-read it
-			// from DB instead of using the now-stale cached value.
+			// timezone just changed — clear tzLoaded so the next message re-reads it from DB.
 			sess.tzLoaded = false
 			return
 		}
@@ -274,18 +266,16 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 		return
 	}
 
-	// Handle slash commands first, so they are not treated as plain reply button text.
+	// commands must be checked first, or they'd be treated as plain reply button text.
 	if msg.IsCommand() {
 		d.handleCommand(msg, mctx)
 		return
 	}
 
-	// Then handle temporary user states (e.g. waiting for activity name).
 	if d.handleUserState(mctx) {
 		return
 	}
 
-	// Then process reply keyboard buttons.
 	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonTrack {
 		d.setScreen(mctx.UserID, screenTrackMain)
 	}
@@ -295,15 +285,16 @@ func (d *Dispatcher) handleMessage(msg *tgbotapi.Message) {
 	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonRoadmap {
 		d.setScreen(mctx.UserID, screenRoadmapMain)
 	}
+	if key, ok := i18n.Key(mctx.Language, mctx.Text); ok && key == i18n.KeyEntryButtonChallenge {
+		d.setScreen(mctx.UserID, screenChallengeList)
+	}
 	if d.reply != nil && d.reply.HandleReplyButtons(mctx) {
 		return
 	}
 
-	// Fallback for regular text messages.
 	d.handleText(mctx)
 }
 
-// handleCallback processes incoming inline callback updates.
 func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 	if q == nil || q.Message == nil || q.From == nil {
 		return
@@ -326,9 +317,8 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 		return
 	}
 
-	// Shared "back to home" action used by every module's entry inline menu
-	// (Track/Profile/Subscription/Learning), not just Track — handled here
-	// rather than inside handleTrackCallback.
+	// go_home is shared by every module's entry menu, not just Track — handled here,
+	// not in handleTrackCallback.
 	if q.Data == "go_home" {
 		d.setScreen(mctx.UserID, screenHome)
 		d.entry.ShowHomeMenu(mctx)
@@ -352,10 +342,8 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 		return
 	}
 
-	// "back_to_main"/"noop" are used as raw literals (not "track:"-prefixed)
-	// by several inline keyboards in internal/buttons/track/keyboard_build.go.
-	// Without this they never reach handleTrackCallback below, so every
-	// inline "◀ Back" wired to back_to_main silently did nothing.
+	// back_to_main/noop are raw literals from track keyboards; without this branch,
+	// inline Back buttons wired to them silently do nothing.
 	if strings.HasPrefix(q.Data, "track:") || strings.HasPrefix(q.Data, "act_toggle_:") ||
 		q.Data == "back_to_main" || q.Data == "noop" {
 		d.handleTrackCallback(mctx, q.Data)
@@ -377,6 +365,11 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 		return
 	}
 
+	if q.Data == subscriptionbtn.SubscriptionCBOpen {
+		d.subscription.ShowSubscriptionMenu(mctx)
+		return
+	}
+
 	if strings.HasPrefix(q.Data, "onboarding:") {
 		d.handleOnboardingCallback(mctx, q.Data)
 		return
@@ -395,9 +388,7 @@ func (d *Dispatcher) handleCallback(q *tgbotapi.CallbackQuery) {
 	}
 }
 
-// handleAdminCallback routes admin-only inline callbacks: opening the admin
-// screen (e.g. from the Profile screen's "👑 Admin" button) and paging the
-// users list. Caller must have already checked entry.IsAdmin.
+// caller must have already checked entry.IsAdmin before calling this.
 func (d *Dispatcher) handleAdminCallback(ctx *tgctx.MsgContext, data string) {
 	switch {
 	case data == adminbtn.CBOpen:
@@ -438,7 +429,6 @@ func (d *Dispatcher) handleAdminCallback(ctx *tgctx.MsgContext, data string) {
 	}
 }
 
-// handleUserState handles temporary per-user states (FSM-like flow).
 func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 	sess := d.sessions.get(ctx.UserID)
 
@@ -465,11 +455,8 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 
 	if sess.waitingActivityName {
 		if d.isTrackButtonText(ctx) {
-			// A tap on a real nav/action button (Back, Home, ...) means the
-			// user changed their mind about typing a name — cancel the
-			// prompt and let it act like a normal button press, rather than
-			// blocking it with no way out. screenTrackManage is where
-			// "Create activity" was launched from, so Back lands there.
+			// nav-button tap cancels the prompt; screenTrackManage is where
+			// Create-activity was launched from.
 			sess.waitingActivityName = false
 			d.setScreen(ctx.UserID, screenTrackManage)
 			return false
@@ -483,15 +470,21 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 	}
 	if sess.waitingCustomTimerMinutes {
 		if d.isTrackButtonText(ctx) {
-			// Same reasoning as waitingActivityName above — let a real nav
-			// button tap cancel the prompt instead of dead-ending on it.
-			// Screen is already screenTrackTimer, which Back/Home both
-			// already handle correctly.
 			sess.waitingCustomTimerMinutes = false
 			return false
 		}
 		if d.track.ProcessCreateCustomTimer(ctx) {
 			sess.waitingCustomTimerMinutes = false
+		}
+		return true
+	}
+	if sess.waitingTrackTargetMinutes {
+		if d.isTrackButtonText(ctx) {
+			sess.waitingTrackTargetMinutes = false
+			return false
+		}
+		if d.track.ProcessSetActivityTarget(ctx, sess.pendingTrackTargetActivityID) {
+			sess.waitingTrackTargetMinutes = false
 		}
 		return true
 	}
@@ -506,16 +499,15 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		}
 		if d.profile.ProcessLanguageSelection(ctx) {
 			sess.waitingLanguage = false
-			// Language just changed — force the next message to re-read it
-			// from DB instead of using the now-stale cached value.
+			// language just changed — clear langLoaded so the next message re-reads it from DB.
 			sess.langLoaded = false
 		}
 		return true
 	}
 	if sess.waitingChallengeName {
-		if ctx.Text == challengebtn.ReplyCancel {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
 			sess.waitingChallengeName = false
-			hide := tgbotapi.NewMessage(ctx.ChatID, "❌ Cancelled.")
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
 			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 			_, _ = d.bot.Send(hide)
 			d.setScreen(ctx.UserID, screenChallengeList)
@@ -677,6 +669,22 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		d.roadmap.ProcessAddRoadmapCards(ctx, sess.roadmapID)
 		return true
 	}
+	if sess.waitingRoadmapAICards {
+		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonDone {
+			sess.waitingRoadmapAICards = false
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapAddCardsDoneNotice))
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			d.roadmap.ShowRoadmapDetail(ctx, sess.roadmapID, false)
+			return true
+		}
+		// Detached for the same reason as the other model calls, and the
+		// flag stays set: the user may paste several messages before Done.
+		cctx := *ctx
+		roadmapID := sess.roadmapID
+		go d.roadmap.ProcessRoadmapAIPaste(&cctx, roadmapID)
+		return true
+	}
 	if sess.waitingRoadmapRename {
 		if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
 			sess.waitingRoadmapRename = false
@@ -704,10 +712,32 @@ func (d *Dispatcher) handleUserState(ctx *tgctx.MsgContext) bool {
 		return true
 	}
 
+	// An open quiz question claims the next message, but only once every
+	// waiting flow above has passed on it: a quiz has no flag of its own, so
+	// checking it earlier would let a stale question swallow a prompt's
+	// answer. An expired question falls through to normal routing (see
+	// pendingQuizzes.take).
+	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok && key == i18n.KeyCommonCancelX {
+		// Without this the word "Cancel" would be graded as an answer.
+		if _, pending := d.quizzes.take(ctx.DBUserID, apptime.Now()); pending {
+			hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonCancelled))
+			hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+			_, _ = d.bot.Send(hide)
+			return true
+		}
+	}
+	if quiz, ok := d.quizzes.take(ctx.DBUserID, apptime.Now()); ok {
+		working := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyRoadmapAIQuizWorking))
+		working.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
+		_, _ = d.bot.Send(working)
+		cctx := *ctx
+		go d.roadmap.GradeRoadmapQuiz(&cctx, quiz)
+		return true
+	}
+
 	return false
 }
 
-// handleCommand routes slash commands.
 func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext) {
 	cmd := msg.Command()
 
@@ -745,11 +775,9 @@ func (d *Dispatcher) handleCommand(msg *tgbotapi.Message, ctx *tgctx.MsgContext)
 	}
 }
 
-// handleText routes plain text based on current screen and reply buttons.
 func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
-	// Timer interval buttons carry their minutes in the button text itself
-	// ("⏱ 15 min" / "🗑 15 min") rather than through inline callback_data —
-	// checked here, gated by screen, before the exact-match switch below.
+	// timer buttons encode minutes in their text, not callback_data;
+	// checked here, gated by screen, before the switch below.
 	if d.isScreen(ctx.UserID, screenTrackTimer) {
 		if minutes, ok := trackbtn.ParseTimerButtonMinutes(ctx.Language, ctx.Text, trackbtn.TrackTimerActivatePrefix); ok {
 			d.track.ActivateTrackTimer(ctx, minutes)
@@ -765,7 +793,6 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 	}
 
-	// Learning review-push interval picker.
 	if d.isScreen(ctx.UserID, screenLearningTimer) {
 		if minutes, ok := learningbtn.ParsePushIntervalButtonMinutes(ctx.Text); ok {
 			d.setScreen(ctx.UserID, screenLearningMain)
@@ -782,7 +809,6 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 	}
 
-	// Roadmap reminder-interval picker.
 	if d.isScreen(ctx.UserID, screenRoadmapTimer) {
 		if minutes, ok := roadmapbtn.ParsePushIntervalButtonMinutes(ctx.Text); ok {
 			d.setScreen(ctx.UserID, screenRoadmapMain)
@@ -799,10 +825,8 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 		}
 	}
 
-	// Buttons whose text is translated (see internal/i18n) can't be matched
-	// as literal switch cases below — resolve to a stable key first (see
-	// handleTranslatedButton). Falls through to the literal-text switch for
-	// buttons not yet converted (Admin's "👥 Users").
+	// i18n-translated button text won't match the literal switch cases below;
+	// resolve via i18n.Key first.
 	if key, ok := i18n.Key(ctx.Language, ctx.Text); ok {
 		if d.handleTranslatedButton(ctx, key) {
 			return
@@ -841,11 +865,6 @@ func (d *Dispatcher) handleText(ctx *tgctx.MsgContext) {
 	}
 }
 
-// handleTranslatedButton routes a reply-button tap that resolved to a
-// stable i18n key (see i18n.Key) rather than literal Go-constant text.
-// Returns false when key isn't one of the buttons handled here, so the
-// caller falls through to the literal-text switch for buttons not yet
-// localized (Reports, Admin's "👥 Users").
 func (d *Dispatcher) handleTranslatedButton(ctx *tgctx.MsgContext, key string) bool {
 	switch key {
 	case i18n.KeyCommonAdmin:
@@ -950,7 +969,6 @@ func (d *Dispatcher) handleTranslatedButton(ctx *tgctx.MsgContext, key string) b
 	return false
 }
 
-// handleTrackCallback routes track-related inline callbacks.
 func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 	sess := d.sessions.get(ctx.UserID)
 
@@ -1111,6 +1129,14 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 			return
 		}
 		d.track.HandleTrackToggleCallback(ctx)
+	case strings.HasPrefix(data, trackbtn.TrackCBActivityTarget):
+		id, ok := parseCallbackID(data, trackbtn.TrackCBActivityTarget)
+		if !ok {
+			return
+		}
+		sess.waitingTrackTargetMinutes = true
+		sess.pendingTrackTargetActivityID = id
+		d.track.PromptSetActivityTarget(ctx, id)
 	case strings.HasPrefix(data, trackbtn.TrackCBHeatmapDay):
 		raw := strings.TrimPrefix(data, trackbtn.TrackCBHeatmapDay)
 		day, err := apptime.ParseDay(raw, d.userLocation(ctx.UserID))
@@ -1123,7 +1149,6 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 	}
 }
 
-// handleLearningCallback routes learning-related inline callbacks.
 func (d *Dispatcher) handleLearningCallback(ctx *tgctx.MsgContext, data string) {
 	sess := d.sessions.get(ctx.UserID)
 
@@ -1322,6 +1347,34 @@ func (d *Dispatcher) handleRoadmapCallback(ctx *tgctx.MsgContext, data string) {
 		sess.waitingRoadmapCards = true
 		sess.roadmapID = id
 		d.roadmap.PromptAddRoadmapCards(ctx, id, false)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBAIPlan):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBAIPlan)
+		if !ok {
+			return
+		}
+		// Model calls run detached: Run processes updates serially, so doing
+		// this inline would stall every user's bot for up to two minutes.
+		// The copy is because the goroutine outlives this update.
+		cctx := *ctx
+		go d.roadmap.HandleRoadmapAIPlan(&cctx, id)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBAIPaste):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBAIPaste)
+		if !ok {
+			return
+		}
+		sess.waitingRoadmapAICards = true
+		sess.roadmapID = id
+		d.roadmap.PromptRoadmapAIPaste(ctx)
+	case strings.HasPrefix(data, roadmapbtn.RoadmapCBAIQuiz):
+		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBAIQuiz)
+		if !ok {
+			return
+		}
+		cctx := *ctx
+		dbID := ctx.DBUserID
+		go d.roadmap.AskRoadmapQuiz(&cctx, id, func(quiz models.RoadmapQuiz) {
+			d.quizzes.put(dbID, quiz, apptime.Now())
+		})
 	case strings.HasPrefix(data, roadmapbtn.RoadmapCBSetCriteria):
 		id, ok := parseCallbackID(data, roadmapbtn.RoadmapCBSetCriteria)
 		if !ok {
@@ -1440,7 +1493,6 @@ func (d *Dispatcher) cancelRoadmapPrompt(ctx *tgctx.MsgContext) {
 	_, _ = d.bot.Send(hide)
 }
 
-// handleChallengeCallback routes challenge-related inline callbacks.
 // handleOnboardingCallback routes the "here's what you can do" tour's
 // navigation. Stateless — the step lives entirely in the callback data, no
 // session field needed.
@@ -1458,6 +1510,7 @@ func (d *Dispatcher) handleOnboardingCallback(ctx *tgctx.MsgContext, data string
 	}
 }
 
+// handleChallengeCallback routes challenge-related inline callbacks.
 func (d *Dispatcher) handleChallengeCallback(ctx *tgctx.MsgContext, data string) {
 	sess := d.sessions.get(ctx.UserID)
 
@@ -1575,8 +1628,6 @@ func (d *Dispatcher) handleChallengeCallback(ctx *tgctx.MsgContext, data string)
 	}
 }
 
-// parseChallengeDayPayload splits a "<prefix><challengeID>:<2006-01-02>"
-// callback payload into its parts.
 func parseChallengeDayPayload(data, prefix string, loc *time.Location) (challengeID int64, day time.Time, ok bool) {
 	raw := strings.TrimPrefix(data, prefix)
 	parts := strings.SplitN(raw, ":", 2)
@@ -1594,22 +1645,14 @@ func parseChallengeDayPayload(data, prefix string, loc *time.Location) (challeng
 	return id, day, true
 }
 
-// replyUseButtons sends a guard message when user is out of current flow.
 func (d *Dispatcher) replyUseButtons(ctx *tgctx.MsgContext) {
 	_, _ = d.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonUseButtons)))
 }
 
-// isTrackButtonText checks if text belongs to a known nav/action button, so
-// a "waiting for free text" flow (activity name, custom timer minutes, ...)
-// can tell a stray button tap from actual input.
 func (d *Dispatcher) isTrackButtonText(ctx *tgctx.MsgContext) bool {
 	if ctx.Text == adminbtn.ReplyButtonUsers {
 		return true
 	}
-	// Covers every translated nav/action button (Back/Home, Activate/
-	// Delete, Timer Create/Delete, View Archive, Select Activity, Admin,
-	// Today, Calendar) — see handleTranslatedButton for the full set this
-	// key space spans.
 	if _, ok := i18n.Key(ctx.Language, ctx.Text); ok {
 		return true
 	}
@@ -1622,7 +1665,6 @@ func (d *Dispatcher) isTrackButtonText(ctx *tgctx.MsgContext) bool {
 	return false
 }
 
-// ensurePeriodDefaults sets initial period report dates for user.
 func (d *Dispatcher) ensurePeriodDefaults(userID int64) {
 	loc := d.userLocation(userID)
 	sess := d.sessions.get(userID)
@@ -1635,8 +1677,7 @@ func (d *Dispatcher) ensurePeriodDefaults(userID int64) {
 	d.getReportSelected(userID)
 }
 
-// setScreen stores current UI screen for user, in memory and persisted so it
-// survives a bot restart.
+// also persisted to DB (when uistate/dbID available) so the screen survives a bot restart.
 func (d *Dispatcher) setScreen(userID int64, screen string) {
 	sess := d.sessions.get(userID)
 	sess.screen = screen
@@ -1649,7 +1690,6 @@ func (d *Dispatcher) setScreen(userID int64, screen string) {
 	}
 }
 
-// isScreen checks whether current screen is one of allowed values.
 func (d *Dispatcher) isScreen(userID int64, allowed ...string) bool {
 	current := d.sessions.get(userID).screen
 	for _, s := range allowed {
@@ -1660,7 +1700,6 @@ func (d *Dispatcher) isScreen(userID int64, allowed ...string) bool {
 	return false
 }
 
-// calendarMonth returns current calendar month or now if empty.
 func (d *Dispatcher) calendarMonth(userID int64) time.Time {
 	m := d.sessions.get(userID).reportCalMonth
 	if m.IsZero() {
@@ -1669,19 +1708,16 @@ func (d *Dispatcher) calendarMonth(userID int64) time.Time {
 	return m
 }
 
-// showPeriodMenu redraws period report menu.
 func (d *Dispatcher) showPeriodMenu(ctx *tgctx.MsgContext) {
 	sess := d.sessions.get(ctx.UserID)
 	d.track.ShowPeriodMenu(ctx, d.getReportSelected(ctx.UserID), sess.reportCalMonth, sess.reportFrom, sess.reportTo)
 }
 
-// showPeriodCalendar redraws period calendar view.
 func (d *Dispatcher) showPeriodCalendar(ctx *tgctx.MsgContext) {
 	sess := d.sessions.get(ctx.UserID)
 	d.track.ShowPeriodCalendar(ctx, sess.reportCalMonth, sess.reportCalFrom, sess.reportCalTo)
 }
 
-// getReportSelected returns selected activity map for user.
 func (d *Dispatcher) getReportSelected(userID int64) map[int64]bool {
 	sess := d.sessions.get(userID)
 	if sess.reportSelected == nil {
@@ -1690,7 +1726,6 @@ func (d *Dispatcher) getReportSelected(userID int64) map[int64]bool {
 	return sess.reportSelected
 }
 
-// parseDateRange parses "YYYY-MM-DD..YYYY-MM-DD".
 func parseDateRange(s string) (time.Time, time.Time, error) {
 	parts := strings.Split(strings.TrimSpace(s), "..")
 	if len(parts) != 2 {
@@ -1710,7 +1745,6 @@ func parseDateRange(s string) (time.Time, time.Time, error) {
 	return from, to, nil
 }
 
-// selectedIDs converts selected map to slice of ids.
 func selectedIDs(m map[int64]bool) []int64 {
 	out := make([]int64, 0, len(m))
 	for id, ok := range m {
@@ -1721,7 +1755,6 @@ func selectedIDs(m map[int64]bool) []int64 {
 	return out
 }
 
-// toggleSelected toggles selected state for one id.
 func toggleSelected(m map[int64]bool, id int64) {
 	m[id] = !m[id]
 	if !m[id] {
@@ -1729,7 +1762,6 @@ func toggleSelected(m map[int64]bool, id int64) {
 	}
 }
 
-// parseCallbackID extracts int64 id from callback by prefix.
 func parseCallbackID(data, prefix string) (int64, bool) {
 	idRaw := strings.TrimPrefix(data, prefix)
 	id, err := strconv.ParseInt(idRaw, 10, 64)
@@ -1739,14 +1771,12 @@ func parseCallbackID(data, prefix string) (int64, bool) {
 	return id, true
 }
 
-// sameDay checks whether two dates are the same day.
 func sameDay(a, b time.Time) bool {
 	ay, am, ad := a.Date()
 	by, bm, bd := b.Date()
 	return ay == by && am == bm && ad == bd
 }
 
-// closeInlineMenu clears inline keyboard and replaces message text.
 func (d *Dispatcher) closeInlineMenu(ctx *tgctx.MsgContext, text string) {
 	if ctx.MessageID <= 0 {
 		return

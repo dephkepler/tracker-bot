@@ -3,9 +3,10 @@ package models
 import "errors"
 
 var (
-	ErrActivityExists   = errors.New("activity already exists")
-	ErrActivityNotFound = errors.New("activity not found")
-	ErrForbidden        = errors.New("forbidden")
+	ErrActivityExists        = errors.New("activity already exists")
+	ErrActivityNotFound      = errors.New("activity not found")
+	ErrActivityTargetInvalid = errors.New("activity target must be between 1 and 1440 minutes")
+	ErrForbidden             = errors.New("forbidden")
 
 	ErrUserExists   = errors.New("user already exists")
 	ErrUserNotFound = errors.New("user not found")
@@ -27,10 +28,16 @@ var (
 	ErrChallengeInvalidRange = errors.New("challenge must be 1-100 days, end date on or after start date")
 	ErrChallengeDayNotFound  = errors.New("challenge day not found")
 
-	ErrRoadmapExists           = errors.New("roadmap already exists")
-	ErrRoadmapNotFound         = errors.New("roadmap not found")
-	ErrRoadmapCardNotFound     = errors.New("roadmap card not found")
-	ErrRoadmapNoCardsParsed    = errors.New("no non-empty card lines found")
+	ErrRoadmapExists        = errors.New("roadmap already exists")
+	ErrRoadmapNotFound      = errors.New("roadmap not found")
+	ErrRoadmapCardNotFound  = errors.New("roadmap card not found")
+	ErrRoadmapNoCardsParsed = errors.New("no non-empty card lines found")
+	// ErrRoadmapAIDisabled means no LLM provider is configured. Callers
+	// show the manual path instead — the feature is off, not broken.
+	ErrRoadmapAIDisabled = errors.New("roadmap ai is not configured")
+	// ErrRoadmapAIEmptyResult is a well-formed reply that contained nothing
+	// usable, e.g. a generated plan with zero cards.
+	ErrRoadmapAIEmptyResult    = errors.New("roadmap ai returned nothing usable")
 	ErrRoadmapInvalidInterval  = errors.New("roadmap push interval must be between 1 and 1440 minutes")
 	ErrRoadmapInvalidName      = errors.New("roadmap name must be 2-60 characters, single line")
 	ErrRoadmapCriteriaTooLong  = errors.New("mastery criteria must be at most 200 characters")
@@ -68,4 +75,11 @@ const MaxCustomTimersPerUser = 5
 const (
 	MinCustomTimerMinutes = 1
 	MaxCustomTimerMinutes = 360
+)
+
+// MinActivityTargetMinutes and MaxActivityTargetMinutes: keep in sync with
+// chk_activity_target_minutes_range in migrations/0013_activity_target.up.sql.
+const (
+	MinActivityTargetMinutes = 1
+	MaxActivityTargetMinutes = 1440
 )

@@ -1,8 +1,6 @@
 package i18n
 
-// catalogTrack holds the Track main screen, activity management, timer, and
-// archive. Reports (Today/Calendar/Period) is a separate later phase — not
-// in this file.
+// Reports (Today/Calendar/Period) keys live in a separate catalog file, not here.
 var catalogTrack = map[string]entry{
 	KeyTrackButtonSelectActivity: {
 		RU: "📂 Активности", EN: "📂 Activities", DE: "📂 Aktivitäten", UK: "📂 Активності", AR: "📂 الأنشطة",
@@ -77,6 +75,29 @@ var catalogTrack = map[string]entry{
 	},
 	KeyTrackLoadFailed: {
 		RU: "⚠️ Не удалось загрузить данные трекера. Попробуй ещё раз.", EN: "⚠️ Failed to load tracking data. Please try again.", DE: "⚠️ Tracking-Daten konnten nicht geladen werden. Bitte versuch es noch einmal.", UK: "⚠️ Не вдалося завантажити дані трекера. Спробуй ще раз.", AR: "⚠️ تعذّر تحميل بيانات التتبع. حاول مرة أخرى.",
+	},
+
+	KeyTrackActivityTargetPromptFmt: {
+		RU: "🎯 Задай дневной таргет времени для *%s*. Отправь число минут (1-1440):",
+		EN: "🎯 Set a daily time target for *%s*. Send a number of minutes (1-1440):",
+		DE: "🎯 Lege ein tägliches Zeitziel für *%s* fest. Sende eine Anzahl Minuten (1-1440):",
+		UK: "🎯 Задай денний таргет часу для *%s*. Надішли число хвилин (1-1440):",
+		AR: "🎯 حدِّد هدفًا زمنيًا يوميًا لـ *%s*. أرسل عدد الدقائق (1-1440):",
+	},
+	KeyTrackActivityTargetInvalid: {
+		RU: "⚠️ Введи число от 1 до 1440.", EN: "⚠️ Enter a number between 1 and 1440.", DE: "⚠️ Gib eine Zahl zwischen 1 und 1440 ein.", UK: "⚠️ Введи число від 1 до 1440.", AR: "⚠️ أدخل رقمًا بين 1 و1440.",
+	},
+	KeyTrackActivityTargetSavedFmt: {
+		RU: "✅ Таргет установлен: %d мин для *%s*.", EN: "✅ Target set: %d min for *%s*.", DE: "✅ Ziel festgelegt: %d Min für *%s*.", UK: "✅ Таргет встановлено: %d хв для *%s*.", AR: "✅ تم تحديد الهدف: %d دقيقة لـ *%s*.",
+	},
+	KeyTrackActivityTargetSaveFailed: {
+		RU: "⚠️ Не удалось сохранить таргет. Попробуй ещё раз.", EN: "⚠️ Failed to save the target. Please try again.", DE: "⚠️ Ziel konnte nicht gespeichert werden. Bitte versuch es noch einmal.", UK: "⚠️ Не вдалося зберегти таргет. Спробуй ще раз.", AR: "⚠️ تعذّر حفظ الهدف. حاول مرة أخرى.",
+	},
+	KeyTrackActivityTargetButtonSetFmt: {
+		RU: "🎯 %d мин", EN: "🎯 %d min", DE: "🎯 %d Min", UK: "🎯 %d хв", AR: "🎯 %d د",
+	},
+	KeyTrackActivityTargetButtonUnset: {
+		RU: "🎯 Задать таргет", EN: "🎯 Set target", DE: "🎯 Ziel setzen", UK: "🎯 Задати таргет", AR: "🎯 تحديد الهدف",
 	},
 
 	KeyTrackCreatePrompt: {

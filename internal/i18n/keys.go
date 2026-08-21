@@ -1,62 +1,105 @@
 package i18n
 
-// Key constants name every translatable string in catalog (see the
-// catalog_*.go files). Other packages should always reference these
-// constants rather than the raw dot-namespaced key strings — same reason
-// button/callback constants are exported everywhere else in this codebase:
-// one typo-proof source of truth.
-//
-// Filled in phase by phase (see doc/vps-deploy.md-style commit history —
-// each phase covers one part of the UI and is deployed before the next).
-// Phase 1: common strings + Entry (Home) screen + Profile screen.
-// Phase 2: Track main screen, activity management, timer, archive.
-// Phase 3: Reports (Today/Calendar/Period).
+// Two keys with identical display text in the same language collide in the
+// reverse i18n.Key() lookup the dispatcher uses to match reply-keyboard taps
+// (see TestCatalog_NoTextCollisionsWithinLanguage) — reuse an existing key
+// instead of adding a duplicate.
 
-// Common — shared across many screens, not tied to one feature.
 const (
 	KeyCommonBack           = "common.back"
 	KeyCommonHome           = "common.home"
 	KeyCommonCancel         = "common.cancel"
 	KeyCommonCancelled      = "common.cancelled"
-	KeyCommonAdmin          = "common.admin"      // "👑 Admin" — identical button in Entry and Profile
-	KeyCommonChallenges     = "common.challenges" // "🎯 Challenges" entry point (Profile screen)
-	KeyCommonOnboarding     = "common.onboarding" // "🎓 How it works" entry point (Profile screen)
+	KeyCommonAdmin          = "common.admin"
+	KeyCommonOnboarding     = "common.onboarding"
 	KeyCommonUnknownCommand = "common.unknown_command"
 	KeyCommonHelpText       = "common.help_text"
-	KeyCommonFallback       = "common.fallback" // catch-all "I don't know what to do with that"
+	KeyCommonFallback       = "common.fallback"
 	KeyCommonGenericError   = "common.generic_error"
 	KeyCommonUseButtons     = "common.use_buttons"
 
-	// KeyCommonCancelX/KeyCommonDone are shared by the Learning/Challenge/
-	// Admin screens added after the original i18n phases — same ❌/✅ style
-	// buttons, reused here rather than redefined per domain to avoid text
-	// collisions (see TestCatalog_NoTextCollisionsWithinLanguage).
-	KeyCommonCancelX = "common.cancel_x" // "❌ Cancel" — distinct from KeyCommonCancel's "✖️ Cancel"
-	KeyCommonDone    = "common.done"     // "✅ Done"
+	KeyCommonCancelX = "common.cancel_x"
+	KeyCommonDone    = "common.done"
 
-	// KeyCommonNameSingleLineInvalid is a shared generic message reused
-	// verbatim by Learning and Challenge. "Failed to load archive." is
-	// likewise shared, but reuses the pre-existing KeyTrackArchiveLoadFailed
-	// rather than a new key (identical text, avoids a collision).
 	KeyCommonNameSingleLineInvalid = "common.name_single_line_invalid"
 )
 
-// Entry (Home) screen.
 const (
 	KeyEntryButtonProfile      = "entry.button.profile"
 	KeyEntryButtonTrack        = "entry.button.track"
 	KeyEntryButtonLearning     = "entry.button.learning"
 	KeyEntryButtonRoadmap      = "entry.button.roadmap"
+	KeyEntryButtonChallenge    = "entry.button.challenge"
 	KeyEntryButtonSubscription = "entry.button.subscription"
 	KeyEntryWelcome            = "entry.welcome"
 )
 
-// Profile screen.
+// Challenges — 🎯 set a goal for N days and check off each day. Promoted
+// from a Profile-screen inline sub-menu to a top-level main-menu feature
+// (KeyEntryButtonChallenge above), and localized for the first time here —
+// the module was previously entirely hardcoded English.
+//
+// Shared buttons are deliberately NOT redefined here: "◀ Back"/"🏠 Home"/
+// "❌ Cancel"/"Cancelled." reuse KeyCommonBack/KeyCommonHome/
+// KeyCommonCancelX/KeyCommonCancelled; the day-mark "✅ Done" button reuses
+// KeyCommonDone; name validation reuses KeyCommonNameSingleLineInvalid;
+// archive restore/delete reuse KeyTrackLabelRestore/
+// KeyTrackLabelDeleteForever; "Failed to load archive." reuses
+// KeyTrackArchiveLoadFailed; and the date-range calendar reuses Track's
+// KeyTrackCalendarMon..Sun/Month01..12 (month/weekday names),
+// KeyTrackLabelConfirmRange and KeyTrackLabelSelectEndDate — two keys
+// rendering the same text would collide in the reverse index Key() depends
+// on (see TestCatalog_NoTextCollisionsWithinLanguage).
+const (
+	KeyChallengeButtonCreate      = "challenge.button.create"
+	KeyChallengeButtonArchive     = "challenge.button.archive"
+	KeyChallengeButtonArchiveThis = "challenge.button.archive_this"
+	KeyChallengeButtonSkip        = "challenge.button.skip"
+
+	KeyChallengeListTitleFmt   = "challenge.list.title_fmt" // "🎯 *Challenges* — %d active"
+	KeyChallengeListEmpty      = "challenge.list.empty"
+	KeyChallengeListLoadFailed = "challenge.list.load_failed"
+	KeyChallengeItemLabelFmt   = "challenge.list.item_label_fmt"    // "🎯 %s — %d%% (%d/%d)"
+	KeyChallengeArchiveItemFmt = "challenge.archive.item_label_fmt" // "📦 %s — %d/%d done"
+
+	KeyChallengeNotFound     = "challenge.not_found"
+	KeyChallengeLoadFailed   = "challenge.load_failed"
+	KeyChallengeDayNotFound  = "challenge.day.not_found"
+	KeyChallengeGridTitleFmt = "challenge.grid.title_fmt"
+
+	// The day-detail screen: status line, then the proportions "donut",
+	// trend strip, and streak — all appended above the existing Done/Skip
+	// buttons, not replacing them.
+	KeyChallengeDayStatusUnmarked    = "challenge.day.status_unmarked"
+	KeyChallengeDayStatusDoneText    = "challenge.day.status_done"
+	KeyChallengeDayStatusSkippedText = "challenge.day.status_skipped"
+	KeyChallengeDayHeaderFmt         = "challenge.day.header_fmt"      // "🎯 *%s*\n\n%s — %s."
+	KeyChallengeDayProportionsFmt    = "challenge.day.proportions_fmt" // "✅ Done %d%%   ❌ Skipped %d%%   🔲 Left %d%%"
+	KeyChallengeDayTrendLabelFmt     = "challenge.day.trend_label_fmt" // "📈 Trend (last %d days):"
+	KeyChallengeDayStreakFmt         = "challenge.day.streak_fmt"      // "🔥 Current streak: %d days   🏆 Best: %d days"
+	KeyChallengeDayMarkPrompt        = "challenge.day.mark_prompt"
+
+	KeyChallengeArchiveTitleFmt = "challenge.archive.title_fmt"
+	KeyChallengeArchiveEmpty    = "challenge.archive.empty"
+
+	KeyChallengeCreateNamePrompt     = "challenge.create.name_prompt"
+	KeyChallengeCreateRangeIntro     = "challenge.create.range_intro"
+	KeyChallengeCreateCalendarHeader = "challenge.create.calendar_header"
+	KeyChallengeCreateExists         = "challenge.create.exists"
+	KeyChallengeCreateInvalidRange   = "challenge.create.invalid_range"
+	KeyChallengeCreateFailed         = "challenge.create.failed"
+	KeyChallengeCreatedFmt           = "challenge.create.created_fmt"
+
+	KeyChallengePushTextFmt       = "challenge.push.text_fmt"
+	KeyChallengePushMarkedDone    = "challenge.push.marked_done"
+	KeyChallengePushMarkedSkipped = "challenge.push.marked_skipped"
+)
+
 const (
 	KeyProfileTitle          = "profile.title"
 	KeyProfileLabelID        = "profile.label.id"
 	KeyProfileLabelName      = "profile.label.name"
-	KeyProfileLabelLanguage  = "profile.label.language" // shared with the "🌐 Language" button — same text
+	KeyProfileLabelLanguage  = "profile.label.language"
 	KeyProfileLabelTimezone  = "profile.label.timezone"
 	KeyProfileLabelEmail     = "profile.label.email"
 	KeyProfileButtonTimezone = "profile.button.timezone"
@@ -77,27 +120,18 @@ const (
 	KeyProfileTimezoneSaved        = "profile.timezone.saved"
 )
 
-// Track — nav buttons and labels (main screen, activity manage, archive,
-// timer). Reply-keyboard buttons here (KeyTrackButtonBack/BackHome/
-// ActivityActivate/ActivityDelete/TimerCreate/TimerDelete) are matched by
-// the dispatcher via i18n.Key, same as the Phase 1 ones.
 const (
 	KeyTrackButtonSelectActivity = "track.button.select_activity"
 	KeyTrackButtonCreateActivity = "track.button.create_activity"
 	KeyTrackButtonViewReports    = "track.button.view_reports"
 	KeyTrackButtonViewArchive    = "track.button.view_archive"
 
-	// Back/Home reply buttons on Track/Timer/Archive screens render the
-	// exact same text as everywhere else in the app — reuse
-	// KeyCommonBack/KeyCommonHome rather than redefining them here (two
-	// keys mapping to identical text would collide in the reverse index
-	// Key() depends on; see TestCatalog_NoTextCollisionsWithinLanguage).
 	KeyTrackButtonActivityActivate = "track.button.activity_activate"
 	KeyTrackButtonActivityDelete   = "track.button.activity_delete"
 	KeyTrackButtonTimerCreate      = "track.button.timer_create"
 	KeyTrackButtonTimerDelete      = "track.button.timer_delete"
 
-	KeyTrackLabelBack             = "track.label.back" // inline "↩️ Back"
+	KeyTrackLabelBack             = "track.label.back"
 	KeyTrackLabelOpenActivities   = "track.label.open_activities"
 	KeyTrackLabelOpenArchive      = "track.label.open_archive"
 	KeyTrackLabelCreateAnother    = "track.label.create_another"
@@ -112,69 +146,78 @@ const (
 	KeyTrackMainTodayTime       = "track.main.today_time"
 	KeyTrackMainStreak          = "track.main.streak"
 	KeyTrackMainTodayCount      = "track.main.today_count"
-	KeyTrackMainProgress        = "track.main.progress" // "Progress: %s (%d%%, target %s)"
+	KeyTrackMainProgress        = "track.main.progress"
 	KeyTrackLoadFailed          = "track.main.load_failed"
 
+	// Per-activity daily target — the 🎯 button on the activity list
+	// (internal/buttons/track/keyboard_build.go's TrackActivitiesInlineMenu)
+	// and its numeric-input flow.
+	KeyTrackActivityTargetPromptFmt    = "track.activity.target_prompt_fmt"
+	KeyTrackActivityTargetInvalid      = "track.activity.target_invalid"
+	KeyTrackActivityTargetSavedFmt     = "track.activity.target_saved_fmt"
+	KeyTrackActivityTargetSaveFailed   = "track.activity.target_save_failed"
+	KeyTrackActivityTargetButtonSetFmt = "track.activity.target_button_set_fmt"
+	KeyTrackActivityTargetButtonUnset  = "track.activity.target_button_unset"
+
 	KeyTrackCreatePrompt        = "track.create.prompt"
-	KeyTrackCreatePromptBlocked = "track.create.prompt_blocked" // typed while a nav button was expected instead
+	KeyTrackCreatePromptBlocked = "track.create.prompt_blocked"
 	KeyTrackCreateEmptyName     = "track.create.empty_name"
 	KeyTrackCreateAlreadyExists = "track.create.already_exists"
 	KeyTrackCreateFailed        = "track.create.failed"
-	KeyTrackCreateConfirmed     = "track.create.confirmed" // "Created: %s"
+	KeyTrackCreateConfirmed     = "track.create.confirmed"
 
 	KeyTrackManageMenuClosed    = "track.manage.menu_closed"
 	KeyTrackManageLoadFailed    = "track.manage.load_failed"
-	KeyTrackManageEmpty         = "track.manage.empty"        // "No activities yet. Create one first."
-	KeyTrackManageSelectTitle   = "track.manage.select_title" // "📂 Select Activity\n\nSelected: %d of %d"
-	KeyTrackInvalidActivityID   = "track.invalid_activity_id" // shared by activity toggle and prompt-answer flows
+	KeyTrackManageEmpty         = "track.manage.empty"
+	KeyTrackManageSelectTitle   = "track.manage.select_title"
+	KeyTrackInvalidActivityID   = "track.invalid_activity_id"
 	KeyTrackManageToggleFailed  = "track.manage.toggle_failed"
 	KeyTrackManageRefreshFailed = "track.manage.refresh_failed"
 	KeyTrackManageDeleteFailed  = "track.manage.delete_failed"
-	KeyTrackManageDeleted       = "track.manage.deleted" // "🗑 Deleted: %d"
+	KeyTrackManageDeleted       = "track.manage.deleted"
 
 	KeyTrackArchiveFailed              = "track.archive.archive_failed"
 	KeyTrackArchiveNoneSelected        = "track.archive.none_selected"
-	KeyTrackArchived                   = "track.archive.archived" // "📦 Archived: %d"
+	KeyTrackArchived                   = "track.archive.archived"
 	KeyTrackArchiveLoadFailed          = "track.archive.load_failed"
 	KeyTrackArchiveEmpty               = "track.archive.empty"
-	KeyTrackArchiveTitle               = "track.archive.title" // "🗄 Archive\n\nTotal archived: %d"
+	KeyTrackArchiveTitle               = "track.archive.title"
 	KeyTrackArchiveInvalidItem         = "track.archive.invalid_item"
 	KeyTrackArchiveRestoreFailed       = "track.archive.restore_failed"
-	KeyTrackArchiveRestored            = "track.archive.restored" // "♻ Activity restored: %s"
+	KeyTrackArchiveRestored            = "track.archive.restored"
 	KeyTrackArchiveDeleteForeverFailed = "track.archive.delete_forever_failed"
-	KeyTrackArchiveDeletedForever      = "track.archive.deleted_forever" // "🗑 Deleted forever: %s"
+	KeyTrackArchiveDeletedForever      = "track.archive.deleted_forever"
 
-	// KeyTrackMinutesUnit is the abbreviated unit word used in timer button
-	// text ("⏱ 15 min" / "⏱ 15 мин") — see FormatTimerButton/
-	// ParseTimerButtonMinutes in internal/buttons/track.
+	// KeyTrackMinutesUnit is machine-parsed by ParseTimerButtonMinutes
+	// (internal/buttons/track) — the abbreviation format matters, not just
+	// how it displays.
 	KeyTrackMinutesUnit             = "track.timer.minutes_unit"
 	KeyTrackTimerPickerTitle        = "track.timer.picker_title"
 	KeyTrackTimerCustomPrompt       = "track.timer.custom_prompt"
-	KeyTrackTimerPromptBlocked      = "track.timer.prompt_blocked" // typed while a nav button was expected instead
+	KeyTrackTimerPromptBlocked      = "track.timer.prompt_blocked"
 	KeyTrackTimerNoneToDelete       = "track.timer.none_to_delete"
 	KeyTrackTimerPickToDelete       = "track.timer.pick_to_delete"
 	KeyTrackTimerNotANumber         = "track.timer.not_a_number"
-	KeyTrackTimerOutOfRange         = "track.timer.out_of_range" // "Interval must be between %d and %d minutes."
+	KeyTrackTimerOutOfRange         = "track.timer.out_of_range"
 	KeyTrackTimerLimitReached       = "track.timer.limit_reached"
 	KeyTrackTimerSaveFailed         = "track.timer.save_failed"
-	KeyTrackTimerAdded              = "track.timer.added" // "✅ Custom timer added: %d min"
+	KeyTrackTimerAdded              = "track.timer.added"
 	KeyTrackTimerDeleteFailed       = "track.timer.delete_failed"
-	KeyTrackTimerRemoved            = "track.timer.removed" // "🗑 Custom timer removed: %d min"
+	KeyTrackTimerRemoved            = "track.timer.removed"
 	KeyTrackTimerLoadSelectedFailed = "track.timer.load_selected_failed"
 	KeyTrackTimerNoneSelected       = "track.timer.none_selected"
 	KeyTrackTimerActivateFailed     = "track.timer.activate_failed"
-	KeyTrackTimerActivated          = "track.timer.activated" // "✅ Timer activated: every %d min"
+	KeyTrackTimerActivated          = "track.timer.activated"
 	KeyTrackTimerStopFailed         = "track.timer.stop_failed"
 	KeyTrackTimerStopped            = "track.timer.stopped"
 
-	KeyTrackPromptQuestion        = "track.prompt.question" // "What are you doing now?"
+	KeyTrackPromptQuestion        = "track.prompt.question"
 	KeyTrackPromptInvalidPayload  = "track.prompt.invalid_payload"
 	KeyTrackPromptInvalidInterval = "track.prompt.invalid_interval"
 	KeyTrackPromptSaveFailed      = "track.prompt.save_failed"
-	KeyTrackPromptSaved           = "track.prompt.saved" // "Saved ✅\nActivity: %s\nTime: %s-%s (%d min)"
+	KeyTrackPromptSaved           = "track.prompt.saved"
 )
 
-// Reports (Today/Calendar/Period).
 const (
 	KeyTrackButtonToday    = "track.button.today"
 	KeyTrackButtonCalendar = "track.button.calendar"
@@ -186,14 +229,16 @@ const (
 	KeyTrackLabelChartReport        = "track.label.chart_report"
 	KeyTrackLabelSelectActivities   = "track.label.select_activities"
 	KeyTrackLabelBuildChart         = "track.label.build_chart"
-	KeyTrackLabelRangePrefix        = "track.label.range_prefix" // "🗓 Range: %s"
+	KeyTrackLabelRangePrefix        = "track.label.range_prefix"
 	KeyTrackLabelConfirmRange       = "track.label.confirm_range"
 	KeyTrackLabelSelectEndDate      = "track.label.select_end_date"
-	// KeyTrackCalendarCancel is distinct from KeyCommonCancel — the
-	// calendar's cancel button has always been plain "Cancel", no ✖️, so
-	// reusing the common key would visibly change it.
+	// KeyTrackCalendarCancel is deliberately distinct from KeyCommonCancel:
+	// the calendar's Cancel has always been plain "Cancel", no ✖️ — reusing
+	// the common key would silently change that text.
 	KeyTrackCalendarCancel = "track.calendar.cancel"
-	KeyTrackCalendarMonth  = "track.calendar.month" // static placeholder between ◀/▶
+	// KeyTrackCalendarMonth is a static filler label between ◀/▶, not an
+	// actual month name — those are KeyTrackCalendarMonth01..12 below.
+	KeyTrackCalendarMonth = "track.calendar.month"
 
 	KeyTrackCalendarMon = "track.calendar.weekday.mon"
 	KeyTrackCalendarTue = "track.calendar.weekday.tue"
@@ -220,54 +265,53 @@ const (
 
 	KeyTrackHeatmapTitle       = "track.reports.heatmap.title"
 	KeyTrackHeatmapLegend      = "track.reports.heatmap.legend"
-	KeyTrackHeatmapDaysTracked = "track.reports.heatmap.days_tracked" // "%d of %d days tracked"
+	KeyTrackHeatmapDaysTracked = "track.reports.heatmap.days_tracked"
 	KeyTrackHeatmapHint        = "track.reports.heatmap.hint"
 
 	KeyTrackHeatmapDayTrackedHeader = "track.reports.heatmap.day.tracked_header"
 	KeyTrackHeatmapDayNoActivity    = "track.reports.heatmap.day.no_activity"
-	KeyTrackHeatmapDayActivityLine  = "track.reports.heatmap.day.activity_line" // "• %s — %s (%d)\n"
+	KeyTrackHeatmapDayActivityLine  = "track.reports.heatmap.day.activity_line"
 	KeyTrackHeatmapDayReviewsHeader = "track.reports.heatmap.day.reviews_header"
 	KeyTrackHeatmapDayNoReviews     = "track.reports.heatmap.day.no_reviews"
-	KeyTrackHeatmapDayReviewLine    = "track.reports.heatmap.day.review_line" // "%s %s → %s\n"
+	KeyTrackHeatmapDayReviewLine    = "track.reports.heatmap.day.review_line"
 
 	KeyTrackTodayChartLoadFailed = "track.reports.today_chart.load_failed"
 	KeyTrackTodayChartEmpty      = "track.reports.today_chart.empty"
 	KeyTrackTodayChartTitle      = "track.reports.today_chart.title"
-	// KeyTrackTodayChartActivityLine has no session count, unlike
-	// KeyTrackPeriodChartActivityLine below — today's chart never shows it.
-	KeyTrackTodayChartActivityLine = "track.reports.today_chart.activity_line" // "%s\n%s %s (%s)\n\n"
+	// KeyTrackTodayChartActivityLine has no session-count arg, unlike
+	// KeyTrackPeriodChartActivityLine below — don't reuse one's formatting
+	// code for the other, the arg counts differ.
+	KeyTrackTodayChartActivityLine = "track.reports.today_chart.activity_line"
 
 	KeyTrackTodaySelectTitle = "track.reports.today_select.title"
 
 	KeyTrackPeriodMenuLoadFailed = "track.reports.period_menu.load_failed"
-	KeyTrackPeriodMenuTitle      = "track.reports.period_menu.title" // "📅 Period Report\nSelected: %d activities\nRange: %s"
+	KeyTrackPeriodMenuTitle      = "track.reports.period_menu.title"
 
 	KeyTrackPeriodTextFailed        = "track.reports.period_text.failed"
 	KeyTrackPeriodTextTitle         = "track.reports.period_text.title"
-	KeyTrackPeriodRangeLine         = "track.reports.period.range_line" // "Range: %s..%s\n"
+	KeyTrackPeriodRangeLine         = "track.reports.period.range_line"
 	KeyTrackPeriodScopeSelected     = "track.reports.period.scope_selected"
 	KeyTrackPeriodScopeAll          = "track.reports.period.scope_all"
-	KeyTrackPeriodTotalsLine        = "track.reports.period.totals_line" // "Total: %s\nSessions: %d\n\n"
+	KeyTrackPeriodTotalsLine        = "track.reports.period.totals_line"
 	KeyTrackPeriodNoSessions        = "track.reports.period.no_sessions"
-	KeyTrackPeriodTextActivityLine  = "track.reports.period_text.activity_line" // "%d) %s - %s (%s, %d)\n"
+	KeyTrackPeriodTextActivityLine  = "track.reports.period_text.activity_line"
 	KeyTrackPeriodChartFailed       = "track.reports.period_chart.failed"
 	KeyTrackPeriodChartEmpty        = "track.reports.period_chart.empty"
 	KeyTrackPeriodChartTitle        = "track.reports.period_chart.title"
-	KeyTrackPeriodChartActivityLine = "track.reports.period_chart.activity_line" // "%s\n%s %s (%s, %d)\n\n"
+	KeyTrackPeriodChartActivityLine = "track.reports.period_chart.activity_line"
 
-	KeyTrackCalendarPickTitle = "track.reports.calendar.pick_title" // "📅 Pick period days\nFrom: %s\nTo: %s"
+	KeyTrackCalendarPickTitle = "track.reports.calendar.pick_title"
 
 	KeyTrackGranularityByMonths   = "track.reports.granularity.by_months"
 	KeyTrackGranularityByDays     = "track.reports.granularity.by_days"
 	KeyTrackGranularityByHours    = "track.reports.granularity.by_hours"
-	KeyTrackGranularityBucketLine = "track.reports.granularity.bucket_line" // "- %s: %s\n"
+	KeyTrackGranularityBucketLine = "track.reports.granularity.bucket_line"
 	KeyTrackPeriodRangeInvalidFmt = "track.reports.period.invalid_format"
-	KeyTrackPeriodRangeSetConfirm = "track.reports.period.range_set" // "Range set: %s..%s"
+	KeyTrackPeriodRangeSetConfirm = "track.reports.period.range_set"
 	KeyTrackCalendarPickBothDays  = "track.reports.calendar.pick_both_days"
 )
 
-// Learning — collections of word pairs reviewed on a spaced-repetition
-// schedule. Phase 4a.
 const (
 	KeyLearningButtonCreateCollection = "learning.button.create_collection"
 	KeyLearningButtonStartReviews     = "learning.button.start_reviews"
@@ -280,47 +324,45 @@ const (
 	KeyLearningButtonAddWords         = "learning.button.add_words"
 	KeyLearningButtonRename           = "learning.button.rename"
 	KeyLearningButtonArchiveThis      = "learning.button.archive_this"
-	KeyLearningButtonToggleOnFmt      = "learning.button.toggle_on_fmt"  // "🟢 %s — %d words"
-	KeyLearningButtonToggleOffFmt     = "learning.button.toggle_off_fmt" // "⚪ %s — %d words"
+	KeyLearningButtonToggleOnFmt      = "learning.button.toggle_on_fmt"
+	KeyLearningButtonToggleOffFmt     = "learning.button.toggle_off_fmt"
 	KeyLearningButtonShowAnswer       = "learning.button.show_answer"
-	// Anki-style four-level grading (see models.LearningGrade), replacing a
-	// plain knew-it/missed-it binary.
 	KeyLearningButtonAgain            = "learning.button.grade_again"
 	KeyLearningButtonHard             = "learning.button.grade_hard"
 	KeyLearningButtonGood             = "learning.button.grade_good"
 	KeyLearningButtonEasy             = "learning.button.grade_easy"
 	KeyLearningLabelIncludedInReviews = "learning.label.included_in_reviews"
 	KeyLearningLabelExcludedReviews   = "learning.label.excluded_from_reviews"
-	KeyLearningArchiveItemFmt         = "learning.label.archive_item_fmt" // "📦 %s — %d words"
+	KeyLearningArchiveItemFmt         = "learning.label.archive_item_fmt"
 
 	KeyLearningMenuTitle           = "learning.menu.title"
 	KeyLearningMenuTotalWords      = "learning.menu.total_words"
 	KeyLearningMenuDueToday        = "learning.menu.due_today"
 	KeyLearningMenuLearned         = "learning.menu.learned"
-	KeyLearningMenuStreak          = "learning.menu.streak"         // "🔥 Streak: *%d* day(s)"
-	KeyLearningMenuReviewsActive   = "learning.menu.reviews_active" // "🕐 Reviews: every *%d* min (next in %s)"
+	KeyLearningMenuStreak          = "learning.menu.streak"
+	KeyLearningMenuReviewsActive   = "learning.menu.reviews_active"
 	KeyLearningMenuReviewsInactive = "learning.menu.reviews_inactive"
 	KeyLearningLoadFailed          = "learning.load_failed"
 
-	KeyLearningReviewPickManageTitle = "learning.review_pick.manage_title" // "🔧 *Manage reviews*\n\nRunning every *%d* min. %d collection(s) selected — tap to include/exclude, changes apply immediately."
+	KeyLearningReviewPickManageTitle = "learning.review_pick.manage_title"
 	KeyLearningReviewPickEmptyTitle  = "learning.review_pick.empty_title"
-	KeyLearningReviewPickTitle       = "learning.review_pick.title" // "🎲 *Pick collections for reviews*\n\n%d selected. Tap to include/exclude, then Continue."
+	KeyLearningReviewPickTitle       = "learning.review_pick.title"
 	KeyLearningReviewPickNeedOne     = "learning.review_pick.need_one"
 
 	KeyLearningStatsTitle          = "learning.stats.title"
-	KeyLearningStatsAccuracy       = "learning.stats.accuracy" // "🎯 Accuracy: *%.0f%%* (%d/%d reviews)"
+	KeyLearningStatsAccuracy       = "learning.stats.accuracy"
 	KeyLearningStatsNoReviews      = "learning.stats.no_reviews"
 	KeyLearningStatsByCollection   = "learning.stats.by_collection"
-	KeyLearningStatsCollectionLine = "learning.stats.collection_line" // "• %s — %d words, %d due, %d learned\n"
+	KeyLearningStatsCollectionLine = "learning.stats.collection_line"
 	KeyLearningStatsLoadFailed     = "learning.stats.load_failed"
 
-	KeyLearningRenamePrompt = "learning.rename.prompt"    // "✏️ Send a new name for *%s* (2-60 characters, single line):"
-	KeyLearningRenamed      = "learning.rename.confirmed" // "✅ Renamed to *%s*."
+	KeyLearningRenamePrompt = "learning.rename.prompt"
+	KeyLearningRenamed      = "learning.rename.confirmed"
 	KeyLearningRenameFailed = "learning.rename.failed"
 
 	KeyLearningWordBaseTitle      = "learning.word_base.title"
 	KeyLearningWordBaseEmpty      = "learning.word_base.empty"
-	KeyLearningCollectionDetail   = "learning.collection.detail_title" // "📚 *%s* — %d word(s)"
+	KeyLearningCollectionDetail   = "learning.collection.detail_title"
 	KeyLearningCollectionNotFound = "learning.collection.not_found"
 	KeyLearningCollectionsFailed  = "learning.collection.load_failed"
 	KeyLearningWordsLoadFailed    = "learning.word.load_failed"
@@ -331,14 +373,14 @@ const (
 	KeyLearningCreateTooLong   = "learning.create.too_long"
 	KeyLearningCreateExists    = "learning.create.exists"
 	KeyLearningCreateFailed    = "learning.create.failed"
-	KeyLearningCreateConfirmed = "learning.create.confirmed" // "📚 Collection *%s* created!"
+	KeyLearningCreateConfirmed = "learning.create.confirmed"
 
 	KeyLearningAddWordsPromptFirst = "learning.add_words.prompt_first"
 	KeyLearningAddWordsPromptMore  = "learning.add_words.prompt_more"
 	KeyLearningAddWordsNoneParsed  = "learning.add_words.none_parsed"
 	KeyLearningAddWordsFailed      = "learning.add_words.failed"
-	KeyLearningAddWordsAdded       = "learning.add_words.added"   // "✅ Added %d word(s)."
-	KeyLearningAddWordsSkipped     = "learning.add_words.skipped" // " (%d line(s) skipped — couldn't parse.)"
+	KeyLearningAddWordsAdded       = "learning.add_words.added"
+	KeyLearningAddWordsSkipped     = "learning.add_words.skipped"
 	KeyLearningAddWordsDoneNotice  = "learning.add_words.done_notice"
 
 	KeyLearningArchiveTitle = "learning.archive.title"
@@ -346,34 +388,26 @@ const (
 
 	KeyLearningReviewIntervalPrompt = "learning.review.interval_prompt"
 	KeyLearningReviewActivateFailed = "learning.review.activate_failed"
-	KeyLearningReviewActivated      = "learning.review.activated"  // "🎲 Reviews activated — a word every %d min."
-	KeyLearningReviewCardTitle      = "learning.review.card_title" // "🧠 *%s*\n\n%s"
-	KeyLearningReviewRevealed       = "learning.review.revealed"   // "🧠 *%s*\n\n%s\n→ *%s*"
+	KeyLearningReviewActivated      = "learning.review.activated"
+	KeyLearningReviewCardTitle      = "learning.review.card_title"
+	KeyLearningReviewRevealed       = "learning.review.revealed"
 	KeyLearningReviewLearned        = "learning.review.graded_learned"
-	KeyLearningReviewCorrect        = "learning.review.graded_correct" // Good
-	KeyLearningReviewHardConfirm    = "learning.review.graded_hard"
-	KeyLearningReviewEasyConfirm    = "learning.review.graded_easy"
-	KeyLearningReviewMissed         = "learning.review.graded_missed" // Again
-	// KeyLearningReviewMissedMinutes/KeyLearningReviewHardConfirmMinutes are
-	// the minute-granularity variants used when the next review is under a
-	// day away (Again always, Hard on a still-new word — see
-	// service.reviewDelay), instead of misleadingly saying "tomorrow"/"in
-	// N day(s)" for a word due back in 10-15 minutes.
+	// KeyLearningReviewCorrect is shown for the "Good" grade — the key name
+	// doesn't match the Again/Hard/Good/Easy grading labels above.
+	KeyLearningReviewCorrect     = "learning.review.graded_correct"
+	KeyLearningReviewHardConfirm = "learning.review.graded_hard"
+	KeyLearningReviewEasyConfirm = "learning.review.graded_easy"
+	// KeyLearningReviewMissed is shown for the "Again" grade — same
+	// name/label mismatch as KeyLearningReviewCorrect above.
+	KeyLearningReviewMissed = "learning.review.graded_missed"
+	// KeyLearningReviewMissedMinutes/KeyLearningReviewHardConfirmMinutes
+	// replace Missed/HardConfirm when the next review lands under a day
+	// away (see service.reviewDelay) — otherwise the message would
+	// misleadingly say "tomorrow" for a review due in 10-15 minutes.
 	KeyLearningReviewMissedMinutes      = "learning.review.graded_missed_minutes"
 	KeyLearningReviewHardConfirmMinutes = "learning.review.graded_hard_minutes"
 )
 
-// Roadmap — up to models.MaxRoadmapsPerUser technologies being learned,
-// each with a free-text mastery goal and a checklist of freeform cards,
-// nudged by a periodic digest push. Phase 4b.
-//
-// Shared buttons are deliberately NOT redefined here: "◀ Back"/"🏠 Home"/
-// "✅ Done"/"❌ Cancel" reuse KeyCommonBack/KeyCommonHome/KeyCommonDone/
-// KeyCommonCancelX, name validation reuses KeyCommonNameSingleLineInvalid,
-// archive restore/delete reuse KeyTrackLabelRestore/KeyTrackLabelDeleteForever,
-// and "✏️ Rename" reuses KeyLearningButtonRename — two keys rendering the
-// same text would collide in the reverse index Key() depends on (see
-// TestCatalog_NoTextCollisionsWithinLanguage).
 // Roadmap — a three-level learning plan: a goal ("reach mid-level"), the
 // technologies feeding it, and a checklist of cards under each technology.
 //
@@ -498,4 +532,26 @@ const (
 	KeyRoadmapStatsNoGoalHeader = "roadmap.stats.no_goal_header"
 	KeyRoadmapStatsEmpty        = "roadmap.stats.empty"
 	KeyRoadmapStatsLoadFailed   = "roadmap.stats.load_failed"
+
+	// Roadmap AI. Every one of these only ever renders when a provider is
+	// configured — with AI off the buttons are not drawn at all, so there is
+	// no "feature unavailable" string among them beyond the race guard.
+	KeyRoadmapButtonAIPlan    = "roadmap.ai.button.plan"
+	KeyRoadmapButtonAIPaste   = "roadmap.ai.button.paste"
+	KeyRoadmapButtonAIQuiz    = "roadmap.ai.button.quiz"
+	KeyRoadmapButtonQuizDone  = "roadmap.ai.button.quiz_done"
+	KeyRoadmapAIWorking       = "roadmap.ai.working"
+	KeyRoadmapAIQuizWorking   = "roadmap.ai.quiz_working"
+	KeyRoadmapAIFailed        = "roadmap.ai.failed"
+	KeyRoadmapAIEmpty         = "roadmap.ai.empty"
+	KeyRoadmapAIDisabled      = "roadmap.ai.disabled"
+	KeyRoadmapAIPlanAddedFmt  = "roadmap.ai.plan_added_fmt"
+	KeyRoadmapAIRejectedFmt   = "roadmap.ai.rejected_fmt"
+	KeyRoadmapAIPastePrompt   = "roadmap.ai.paste_prompt"
+	KeyRoadmapAIQuizPromptFmt = "roadmap.ai.quiz_prompt_fmt"
+	KeyRoadmapAIQuizCorrect   = "roadmap.ai.quiz_correct"
+	KeyRoadmapAIQuizPartial   = "roadmap.ai.quiz_partial"
+	KeyRoadmapAIQuizWrong     = "roadmap.ai.quiz_wrong"
+	KeyRoadmapAIQuizGradeFmt  = "roadmap.ai.quiz_grade_fmt"
+	KeyRoadmapAIDigestHintFmt = "roadmap.ai.digest_hint_fmt"
 )

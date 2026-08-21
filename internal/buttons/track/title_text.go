@@ -8,7 +8,6 @@ import (
 	"tracker-bot/internal/models"
 )
 
-// Main screen
 type TrackMainStats struct {
 	CurrentActivityName string
 	TodayTrackedTime    string
@@ -16,7 +15,6 @@ type TrackMainStats struct {
 	CurrentStreakDays   string
 }
 
-// Activity report
 type TrackActivityReportStats struct {
 	ActivityStartDate    string
 	ConsecutiveDaysCount string
@@ -27,6 +25,9 @@ type TrackActivityReportStats struct {
 
 func TrackingMenuText(lang i18n.Lang, stats models.MainStats) string {
 	target := 120 * time.Minute
+	if stats.TargetMinutes != nil {
+		target = time.Duration(*stats.TargetMinutes) * time.Minute
+	}
 	progress := progressBar(lang, stats.TodayTracked, target, 10)
 	return fmt.Sprintf(
 		"%s\n\n%s *%s*\n%s *%s*\n`%s`\n%s *%d*\n%s *%d*\n",
@@ -39,7 +40,22 @@ func TrackingMenuText(lang i18n.Lang, stats models.MainStats) string {
 	)
 }
 
-// formatDuration formats duration into human-readable string like "4h 30m".
+// TrackActivityTargetPromptText asks for a daily minutes target for one
+// activity — the numeric-input prompt behind the 🎯 button in
+// TrackActivitiesInlineMenu.
+func TrackActivityTargetPromptText(lang i18n.Lang, activityName string) string {
+	return i18n.T(lang, i18n.KeyTrackActivityTargetPromptFmt, activityName)
+}
+
+// TrackActivityTargetButtonLabel renders the per-row 🎯 button: the
+// configured target if set, or an invitation to set one.
+func TrackActivityTargetButtonLabel(lang i18n.Lang, item models.TrackActivityItem) string {
+	if item.TargetMinutes != nil {
+		return i18n.T(lang, i18n.KeyTrackActivityTargetButtonSetFmt, *item.TargetMinutes)
+	}
+	return i18n.T(lang, i18n.KeyTrackActivityTargetButtonUnset)
+}
+
 func formatDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0
@@ -57,17 +73,13 @@ func formatDuration(d time.Duration) string {
 	}
 }
 
-// weekdayShortKeys indexes Mon(0)..Sun(6) to the matching i18n key — same
-// order as the calendar picker's header row.
+// Mon(0)..Sun(6) — must match the calendar picker's header row order.
 var weekdayShortKeys = [...]string{
 	i18n.KeyTrackCalendarMon, i18n.KeyTrackCalendarTue, i18n.KeyTrackCalendarWed,
 	i18n.KeyTrackCalendarThu, i18n.KeyTrackCalendarFri, i18n.KeyTrackCalendarSat, i18n.KeyTrackCalendarSun,
 }
 
-// TrackHeatmapText renders the caption above the tappable heatmap grid (see
-// TrackHeatmapInlineMenu): title, tap hint, legend, and a tracked-days
-// tally. gridStart must be a Monday; today is the last day considered
-// "past" (inclusive).
+// gridStart must be a Monday; today is the last day considered "past" (inclusive).
 func TrackHeatmapText(lang i18n.Lang, gridStart, today time.Time, trackedDays map[string]bool, weeks int) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyTrackHeatmapTitle))
@@ -94,14 +106,11 @@ func TrackHeatmapText(lang i18n.Lang, gridStart, today time.Time, trackedDays ma
 	return b.String()
 }
 
-// TrackHeatmapDayTitle renders a localized header for one day's drill-down,
-// e.g. "📅 Wed, 19 Aug 2026".
 func TrackHeatmapDayTitle(lang i18n.Lang, day time.Time) string {
 	weekday := i18n.T(lang, weekdayShortKeys[(int(day.Weekday())+6)%7])
 	return fmt.Sprintf("📅 %s, %d %s %d", weekday, day.Day(), monthName(lang, day.Month()), day.Year())
 }
 
-// safeText returns fallback when string is empty.
 func safeText(s string) string {
 	if s == "" {
 		return "—"

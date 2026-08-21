@@ -12,8 +12,6 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Inline button menus
-
 func TrackEntryInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
@@ -29,8 +27,6 @@ func TrackEntryInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 		),
 	)
 }
-
-// Reply button menus
 
 func TrackActivityManageReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
@@ -59,7 +55,6 @@ func TrackArchiveReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	)
 }
 
-// TrackReportsReplyMenu renders the reports screen's reply keyboard.
 func TrackReportsReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(
@@ -76,12 +71,7 @@ func TrackReportsReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	)
 }
 
-// TrackTimerReplyMenu renders the timer picker as plain reply buttons:
-// built-in intervals first, then any custom ones the user added, then
-// actions to add/delete a custom interval, then navigation. Activating an
-// interval and deleting a custom one both happen by tapping its button text
-// (see FormatTimerButton/ParseTimerButtonMinutes) rather than through an
-// inline keyboard.
+// interval buttons are tapped to activate/delete (see FormatTimerButton/ParseTimerButtonMinutes), not via inline keyboard.
 func TrackTimerReplyMenu(lang i18n.Lang, builtIn, custom []int) tgbotapi.ReplyKeyboardMarkup {
 	rows := make([][]tgbotapi.KeyboardButton, 0, 4)
 	rows = append(rows, timerIntervalRows(lang, builtIn, TrackTimerActivatePrefix)...)
@@ -102,16 +92,13 @@ func TrackTimerReplyMenu(lang i18n.Lang, builtIn, custom []int) tgbotapi.ReplyKe
 	return buttonbuilder.RK(rows...)
 }
 
-// TrackTimerDeleteReplyMenu lists custom intervals as buttons; tapping one
-// deletes it (see ParseTimerButtonMinutes with TrackTimerDeletePrefix).
+// tapping a custom interval button deletes it (see ParseTimerButtonMinutes with TrackTimerDeletePrefix).
 func TrackTimerDeleteReplyMenu(lang i18n.Lang, custom []int) tgbotapi.ReplyKeyboardMarkup {
 	rows := timerIntervalRows(lang, custom, TrackTimerDeletePrefix)
 	rows = append(rows, buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack))))
 	return buttonbuilder.RK(rows...)
 }
 
-// timerIntervalRows renders interval minutes as "<prefix><N> <unit>"
-// buttons, two per row.
 func timerIntervalRows(lang i18n.Lang, intervals []int, prefix string) [][]tgbotapi.KeyboardButton {
 	rows := make([][]tgbotapi.KeyboardButton, 0, (len(intervals)+1)/2)
 	for i := 0; i < len(intervals); i += 2 {
@@ -127,20 +114,11 @@ func timerIntervalRows(lang i18n.Lang, intervals []int, prefix string) [][]tgbot
 	return rows
 }
 
-// FormatTimerButton renders one timer interval as reply-button text, e.g.
-// "⏱ 15 min" / "⏱ 15 мин".
 func FormatTimerButton(lang i18n.Lang, prefix string, minutes int) string {
 	return fmt.Sprintf("%s%d %s", prefix, minutes, i18n.T(lang, i18n.KeyTrackMinutesUnit))
 }
 
-// ParseTimerButtonMinutes extracts the interval from a timer reply-button's
-// text (the inverse of FormatTimerButton). It tries lang's own minutes unit
-// first, then Default's — same cross-phase safety net as i18n.Key, for a
-// button that was rendered before the user's language was known/changed.
-// ok is false if text isn't "<prefix><N> <unit>" for a positive N — in
-// particular it correctly rejects a translated TrackButtonTimerDelete
-// ("🗑 Timer löschen" etc) even though it shares the "🗑 " prefix with
-// delete-picker buttons, since it doesn't end in a minutes unit at all.
+// falls back to Default's unit (like i18n.Key); rejects any text lacking the "<N> <unit>" suffix, even if the prefix matches.
 func ParseTimerButtonMinutes(lang i18n.Lang, text, prefix string) (int, bool) {
 	if n, ok := parseTimerButtonMinutesUnit(text, prefix, i18n.T(lang, i18n.KeyTrackMinutesUnit)); ok {
 		return n, true
@@ -187,8 +165,10 @@ func TrackActivitiesInlineMenu(lang i18n.Lang, items []models.TrackActivityItem)
 		}
 
 		callbackData := fmt.Sprintf("act_toggle_:%d", item.ID)
+		targetCB := fmt.Sprintf("%s%d", TrackCBActivityTarget, item.ID)
 		rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 			tgbotapi.NewInlineKeyboardButtonData(title, callbackData),
+			tgbotapi.NewInlineKeyboardButtonData(TrackActivityTargetButtonLabel(lang, item), targetCB),
 		))
 	}
 
@@ -202,11 +182,7 @@ func TrackActivitiesInlineMenu(lang i18n.Lang, items []models.TrackActivityItem)
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-// TrackPromptInlineMenu renders the periodic "what are you doing?" prompt's
-// activity picker. dueAt is embedded in each button's callback data (as a
-// unix timestamp) so a late answer still credits the interval that was
-// actually due, instead of "now minus interval" — see
-// handlers.Module.RecordPromptAnswer.
+// dueAt is embedded in callback data so a late answer credits the interval that was actually due, not "now minus interval".
 func TrackPromptInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, intervalMin int, dueAt time.Time) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+1)
 	for _, item := range items {
@@ -278,9 +254,6 @@ func TrackArchiveSuccessInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup
 		),
 	)
 }
-
-// ---------------------------------------------------------------------
-// Reports (Today/Calendar/Period)
 
 func TrackReportsHubInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
@@ -368,7 +341,7 @@ func TrackReportPeriodInlineMenu(lang i18n.Lang, items []models.TrackActivityIte
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-// monthNameKeys indexes 1-12 (time.Month) to the matching i18n key.
+// indexes time.Month (1-12) via m-1, since the array itself is 0-indexed.
 var monthNameKeys = [...]string{
 	i18n.KeyTrackCalendarMonth01, i18n.KeyTrackCalendarMonth02, i18n.KeyTrackCalendarMonth03,
 	i18n.KeyTrackCalendarMonth04, i18n.KeyTrackCalendarMonth05, i18n.KeyTrackCalendarMonth06,
@@ -446,9 +419,7 @@ func TrackReportPeriodCalendarInlineMenu(lang i18n.Lang, month time.Time, from, 
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-// TrackHeatmapInlineMenu renders the calendar heatmap as a tappable grid:
-// one button per day (🟩 tracked / ⬛ missed, both open that day's
-// drill-down; ⬜ upcoming days are inert). gridStart must be a Monday.
+// gridStart must be a Monday; 🟩 tracked / ⬛ missed both open drill-down, ⬜ upcoming days are inert.
 func TrackHeatmapInlineMenu(lang i18n.Lang, gridStart, today time.Time, trackedDays map[string]bool, weeks int) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, weeks+2)
 
@@ -481,8 +452,6 @@ func TrackHeatmapInlineMenu(lang i18n.Lang, gridStart, today time.Time, trackedD
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
-// TrackHeatmapDayDetailInlineMenu is the single "back to heatmap" row shown
-// under a day's drill-down.
 func TrackHeatmapDayDetailInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelBack), TrackCBHeatmapBack)),

@@ -50,6 +50,15 @@ const (
 	RoadmapCBCardDiff     = "roadmap:card:diff:"
 	RoadmapCBCardDelete   = "roadmap:card:delete:"
 	RoadmapCBDigestToggle = "roadmap:digest:toggle:"
+
+	// AI-backed actions, all under "roadmap:ai:". None of these buttons is
+	// drawn unless a provider is configured, so a handler reaching one with
+	// AI off means a stale keyboard — hence the guard on each.
+	//
+	// "plan" and "paste" carry a technology id, "quiz" a card id.
+	RoadmapCBAIPlan  = "roadmap:ai:plan:"
+	RoadmapCBAIPaste = "roadmap:ai:paste:"
+	RoadmapCBAIQuiz  = "roadmap:ai:quiz:"
 )
 
 // BuiltInPushIntervals are the reminder-interval choices (minutes) offered in

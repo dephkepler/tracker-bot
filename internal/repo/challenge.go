@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ChallengeRepository persists day-range "challenges" (e.g. "100 days of
-// reading"), their per-day marks, and the daily evening push schedule.
 type ChallengeRepository interface {
 	Create(ctx context.Context, userID int64, name string, startDate, endDate time.Time) (int64, error)
 	ListChallenges(ctx context.Context, userID int64, archived bool) ([]models.ChallengeItem, error)
@@ -26,9 +24,7 @@ type ChallengeRepository interface {
 	MarkDay(ctx context.Context, userID, challengeID int64, day time.Time, status models.ChallengeDayStatus) error
 	GetDayStatus(ctx context.Context, userID, challengeID int64, day time.Time) (models.ChallengeDayStatus, error)
 
-	// Push scheduling — same shape as TimerRepository (migrations/0004),
-	// but the "interval" here is always "tomorrow at the same wall-clock
-	// time", computed by the caller from the user's timezone.
+	// Unlike TimerRepository, "next" here is always "tomorrow, same wall-clock time" — caller computes it from the user's timezone.
 	UpsertPushSchedule(ctx context.Context, challengeID int64, nextPushAt time.Time) error
 	ClearPushSchedule(ctx context.Context, challengeID int64) error
 	ListDueChallenges(ctx context.Context, now time.Time, limit int) ([]models.ChallengeDueUser, error)
@@ -38,13 +34,11 @@ type challengeRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewChallengeRepository creates repository backed by pgx pool.
 func NewChallengeRepository(db *pgxpool.Pool) ChallengeRepository {
 	return &challengeRepository{db: db}
 }
 
-// Create inserts a new challenge and pre-populates challenge_days for every
-// day in [startDate, endDate], all 'pending'.
+// Inserts into challenges, then challenge_days for the full range — two calls, not one transaction.
 func (r *challengeRepository) Create(ctx context.Context, userID int64, name string, startDate, endDate time.Time) (int64, error) {
 	var id int64
 	err := r.db.QueryRow(ctx,
@@ -75,8 +69,6 @@ func (r *challengeRepository) Create(ctx context.Context, userID int64, name str
 	return id, nil
 }
 
-// ListChallenges returns a user's challenges (archived or not) with
-// progress counts, ordered by creation time.
 func (r *challengeRepository) ListChallenges(ctx context.Context, userID int64, archived bool) ([]models.ChallengeItem, error) {
 	q := `
 	SELECT c.id, c.name, c.start_date, c.end_date, c.is_archived,
@@ -109,7 +101,6 @@ func (r *challengeRepository) ListChallenges(ctx context.Context, userID int64, 
 	return out, nil
 }
 
-// GetChallenge loads one challenge's summary, scoped to its owner.
 func (r *challengeRepository) GetChallenge(ctx context.Context, userID, challengeID int64) (models.ChallengeItem, error) {
 	q := `
 	SELECT c.id, c.name, c.start_date, c.end_date, c.is_archived,
@@ -132,8 +123,6 @@ func (r *challengeRepository) GetChallenge(ctx context.Context, userID, challeng
 	return item, nil
 }
 
-// ArchiveChallenge moves a challenge to the archive and stops its push
-// schedule.
 func (r *challengeRepository) ArchiveChallenge(ctx context.Context, userID, challengeID int64) error {
 	tag, err := r.db.Exec(ctx, `UPDATE challenges SET is_archived = TRUE, next_push_at = NULL WHERE id = $1 AND user_id = $2;`, challengeID, userID)
 	if err != nil {
@@ -145,8 +134,7 @@ func (r *challengeRepository) ArchiveChallenge(ctx context.Context, userID, chal
 	return nil
 }
 
-// RestoreChallenge moves an archived challenge back to the active list.
-// The caller is responsible for re-scheduling its push if still in range.
+// Caller must re-schedule the push separately if the challenge is still in range.
 func (r *challengeRepository) RestoreChallenge(ctx context.Context, userID, challengeID int64) error {
 	tag, err := r.db.Exec(ctx, `UPDATE challenges SET is_archived = FALSE WHERE id = $1 AND user_id = $2;`, challengeID, userID)
 	if err != nil {
@@ -158,7 +146,6 @@ func (r *challengeRepository) RestoreChallenge(ctx context.Context, userID, chal
 	return nil
 }
 
-// DeleteChallengeForever permanently removes a challenge and its days.
 func (r *challengeRepository) DeleteChallengeForever(ctx context.Context, userID, challengeID int64) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM challenges WHERE id = $1 AND user_id = $2;`, challengeID, userID)
 	if err != nil {
@@ -170,7 +157,6 @@ func (r *challengeRepository) DeleteChallengeForever(ctx context.Context, userID
 	return nil
 }
 
-// ListDays returns every day in a challenge's range, scoped to its owner.
 func (r *challengeRepository) ListDays(ctx context.Context, userID, challengeID int64) ([]models.ChallengeDay, error) {
 	q := `
 	SELECT cd.day_date, cd.status
@@ -201,7 +187,6 @@ func (r *challengeRepository) ListDays(ctx context.Context, userID, challengeID 
 	return out, nil
 }
 
-// MarkDay sets one day's status, scoped to the challenge's owner.
 func (r *challengeRepository) MarkDay(ctx context.Context, userID, challengeID int64, day time.Time, status models.ChallengeDayStatus) error {
 	q := `
 	UPDATE challenge_days cd
@@ -219,7 +204,6 @@ func (r *challengeRepository) MarkDay(ctx context.Context, userID, challengeID i
 	return nil
 }
 
-// GetDayStatus returns one day's current status, scoped to the challenge's owner.
 func (r *challengeRepository) GetDayStatus(ctx context.Context, userID, challengeID int64, day time.Time) (models.ChallengeDayStatus, error) {
 	q := `
 	SELECT cd.status
@@ -238,7 +222,6 @@ func (r *challengeRepository) GetDayStatus(ctx context.Context, userID, challeng
 	return models.ChallengeDayStatus(status), nil
 }
 
-// UpsertPushSchedule sets the next evening-push time for a challenge.
 func (r *challengeRepository) UpsertPushSchedule(ctx context.Context, challengeID int64, nextPushAt time.Time) error {
 	_, err := r.db.Exec(ctx, `UPDATE challenges SET next_push_at = $2 WHERE id = $1;`, challengeID, nextPushAt)
 	if err != nil {
@@ -247,8 +230,6 @@ func (r *challengeRepository) UpsertPushSchedule(ctx context.Context, challengeI
 	return nil
 }
 
-// ClearPushSchedule stops a challenge's evening push (its range ended, or
-// it was archived).
 func (r *challengeRepository) ClearPushSchedule(ctx context.Context, challengeID int64) error {
 	_, err := r.db.Exec(ctx, `UPDATE challenges SET next_push_at = NULL WHERE id = $1;`, challengeID)
 	if err != nil {
@@ -257,7 +238,6 @@ func (r *challengeRepository) ClearPushSchedule(ctx context.Context, challengeID
 	return nil
 }
 
-// ListDueChallenges returns challenges whose next_push_at is due.
 func (r *challengeRepository) ListDueChallenges(ctx context.Context, now time.Time, limit int) ([]models.ChallengeDueUser, error) {
 	q := `
 	SELECT c.id, c.user_id, u.tg_user_id, c.name, c.start_date, c.end_date

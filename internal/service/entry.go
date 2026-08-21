@@ -10,19 +10,11 @@ import (
 )
 
 type EntryService interface {
-	// EnsureUser loads or creates the user and reports whether this is their
-	// very first time (used to decide between a welcome message and a plain
-	// "back home" one).
+	// isNew decides welcome message vs plain "back home" for the caller.
 	EnsureUser(ctx context.Context, user *models.UserInput) (dbID int64, isNew bool, err error)
-	// CountUsers returns the total number of registered users (admin stat).
 	CountUsers(ctx context.Context) (int, error)
-	// ListUsersPage returns one page of registered users, newest first
-	// (admin listing).
 	ListUsersPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error)
-	// ListAllTelegramIDs returns every registered user's Telegram id
-	// (admin broadcast).
 	ListAllTelegramIDs(ctx context.Context) ([]int64, error)
-	// DeleteUser permanently removes a user and everything owned by them.
 	DeleteUser(ctx context.Context, dbUserID int64) error
 }
 
@@ -52,9 +44,8 @@ func (s *entryService) EnsureUser(ctx context.Context, user *models.UserInput) (
 		user.Language = &v
 	}
 	if user.TimeZone == nil || *user.TimeZone == "" {
-		// No per-user timezone picker is wired yet (the "📍 Time zone" profile
-		// button has no handler) — every user is currently treated as being in
-		// this zone, matching apptime.Location which drives all calendar math.
+		// no per-user tz picker yet; every user defaults to apptime.Location,
+		// which drives all calendar math.
 		v := apptime.Location.String()
 		user.TimeZone = &v
 	}
@@ -70,13 +61,10 @@ func (s *entryService) EnsureUser(ctx context.Context, user *models.UserInput) (
 	return dbID, true, nil
 }
 
-// CountUsers returns the total number of registered users.
 func (s *entryService) CountUsers(ctx context.Context) (int, error) {
 	return s.repo.CountAll(ctx)
 }
 
-// ListUsersPage returns one page of registered users, clamping limit/offset
-// to sane bounds.
 func (s *entryService) ListUsersPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error) {
 	if limit <= 0 {
 		limit = 15
@@ -87,12 +75,10 @@ func (s *entryService) ListUsersPage(ctx context.Context, limit, offset int) ([]
 	return s.repo.ListPage(ctx, limit, offset)
 }
 
-// ListAllTelegramIDs returns every registered user's Telegram id.
 func (s *entryService) ListAllTelegramIDs(ctx context.Context) ([]int64, error) {
 	return s.repo.ListAllTelegramIDs(ctx)
 }
 
-// DeleteUser permanently removes a user and everything owned by them.
 func (s *entryService) DeleteUser(ctx context.Context, dbUserID int64) error {
 	if dbUserID <= 0 {
 		return models.ErrUserNotFound

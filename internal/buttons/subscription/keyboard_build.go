@@ -6,8 +6,6 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Inline button menus
-
 func SubscriptionEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
@@ -23,5 +21,3 @@ func SubscriptionEntryInlineMenu() tgbotapi.InlineKeyboardMarkup {
 		),
 	)
 }
-
-// Reply button menus

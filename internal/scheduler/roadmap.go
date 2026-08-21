@@ -9,16 +9,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// RoadmapScheduler periodically checks due users and sends each one a digest
-// of what's still pending across their roadmaps — mirrors
-// LearningScheduler's shape.
 type RoadmapScheduler struct {
 	ctx        context.Context
 	roadmapsvc service.RoadmapService
 	roadmap    *handlers.Module
 }
 
-// NewRoadmapScheduler creates scheduler instance.
 func NewRoadmapScheduler(ctx context.Context, roadmapsvc service.RoadmapService, roadmap *handlers.Module) *RoadmapScheduler {
 	return &RoadmapScheduler{
 		ctx:        ctx,
@@ -27,7 +23,6 @@ func NewRoadmapScheduler(ctx context.Context, roadmapsvc service.RoadmapService,
 	}
 }
 
-// Run starts background ticker loop.
 func (s *RoadmapScheduler) Run() {
 	ticker := time.NewTicker(10 * time.Second)
 	go func() {
@@ -43,7 +38,6 @@ func (s *RoadmapScheduler) Run() {
 	}()
 }
 
-// tick processes one scheduler cycle at provided UTC time.
 func (s *RoadmapScheduler) tick(now time.Time) {
 	dueUsers, err := s.roadmapsvc.ListDueUsers(s.ctx, now, 100)
 	if err != nil {
@@ -52,9 +46,7 @@ func (s *RoadmapScheduler) tick(now time.Time) {
 	}
 
 	for _, item := range dueUsers {
-		// SendRoadmapDigestMessage returns nil without sending when nothing
-		// is pending — the schedule still advances below, so an all-done
-		// user isn't retried on every 10s tick.
+		// nil here can mean "nothing pending, nothing sent" — schedule still advances so an all-done user isn't retried every tick.
 		if err := s.roadmap.SendRoadmapDigestMessage(s.ctx, item.TgUserID, item.DBUserID); err != nil {
 			log.Error().Err(err).Int64("user_id", item.DBUserID).Msg("roadmap scheduler: send digest failed")
 			continue

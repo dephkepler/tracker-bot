@@ -1,7 +1,5 @@
 package track
 
-// ---------------------------------------------------------------------
-// Inline callbacks (actions)
 const (
 	TrackCBActivitySelect         = "track:activity:select"
 	TrackCBActivityCreate         = "track:activity:create"
@@ -41,30 +39,20 @@ const (
 	// TrackCBHeatmapDay carries the tapped day as "<TrackCBHeatmapDay>2006-01-02".
 	TrackCBHeatmapDay  = "track:heatmap:day:"
 	TrackCBHeatmapBack = "track:heatmap:back"
+
+	// TrackCBActivityTarget carries the activity id: "<TrackCBActivityTarget><id>".
+	TrackCBActivityTarget = "track:activity:target:"
 )
 
-// ---------------------------------------------------------------------
-// Buttons (Inline + Reply)
-//
-// All button/label TEXT (main screen, activity management, timer, archive,
-// reports) has moved to internal/i18n (see i18n.KeyTrack*). Only
-// non-translatable technical constants remain here.
+// most button/label text lives in internal/i18n (i18n.KeyTrack*); only non-translatable constants remain here
 
-// TrackLabelArchiveItemPrefix is a plain emoji marker (no translatable
-// text), used as-is in every language.
+// plain emoji marker, not translated — same in every language
 const TrackLabelArchiveItemPrefix = "📦 "
 
-// TrackTimerActivatePrefix/TrackTimerDeletePrefix prefix a timer button's
-// text (see FormatTimerButton/ParseTimerButtonMinutes) so the same
-// "<prefix><N> <unit>" shape can mean either "activate this interval" (on
-// the main timer screen) or "delete this custom interval" (on the
-// delete-picker screen), depending on which screen the user is on. Plain
-// emoji, not translated.
+// same "<prefix><N> <unit>" shape means activate (timer screen) or delete (delete-picker), by context
 const (
 	TrackTimerActivatePrefix = "⏱ "
 	TrackTimerDeletePrefix   = "🗑 "
 )
 
-// BuiltInTimerIntervals are the always-available timer choices shown before
-// any user-defined custom intervals.
 var BuiltInTimerIntervals = []int{15, 30}

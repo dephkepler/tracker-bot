@@ -10,7 +10,6 @@ import (
 	"tracker-bot/pkg/apptime"
 )
 
-// TrackerService contains tracking use-cases used by handlers.
 type TrackerService interface {
 	GetMainStats(ctx context.Context, userID int64, loc *time.Location) (models.MainStats, error)
 	CreateActivity(ctx context.Context, userID int64, name, emoji string) (repo.Activity, error)
@@ -22,6 +21,9 @@ type TrackerService interface {
 	ArchiveSelectedActivities(ctx context.Context, userID int64) (int64, error)
 	RestoreArchivedActivity(ctx context.Context, userID, activityID int64) error
 	DeleteArchivedForever(ctx context.Context, userID, activityID int64) error
+	// SetActivityTarget validates and stores one activity's daily time
+	// target (models.MinActivityTargetMinutes..MaxActivityTargetMinutes).
+	SetActivityTarget(ctx context.Context, userID, activityID int64, minutes int) error
 	GetTodayReport(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error)
 	GetTodayReportBySelected(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error)
 	GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) (models.ReportPeriodStats, error)
@@ -35,15 +37,13 @@ type trackerService struct {
 	repo repo.TrackerRepository
 }
 
-// NewTrackerService creates tracking service.
 func NewTrackerService(repo repo.TrackerRepository) TrackerService {
 	return &trackerService{
 		repo: repo,
 	}
 }
 
-// resolveLoc defaults to apptime.Location when the caller has no specific
-// user timezone in scope yet.
+// resolveLoc defaults to apptime.Location when loc is nil.
 func resolveLoc(loc *time.Location) *time.Location {
 	if loc == nil {
 		return apptime.Location
@@ -51,7 +51,6 @@ func resolveLoc(loc *time.Location) *time.Location {
 	return loc
 }
 
-// GetMainStats returns tracking home summary.
 func (srv *trackerService) GetMainStats(ctx context.Context, userID int64, loc *time.Location) (models.MainStats, error) {
 	if userID <= 0 {
 		return models.MainStats{}, fmt.Errorf("main stats: invalid userID")
@@ -93,17 +92,16 @@ func (srv *trackerService) GetMainStats(ctx context.Context, userID int64, loc *
 		TodayTracked:        total,
 		TodaySessions:       todayTrackedActivities,
 		StreakDays:          streak,
+		TargetMinutes:       last.TargetMinutes,
 	}, nil
 }
 
-// CreateActivity validates and creates new activity.
 func (srv *trackerService) CreateActivity(ctx context.Context, userID int64, name, emoji string) (repo.Activity, error) {
 	name = strings.TrimSpace(name)
 	emoji = strings.TrimSpace(emoji)
 	return srv.repo.Create(ctx, userID, name, emoji)
 }
 
-// ListActivities returns active activities with selected flags.
 func (srv *trackerService) ListActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error) {
 	activities, err := srv.repo.ListActive(ctx, userID)
 	if err != nil {
@@ -124,27 +122,25 @@ func (srv *trackerService) ListActivities(ctx context.Context, userID int64) ([]
 	for _, a := range activities {
 		_, isSelected := selected[a.ID]
 		items = append(items, models.TrackActivityItem{
-			ID:       a.ID,
-			Name:     a.Name,
-			Emoji:    a.Emoji,
-			Selected: isSelected,
+			ID:            a.ID,
+			Name:          a.Name,
+			Emoji:         a.Emoji,
+			Selected:      isSelected,
+			TargetMinutes: a.TargetMinutes,
 		})
 	}
 
 	return items, nil
 }
 
-// ToggleSelectedActivity toggles activity selection state.
 func (srv *trackerService) ToggleSelectedActivity(ctx context.Context, userID, activityID int64) error {
 	return srv.repo.ToggleSelectedActive(ctx, userID, activityID)
 }
 
-// DeleteSelectedActivities removes currently selected activities.
 func (srv *trackerService) DeleteSelectedActivities(ctx context.Context, userID int64) (int64, error) {
 	return srv.repo.DeleteSelected(ctx, userID)
 }
 
-// ListSelectedActivities returns only selected active activities.
 func (srv *trackerService) ListSelectedActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error) {
 	items, err := srv.ListActivities(ctx, userID)
 	if err != nil {
@@ -160,7 +156,6 @@ func (srv *trackerService) ListSelectedActivities(ctx context.Context, userID in
 	return out, nil
 }
 
-// ListArchivedActivities returns archived activities.
 func (srv *trackerService) ListArchivedActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error) {
 	activities, err := srv.repo.ListArchived(ctx, userID)
 	if err != nil {
@@ -178,23 +173,26 @@ func (srv *trackerService) ListArchivedActivities(ctx context.Context, userID in
 	return items, nil
 }
 
-// ArchiveSelectedActivities moves selected activities to archive.
 func (srv *trackerService) ArchiveSelectedActivities(ctx context.Context, userID int64) (int64, error) {
 	return srv.repo.ArchiveSelected(ctx, userID)
 }
 
-// RestoreArchivedActivity moves one activity from archive back to active.
 func (srv *trackerService) RestoreArchivedActivity(ctx context.Context, userID, activityID int64) error {
 	return srv.repo.RestoreArchived(ctx, userID, activityID)
 }
 
-// DeleteArchivedForever permanently removes archived activity.
 func (srv *trackerService) DeleteArchivedForever(ctx context.Context, userID, activityID int64) error {
 	return srv.repo.DeleteArchivedForever(ctx, userID, activityID)
 }
 
-// GetTodayReport aggregates today's tracked durations and sessions, "today"
-// meaning the user's own local calendar day.
+func (srv *trackerService) SetActivityTarget(ctx context.Context, userID, activityID int64, minutes int) error {
+	if minutes < models.MinActivityTargetMinutes || minutes > models.MaxActivityTargetMinutes {
+		return models.ErrActivityTargetInvalid
+	}
+	return srv.repo.SetActivityTarget(ctx, userID, activityID, minutes)
+}
+
+// "today" means the user's local calendar day (loc), not UTC.
 func (srv *trackerService) GetTodayReport(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error) {
 	tzName := resolveLoc(loc).String()
 
@@ -226,7 +224,6 @@ func (srv *trackerService) GetTodayReport(ctx context.Context, userID int64, loc
 	}, nil
 }
 
-// GetTodayReportBySelected returns today's report filtered by selected activities.
 func (srv *trackerService) GetTodayReportBySelected(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error) {
 	report, err := srv.GetTodayReport(ctx, userID, loc)
 	if err != nil {
@@ -261,7 +258,6 @@ func (srv *trackerService) GetTodayReportBySelected(ctx context.Context, userID 
 	}, nil
 }
 
-// GetPeriodReport aggregates report for date range and optional activity filter.
 func (srv *trackerService) GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) (models.ReportPeriodStats, error) {
 	tzName := resolveLoc(loc).String()
 
@@ -302,25 +298,19 @@ func (srv *trackerService) GetPeriodReport(ctx context.Context, userID int64, fr
 	}, nil
 }
 
-// GetMonthDailyTotals returns daily totals for given month.
 func (srv *trackerService) GetMonthDailyTotals(ctx context.Context, userID int64, month time.Time, activityIDs []int64, loc *time.Location) (map[int]time.Duration, error) {
 	loc = resolveLoc(loc)
 	return srv.repo.GetMonthDailyTotals(ctx, userID, month, activityIDs, loc, loc.String())
 }
 
-// GetPeriodBuckets returns bucketed totals (hour/day/month).
 func (srv *trackerService) GetPeriodBuckets(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error) {
 	return srv.repo.GetPeriodBuckets(ctx, userID, from, to, activityIDs, granularity, resolveLoc(loc).String())
 }
 
-// GetHourlyBucketsByActivity returns per-hour totals broken down by
-// activity (see repo.TrackerRepository.GetHourlyBucketsByActivity).
 func (srv *trackerService) GetHourlyBucketsByActivity(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) ([]models.HourActivityDuration, error) {
 	return srv.repo.GetHourlyBucketsByActivity(ctx, userID, from, to, activityIDs, resolveLoc(loc).String())
 }
 
-// GetTrackedDaysInRange returns distinct local calendar days with at least
-// one completed session, for the "🔥 Heatmap" report.
 func (srv *trackerService) GetTrackedDaysInRange(ctx context.Context, userID int64, from, to time.Time, loc *time.Location) ([]time.Time, error) {
 	return srv.repo.GetTrackedDaysInRange(ctx, userID, from, to, resolveLoc(loc).String())
 }
@@ -332,7 +322,14 @@ func calcStreakDays(days []time.Time, now time.Time, loc *time.Location) int {
 	loc = resolveLoc(loc)
 	daySet := make(map[string]struct{}, len(days))
 	for _, d := range days {
-		daySet[d.In(loc).Format("2006-01-02")] = struct{}{}
+		// Formatted, never converted. These values come from
+		// `date_trunc('day', start_at AT TIME ZONE $n)::timestamp`, so each one
+		// is already a local wall clock in loc, carrying time.UTC only because
+		// that is what pgx attaches to a zoneless timestamp. Calling .In(loc)
+		// here reinterpreted it as a UTC instant and shifted it — harmless east
+		// of UTC, but west of it every key landed a day early, so today never
+		// matched and the streak read 0. See TestCalcStreakDaysAcrossTimezones.
+		daySet[d.Format("2006-01-02")] = struct{}{}
 	}
 
 	local := now.In(loc)

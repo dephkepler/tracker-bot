@@ -1,7 +1,5 @@
 package i18n
 
-// catalogTrackReports holds the Track Reports screens: Today (chart +
-// select-activities), Period (menu, text report, chart report, calendar).
 var catalogTrackReports = map[string]entry{
 	KeyTrackButtonToday: {
 		RU: "📊 Сегодня", EN: "📊 Today", DE: "📊 Heute", UK: "📊 Сьогодні", AR: "📊 اليوم",
@@ -110,8 +108,7 @@ var catalogTrackReports = map[string]entry{
 	KeyTrackTodayChartTitle: {
 		RU: "📉 График за сегодня\n\n", EN: "📉 Today Chart\n\n", DE: "📉 Heutiges Diagramm\n\n", UK: "📉 Графік за сьогодні\n\n", AR: "📉 مخطط اليوم\n\n",
 	},
-	// Pure formatting, no natural-language words — identical across
-	// languages (same reasoning as KeyTrackPeriodTextActivityLine).
+	// pure formatting, no natural-language words — same value in every language is intentional, not a missing translation.
 	KeyTrackTodayChartActivityLine: {
 		RU: "%s\n%s %s (%s)\n\n", EN: "%s\n%s %s (%s)\n\n", DE: "%s\n%s %s (%s)\n\n", UK: "%s\n%s %s (%s)\n\n", AR: "%s\n%s %s (%s)\n\n",
 	},
@@ -152,9 +149,7 @@ var catalogTrackReports = map[string]entry{
 	KeyTrackPeriodNoSessions: {
 		RU: "Нет сессий за этот период.", EN: "No sessions for this period.", DE: "Keine Sitzungen für diesen Zeitraum.", UK: "Немає сесій за цей період.", AR: "لا توجد جلسات لهذه الفترة.",
 	},
-	// Pure formatting, no natural-language words — identical across
-	// languages by design (same reasoning as duration/percent formatting
-	// elsewhere in this codebase, e.g. track.TrackingMenuText's "4h 30m").
+	// pure formatting, no natural-language words — same value in every language is intentional, not a missing translation.
 	KeyTrackPeriodTextActivityLine: {
 		RU: "%d) %s - %s (%s, %d)\n", EN: "%d) %s - %s (%s, %d)\n", DE: "%d) %s - %s (%s, %d)\n", UK: "%d) %s - %s (%s, %d)\n", AR: "%d) %s - %s (%s, %d)\n",
 	},

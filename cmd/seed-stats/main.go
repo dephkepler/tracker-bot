@@ -70,7 +70,7 @@ func main() {
 				activityIDs = append(activityIDs, id)
 				continue
 			}
-			// If INSERT returned no row (conflict path), load existing activity id.
+			// no RETURNING row means the insert hit ON CONFLICT — fall back to loading the existing id
 			_ = db.Pool().QueryRow(ctx, "SELECT id FROM activities WHERE user_id=$1 AND lower(name)=lower($2) LIMIT 1", userID, item.name).Scan(&id)
 			if id > 0 {
 				activityIDs = append(activityIDs, id)
@@ -93,7 +93,6 @@ func main() {
 	inserted := 0
 	for d := start; d.Before(end); d = d.AddDate(0, 0, 1) {
 		monthWeight := 1 + int(d.Month())/4
-		// Add slightly more sessions later in the year to simulate organic growth.
 		sessionsPerDay := monthWeight + r.Intn(3)
 		for i := 0; i < sessionsPerDay; i++ {
 			actID := activityIDs[r.Intn(len(activityIDs))]

@@ -6,7 +6,6 @@ import (
 	"tracker-bot/internal/repo"
 )
 
-// UIStateService persists per-user navigation screen across restarts.
 type UIStateService interface {
 	GetScreen(ctx context.Context, userID int64) (string, error)
 	SetScreen(ctx context.Context, userID int64, screen string) error
@@ -16,7 +15,6 @@ type uiStateService struct {
 	repo repo.UIStateRepository
 }
 
-// NewUIStateService creates service backed by given repository.
 func NewUIStateService(repo repo.UIStateRepository) UIStateService {
 	return &uiStateService{repo: repo}
 }

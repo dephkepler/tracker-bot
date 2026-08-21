@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// TimerRepository works with persisted timer settings.
 type TimerRepository interface {
 	UpsertInterval(ctx context.Context, userID int64, intervalMin int, nextPingAt time.Time) error
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error)
@@ -25,12 +24,10 @@ type timerRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewTimerRepository creates repository backed by pgx pool.
 func NewTimerRepository(db *pgxpool.Pool) TimerRepository {
 	return &timerRepository{db: db}
 }
 
-// UpsertInterval enables timer and saves interval + next ping timestamp.
 func (r *timerRepository) UpsertInterval(ctx context.Context, userID int64, intervalMin int, nextPingAt time.Time) error {
 	q := `
 	INSERT INTO user_timer_settings (user_id, interval_min, next_ping_at, enabled, updated_at)
@@ -48,7 +45,6 @@ func (r *timerRepository) UpsertInterval(ctx context.Context, userID int64, inte
 	return nil
 }
 
-// ListDueUsers returns users whose next_ping_at is due.
 func (r *timerRepository) ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error) {
 	q := `
 	SELECT uts.user_id, u.tg_user_id, uts.interval_min, uts.next_ping_at
@@ -81,7 +77,6 @@ func (r *timerRepository) ListDueUsers(ctx context.Context, now time.Time, limit
 	return out, nil
 }
 
-// SetNextPing updates next scheduled ping time for user.
 func (r *timerRepository) SetNextPing(ctx context.Context, userID int64, nextPingAt time.Time) error {
 	q := `
 	UPDATE user_timer_settings
@@ -98,7 +93,6 @@ func (r *timerRepository) SetNextPing(ctx context.Context, userID int64, nextPin
 	return nil
 }
 
-// GetInterval returns active timer interval in minutes.
 func (r *timerRepository) GetInterval(ctx context.Context, userID int64) (int, error) {
 	q := `
 	SELECT interval_min
@@ -112,8 +106,8 @@ func (r *timerRepository) GetInterval(ctx context.Context, userID int64) (int, e
 	return interval, nil
 }
 
-// GetSettings returns the raw persisted timer row for user, if any.
-// enabled is false and err is nil when the user has no timer row yet.
+// GetSettings: enabled=false, err=nil means the user has no timer row yet —
+// that's not an error.
 func (r *timerRepository) GetSettings(ctx context.Context, userID int64) (int, time.Time, bool, error) {
 	q := `
 	SELECT interval_min, next_ping_at, enabled
@@ -135,7 +129,6 @@ func (r *timerRepository) GetSettings(ctx context.Context, userID int64) (int, t
 	return intervalMin, nextPingAt, enabled, nil
 }
 
-// Disable turns off timer for user.
 func (r *timerRepository) Disable(ctx context.Context, userID int64) error {
 	q := `
 	UPDATE user_timer_settings

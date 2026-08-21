@@ -8,9 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// UIStateRepository persists which "screen" a user is currently on, so
-// navigation survives a bot restart instead of resetting to zero for
-// everyone mid-flow.
 type UIStateRepository interface {
 	GetScreen(ctx context.Context, userID int64) (string, error)
 	SetScreen(ctx context.Context, userID int64, screen string) error
@@ -20,12 +17,11 @@ type uiStateRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewUIStateRepository creates repository backed by pgx pool.
 func NewUIStateRepository(db *pgxpool.Pool) UIStateRepository {
 	return &uiStateRepository{db: db}
 }
 
-// GetScreen returns the saved screen for user, or "" if none saved yet.
+// Returns "" with no error when the user has no saved screen yet.
 func (r *uiStateRepository) GetScreen(ctx context.Context, userID int64) (string, error) {
 	q := `SELECT screen FROM user_ui_state WHERE user_id = $1;`
 	var screen string
@@ -38,7 +34,6 @@ func (r *uiStateRepository) GetScreen(ctx context.Context, userID int64) (string
 	return screen, nil
 }
 
-// SetScreen upserts the current screen for user.
 func (r *uiStateRepository) SetScreen(ctx context.Context, userID int64, screen string) error {
 	q := `
 	INSERT INTO user_ui_state (user_id, screen, updated_at)

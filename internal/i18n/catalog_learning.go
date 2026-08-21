@@ -1,8 +1,5 @@
 package i18n
 
-// catalogLearning holds the Learning screens: main menu, word base,
-// collection detail, review-collection picker, statistics, archive, and
-// review cards.
 var catalogLearning = map[string]entry{
 	KeyLearningButtonCreateCollection: {
 		RU: "➕ Создать подборку", EN: "➕ Create a collection", DE: "➕ Sammlung erstellen", UK: "➕ Створити добірку", AR: "➕ إنشاء مجموعة",

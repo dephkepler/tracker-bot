@@ -9,15 +9,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// LearningScheduler periodically checks due users and sends one word
-// review card each — mirrors TimerScheduler's shape.
 type LearningScheduler struct {
 	ctx         context.Context
 	learningsvc service.LearningService
 	learning    *handlers.Module
 }
 
-// NewLearningScheduler creates scheduler instance.
 func NewLearningScheduler(ctx context.Context, learningsvc service.LearningService, learning *handlers.Module) *LearningScheduler {
 	return &LearningScheduler{
 		ctx:         ctx,
@@ -26,7 +23,6 @@ func NewLearningScheduler(ctx context.Context, learningsvc service.LearningServi
 	}
 }
 
-// Run starts background ticker loop.
 func (s *LearningScheduler) Run() {
 	ticker := time.NewTicker(10 * time.Second)
 	go func() {
@@ -42,7 +38,6 @@ func (s *LearningScheduler) Run() {
 	}()
 }
 
-// tick processes one scheduler cycle at provided UTC time.
 func (s *LearningScheduler) tick(now time.Time) {
 	dueUsers, err := s.learningsvc.ListDueUsers(s.ctx, now, 100)
 	if err != nil {

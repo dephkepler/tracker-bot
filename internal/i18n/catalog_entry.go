@@ -1,7 +1,5 @@
 package i18n
 
-// catalogEntry holds the Home/Entry screen: the top-level nav buttons and
-// the one-time welcome message.
 var catalogEntry = map[string]entry{
 	KeyEntryButtonProfile: {
 		RU: "👤Мой профиль",
@@ -30,6 +28,13 @@ var catalogEntry = map[string]entry{
 		DE: "🗺Roadmaps",
 		UK: "🗺Роадмапи",
 		AR: "🗺خطط التعلّم",
+	},
+	KeyEntryButtonChallenge: {
+		RU: "🎯Челленджи",
+		EN: "🎯Challenges",
+		DE: "🎯Challenges",
+		UK: "🎯Челенджі",
+		AR: "🎯التحديات",
 	},
 	KeyEntryButtonSubscription: {
 		RU: "💳Подписка",

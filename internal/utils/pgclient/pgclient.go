@@ -8,12 +8,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Client wraps pgx connection pool.
 type Client struct {
 	db *pgxpool.Pool
 }
 
-// New creates and pings PostgreSQL connection pool.
 func New(ctx context.Context, dsn string) (*Client, error) {
 	db, err := pgxpool.New(ctx, dsn)
 	if err != nil {

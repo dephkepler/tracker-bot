@@ -1,9 +1,5 @@
 package i18n
 
-// catalogCommon holds strings shared across many screens rather than owned
-// by one feature — navigation (Back/Home/Cancel), and the generic
-// error/fallback messages the dispatcher sends regardless of which screen
-// the user was on.
 var catalogCommon = map[string]entry{
 	KeyCommonBack: {
 		RU: "◀ Назад",
@@ -39,13 +35,6 @@ var catalogCommon = map[string]entry{
 		DE: "👑 Admin",
 		UK: "👑 Адмін",
 		AR: "👑 المشرف",
-	},
-	KeyCommonChallenges: {
-		RU: "🎯 Челленджи",
-		EN: "🎯 Challenges",
-		DE: "🎯 Challenges",
-		UK: "🎯 Челенджі",
-		AR: "🎯 التحديات",
 	},
 	KeyCommonOnboarding: {
 		RU: "🎓 Как это работает",

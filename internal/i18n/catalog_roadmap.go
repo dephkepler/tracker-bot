@@ -339,4 +339,61 @@ var catalogRoadmap = map[string]entry{
 	KeyRoadmapStatsLoadFailed: {
 		RU: "⚠️ Не удалось загрузить прогресс.", EN: "⚠️ Failed to load progress.", DE: "⚠️ Fortschritt konnte nicht geladen werden.", UK: "⚠️ Не вдалося завантажити прогрес.", AR: "⚠️ تعذّر تحميل التقدّم.",
 	},
+
+	// Roadmap AI. The added-cards count deliberately reuses
+	// KeyRoadmapAddCardsAdded — the confirmation is identical whether the
+	// cards came from a paste or from the model, and two keys rendering the
+	// same string collide in i18n's reverse index (see
+	// TestCatalog_NoTextCollisionsWithinLanguage).
+	KeyRoadmapButtonAIPlan: {
+		RU: "✨ План от ИИ", EN: "✨ AI plan", DE: "✨ KI-Plan", UK: "✨ План від ШІ", AR: "✨ خطة بالذكاء الاصطناعي",
+	},
+	KeyRoadmapButtonAIPaste: {
+		RU: "🤖 Разметить вставку", EN: "🤖 Tag a paste", DE: "🤖 Einfügung einordnen", UK: "🤖 Розмітити вставку", AR: "🤖 تصنيف نص ملصق",
+	},
+	KeyRoadmapButtonAIQuiz: {
+		RU: "❓", EN: "❓", DE: "❓", UK: "❓", AR: "❓",
+	},
+	KeyRoadmapButtonQuizDone: {
+		RU: "✅ Отметить выученным", EN: "✅ Mark as learned", DE: "✅ Als gelernt markieren", UK: "✅ Позначити вивченим", AR: "✅ اعتبارها متعلَّمة",
+	},
+	KeyRoadmapAIWorking: {
+		RU: "✨ Составляю план, это займёт до минуты…", EN: "✨ Building the plan, this can take up to a minute…", DE: "✨ Der Plan entsteht, das kann bis zu einer Minute dauern…", UK: "✨ Складаю план, це займе до хвилини…", AR: "✨ يجري إعداد الخطة، قد يستغرق ذلك دقيقة…",
+	},
+	KeyRoadmapAIQuizWorking: {
+		RU: "❓ Придумываю вопрос…", EN: "❓ Coming up with a question…", DE: "❓ Eine Frage entsteht…", UK: "❓ Придумую питання…", AR: "❓ يجري تحضير سؤال…",
+	},
+	KeyRoadmapAIFailed: {
+		RU: "🤖 ИИ не ответил. Попробуй ещё раз чуть позже.", EN: "🤖 The AI didn't answer. Try again in a bit.", DE: "🤖 Die KI hat nicht geantwortet. Versuche es später erneut.", UK: "🤖 ШІ не відповів. Спробуй ще раз трохи пізніше.", AR: "🤖 لم يستجب الذكاء الاصطناعي. حاول لاحقًا.",
+	},
+	KeyRoadmapAIEmpty: {
+		RU: "🤖 ИИ не вернул ничего пригодного. Попробуй ещё раз.", EN: "🤖 The AI returned nothing usable. Try again.", DE: "🤖 Die KI hat nichts Brauchbares geliefert. Versuche es erneut.", UK: "🤖 ШІ не повернув нічого придатного. Спробуй ще раз.", AR: "🤖 لم يعد الذكاء الاصطناعي بشيء صالح. حاول مرة أخرى.",
+	},
+	KeyRoadmapAIDisabled: {
+		RU: "🤖 ИИ не подключён.", EN: "🤖 AI is not connected.", DE: "🤖 KI ist nicht angebunden.", UK: "🤖 ШІ не підключений.", AR: "🤖 الذكاء الاصطناعي غير موصول.",
+	},
+	KeyRoadmapAIRejectedFmt: {
+		RU: " (отброшено: %d — не прошли проверку.)", EN: " (%d dropped — failed validation.)", DE: " (%d verworfen — Prüfung nicht bestanden.)", UK: " (відкинуто: %d — не пройшли перевірку.)", AR: " (تم استبعاد %d — لم تجتز التحقق.)",
+	},
+	KeyRoadmapAIPastePrompt: {
+		RU: "🤖 Пришли пункты — по одному на строку. Теги ставить не нужно: вид и сложность определит ИИ.\n\nНажми ✅ Готово, когда закончишь.", EN: "🤖 Send the items, one per line. No tags needed — the AI decides kind and difficulty.\n\nTap ✅ Done when finished.", DE: "🤖 Sende die Punkte, einen pro Zeile. Keine Tags nötig — Art und Schwierigkeit bestimmt die KI.\n\nTippe ✅ Fertig, wenn du durch bist.", UK: "🤖 Надішли пункти — по одному на рядок. Теги не потрібні: вид і складність визначить ШІ.\n\nНатисни ✅ Готово, коли закінчиш.", AR: "🤖 أرسل العناصر، عنصرًا في كل سطر. لا حاجة للوسوم — الذكاء الاصطناعي يحدد النوع والصعوبة.\n\nاضغط ✅ تم عند الانتهاء.",
+	},
+	KeyRoadmapAIQuizPromptFmt: {
+		RU: "❓ *Вопрос*\n\n%s\n\nОтветь текстом — или нажми ❌ Отмена.", EN: "❓ *Question*\n\n%s\n\nAnswer in a message — or tap ❌ Cancel.", DE: "❓ *Frage*\n\n%s\n\nAntworte mit einer Nachricht — oder tippe ❌ Abbrechen.", UK: "❓ *Питання*\n\n%s\n\nВідповідай текстом — або натисни ❌ Скасувати.", AR: "❓ *سؤال*\n\n%s\n\nأجب برسالة — أو اضغط ❌ إلغاء.",
+	},
+	KeyRoadmapAIQuizCorrect: {
+		RU: "✅ Верно", EN: "✅ Correct", DE: "✅ Richtig", UK: "✅ Правильно", AR: "✅ صحيح",
+	},
+	KeyRoadmapAIQuizPartial: {
+		RU: "🟡 Почти", EN: "🟡 Almost", DE: "🟡 Fast", UK: "🟡 Майже", AR: "🟡 تقريبًا",
+	},
+	KeyRoadmapAIQuizWrong: {
+		RU: "🔴 Мимо", EN: "🔴 Not quite", DE: "🔴 Daneben", UK: "🔴 Не те", AR: "🔴 غير صحيح",
+	},
+	KeyRoadmapAIQuizGradeFmt: {
+		RU: "%s\n\n%s", EN: "%s\n\n%s", DE: "%s\n\n%s", UK: "%s\n\n%s", AR: "%s\n\n%s",
+	},
+	KeyRoadmapAIDigestHintFmt: {
+		RU: "\n\n💡 %s", EN: "\n\n💡 %s", DE: "\n\n💡 %s", UK: "\n\n💡 %s", AR: "\n\n💡 %s",
+	},
 }

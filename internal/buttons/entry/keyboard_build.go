@@ -7,11 +7,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Reply button menus
-
-// EntryReplyMenu renders the home screen keyboard in lang. isAdmin adds a
-// row with the "👑 Admin" button — pass handlers.Module.IsAdmin(ctx), never
-// hardcode true.
+// isAdmin adds the "👑 Admin" row — pass handlers.Module.IsAdmin(ctx), never hardcode true.
 func EntryReplyMenu(lang i18n.Lang, isAdmin bool) tgbotapi.ReplyKeyboardMarkup {
 	rows := [][]tgbotapi.KeyboardButton{
 		buttonbuilder.RR(
@@ -23,7 +19,7 @@ func EntryReplyMenu(lang i18n.Lang, isAdmin bool) tgbotapi.ReplyKeyboardMarkup {
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyEntryButtonRoadmap)),
 		),
 		buttonbuilder.RR(
-			buttonbuilder.RB(i18n.T(lang, i18n.KeyEntryButtonSubscription)),
+			buttonbuilder.RB(i18n.T(lang, i18n.KeyEntryButtonChallenge)),
 		),
 	}
 	if isAdmin {

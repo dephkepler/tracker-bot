@@ -10,11 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// CustomTimerRepository persists user-defined timer intervals (in addition
-// to the built-in 15/30 min choices).
 type CustomTimerRepository interface {
-	// Create adds a custom interval for user. Idempotent: adding an
-	// interval that already exists for this user is a no-op, not an error.
+	// idempotent: adding an interval that already exists for user is a no-op, not an error
 	Create(ctx context.Context, userID int64, intervalMin int) error
 	ListByUser(ctx context.Context, userID int64) ([]int, error)
 	Delete(ctx context.Context, userID int64, intervalMin int) error
@@ -25,12 +22,10 @@ type customTimerRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewCustomTimerRepository creates repository backed by pgx pool.
 func NewCustomTimerRepository(db *pgxpool.Pool) CustomTimerRepository {
 	return &customTimerRepository{db: db}
 }
 
-// Create inserts a custom interval for user, ignoring duplicates.
 func (r *customTimerRepository) Create(ctx context.Context, userID int64, intervalMin int) error {
 	if userID <= 0 || intervalMin <= 0 {
 		return fmt.Errorf("create custom timer: invalid args")
@@ -51,7 +46,6 @@ func (r *customTimerRepository) Create(ctx context.Context, userID int64, interv
 	return nil
 }
 
-// ListByUser returns custom intervals for user, ascending.
 func (r *customTimerRepository) ListByUser(ctx context.Context, userID int64) ([]int, error) {
 	if userID <= 0 {
 		return nil, fmt.Errorf("list custom timers: invalid userID")
@@ -83,7 +77,6 @@ func (r *customTimerRepository) ListByUser(ctx context.Context, userID int64) ([
 	return out, nil
 }
 
-// Delete removes one custom interval for user.
 func (r *customTimerRepository) Delete(ctx context.Context, userID int64, intervalMin int) error {
 	if userID <= 0 || intervalMin <= 0 {
 		return fmt.Errorf("delete custom timer: invalid args")
@@ -103,7 +96,6 @@ func (r *customTimerRepository) Delete(ctx context.Context, userID int64, interv
 	return nil
 }
 
-// Count returns how many custom intervals user already has.
 func (r *customTimerRepository) Count(ctx context.Context, userID int64) (int, error) {
 	if userID <= 0 {
 		return 0, fmt.Errorf("count custom timers: invalid userID")

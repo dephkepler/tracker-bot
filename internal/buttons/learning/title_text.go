@@ -7,7 +7,6 @@ import (
 	"tracker-bot/internal/models"
 )
 
-// LearningMenuText renders the main Learning screen's stats block.
 func LearningMenuText(lang i18n.Lang, stats models.LearningStats) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyLearningMenuTitle))
@@ -29,9 +28,7 @@ func LearningMenuText(lang i18n.Lang, stats models.LearningStats) string {
 	return b.String()
 }
 
-// LearningReviewPickTitle renders the review collection-picker's header.
-// When reviews are already running, toggling here applies immediately —
-// no need to stop and restart the schedule to change what's in rotation.
+// Toggling here while reviews are already running applies immediately, no restart needed.
 func LearningReviewPickTitle(lang i18n.Lang, activeCount int, reviewsActive bool, intervalMin int) string {
 	if reviewsActive {
 		return i18n.T(lang, i18n.KeyLearningReviewPickManageTitle, intervalMin, activeCount)
@@ -42,8 +39,6 @@ func LearningReviewPickTitle(lang i18n.Lang, activeCount int, reviewsActive bool
 	return i18n.T(lang, i18n.KeyLearningReviewPickTitle, activeCount)
 }
 
-// LearningStatsDetailText renders the full "📈 Statistics" breakdown: overall
-// numbers, per-collection counts, and answer accuracy.
 func LearningStatsDetailText(lang i18n.Lang, d models.LearningStatsDetail) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyLearningStatsTitle))
@@ -75,44 +70,32 @@ func LearningStatsDetailText(lang i18n.Lang, d models.LearningStatsDetail) strin
 	return b.String()
 }
 
-// LearningRenamePromptText asks the user to type a new name for a collection.
 func LearningRenamePromptText(lang i18n.Lang, currentName string) string {
 	return i18n.T(lang, i18n.KeyLearningRenamePrompt, currentName)
 }
 
-// LearningWordBaseTitle renders the word-base screen's header.
 func LearningWordBaseTitle(lang i18n.Lang, count int) string {
 	return i18n.T(lang, i18n.KeyLearningWordBaseTitle, count)
 }
 
-// LearningCollectionDetailTitle renders one collection's detail header.
 func LearningCollectionDetailTitle(lang i18n.Lang, name string, wordCount int) string {
 	return i18n.T(lang, i18n.KeyLearningCollectionDetail, name, wordCount)
 }
 
-// LearningArchiveTitle renders the archive screen's header.
 func LearningArchiveTitle(lang i18n.Lang, count int) string {
 	return i18n.T(lang, i18n.KeyLearningArchiveTitle, count)
 }
 
-// LearningReviewCardText renders the term-only side of a review card.
 func LearningReviewCardText(lang i18n.Lang, collectionName, term string) string {
 	return i18n.T(lang, i18n.KeyLearningReviewCardTitle, collectionName, term)
 }
 
-// LearningReviewRevealedText renders the revealed (term + translation) side
-// of a review card.
 func LearningReviewRevealedText(lang i18n.Lang, collectionName, term, translation string) string {
 	return i18n.T(lang, i18n.KeyLearningReviewRevealed, collectionName, term, translation)
 }
 
-// LearningReviewGradedText renders the confirmation after grading. Reaching
-// "learned" takes priority over the grade-specific message, regardless of
-// which grade (Good/Easy) triggered it. nextReviewAt is the actual
-// scheduled instant, not just a day count — Again and a Hard on a
-// still-new word use short minute-level steps (see service.reviewDelay),
-// so this picks a "in N min" vs "in N day(s)" wording based on how far
-// away it really is, instead of assuming whole days.
+// learned overrides the grade message; minute vs day wording is picked from the
+// actual delay to nextReviewAt, not the grade (see service.reviewDelay).
 func LearningReviewGradedText(lang i18n.Lang, term string, grade models.LearningGrade, nextReviewAt time.Time, learned bool) string {
 	if learned {
 		return i18n.T(lang, i18n.KeyLearningReviewLearned, term)

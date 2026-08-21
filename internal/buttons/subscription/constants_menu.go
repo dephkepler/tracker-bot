@@ -1,14 +1,16 @@
 package subscription
 
-// Inline callbacks.
 const (
 	SubscriptionCBTariffPlans   = "subscription:tariff:plans"
 	SubscriptionCBFreePlan      = "subscription:free:plan"
 	SubscriptionCBSupport       = "subscription:support"
 	SubscriptionCBPaymentChange = "subscription:payment:change"
+	// SubscriptionCBOpen is Profile's inline entry point into the
+	// subscription screen — Subscription no longer has its own main-menu
+	// reply button (see internal/buttons/entry/keyboard_build.go).
+	SubscriptionCBOpen = "subscription:open"
 )
 
-// Inline menu buttons.
 const (
 	SubscriptionButtonTariffPlans   = "🗓 Tariff plans"
 	SubscriptionButtonFreePlan      = "🎁 Free"
@@ -16,7 +18,6 @@ const (
 	SubscriptionButtonPaymentChange = "💳 Change payment"
 )
 
-// Subscription screen labels.
 const (
 	SubscriptionUIMainTitle      = "💳 Subscription"
 	SubscriptionUIMainTariffPlan = "🗓 Tariff plan:"

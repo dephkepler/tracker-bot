@@ -3,42 +3,37 @@ package challenge
 import (
 	"fmt"
 	"time"
+	"tracker-bot/internal/i18n"
 	"tracker-bot/internal/models"
 	"tracker-bot/pkg/buttonbuilder"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// WaitingReplyMenu is shown while the bot is waiting for typed input (a new
-// challenge's name) — lets the user bail out.
-func WaitingReplyMenu() tgbotapi.ReplyKeyboardMarkup {
+func WaitingReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(buttonbuilder.RB(ReplyCancel)),
+		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonCancelX))),
 	)
 }
 
-// ListInlineMenu lists a user's active challenges — tap one to open its
-// grid (see GridInlineMenu).
-func ListInlineMenu(items []models.ChallengeItem) tgbotapi.InlineKeyboardMarkup {
+func ListInlineMenu(lang i18n.Lang, items []models.ChallengeItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+3)
 	for _, item := range items {
 		pct := 0
 		if item.TotalDays > 0 {
 			pct = item.DoneDays * 100 / item.TotalDays
 		}
-		label := fmt.Sprintf("🎯 %s — %d%% (%d/%d)", item.Name, pct, item.DoneDays, item.TotalDays)
+		label := i18n.T(lang, i18n.KeyChallengeItemLabelFmt, item.Name, pct, item.DoneDays, item.TotalDays)
 		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(label, fmt.Sprintf("%s%d", CBOpen, item.ID))))
 	}
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ButtonCreate, CBCreate)))
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ButtonArchive, CBArchiveOpen)))
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ButtonHome, "go_home")))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyChallengeButtonCreate), CBCreate)))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyChallengeButtonArchive), CBArchiveOpen)))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonHome), "go_home")))
 	return buttonbuilder.IK(rows...)
 }
 
-// GridInlineMenu renders one challenge's day-squares: ✅ done, ❌ skipped,
-// 🔲 pending-and-markable (today or already past), ⬜ upcoming (inert).
-// Seven days per row, in range order (not calendar-week-aligned).
-func GridInlineMenu(challengeID int64, days []models.ChallengeDay, today time.Time) tgbotapi.InlineKeyboardMarkup {
+// rows are 7 per range-day, not calendar-week-aligned
+func GridInlineMenu(lang i18n.Lang, challengeID int64, days []models.ChallengeDay, today time.Time) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(days)/7+3)
 	var row []tgbotapi.InlineKeyboardButton
 	for _, d := range days {
@@ -56,14 +51,11 @@ func GridInlineMenu(challengeID int64, days []models.ChallengeDay, today time.Ti
 	if len(row) > 0 {
 		rows = append(rows, row)
 	}
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ButtonArchive+" this", fmt.Sprintf("%s%d", CBArchiveThis, challengeID))))
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ButtonBack, CBBackList)))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyChallengeButtonArchiveThis), fmt.Sprintf("%s%d", CBArchiveThis, challengeID))))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), CBBackList)))
 	return buttonbuilder.IK(rows...)
 }
 
-// dayCellState returns the emoji for one day and whether it should be
-// clickable (today or earlier, within the challenge's range — future days
-// are always inert).
 func dayCellState(d models.ChallengeDay, today time.Time) (emoji string, clickable bool) {
 	switch d.Status {
 	case models.ChallengeDayDone:
@@ -78,54 +70,61 @@ func dayCellState(d models.ChallengeDay, today time.Time) (emoji string, clickab
 	}
 }
 
-// DayConfirmInlineMenu lets the user mark one specific day.
-func DayConfirmInlineMenu(challengeID int64, day time.Time) tgbotapi.InlineKeyboardMarkup {
+func DayConfirmInlineMenu(lang i18n.Lang, challengeID int64, day time.Time) tgbotapi.InlineKeyboardMarkup {
 	dateStr := day.Format("2006-01-02")
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(ButtonMarkDone, fmt.Sprintf("%s%d:%s", CBDayDone, challengeID, dateStr)),
-			buttonbuilder.IB(ButtonMarkSkip, fmt.Sprintf("%s%d:%s", CBDaySkip, challengeID, dateStr)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonDone), fmt.Sprintf("%s%d:%s", CBDayDone, challengeID, dateStr)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyChallengeButtonSkip), fmt.Sprintf("%s%d:%s", CBDaySkip, challengeID, dateStr)),
 		),
-		buttonbuilder.IR(buttonbuilder.IB(ButtonBack, fmt.Sprintf("%s%d", CBOpen, challengeID))),
+		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), fmt.Sprintf("%s%d", CBOpen, challengeID))),
 	)
 }
 
-// ArchiveInlineMenu lists archived challenges with restore/delete actions —
-// mirrors learning.LearningArchiveInlineMenu.
-func ArchiveInlineMenu(items []models.ChallengeItem) tgbotapi.InlineKeyboardMarkup {
+func ArchiveInlineMenu(lang i18n.Lang, items []models.ChallengeItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)*2+1)
 	for _, item := range items {
-		label := fmt.Sprintf("📦 %s — %d/%d done", item.Name, item.DoneDays, item.TotalDays)
+		label := i18n.T(lang, i18n.KeyChallengeArchiveItemFmt, item.Name, item.DoneDays, item.TotalDays)
 		rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(label, "noop")))
 		rows = append(rows, buttonbuilder.IR(
-			buttonbuilder.IB(ButtonRestore, fmt.Sprintf("%s%d", CBArchiveRestore, item.ID)),
-			buttonbuilder.IB(ButtonDeleteForever, fmt.Sprintf("%s%d", CBArchiveDelete, item.ID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelRestore), fmt.Sprintf("%s%d", CBArchiveRestore, item.ID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackLabelDeleteForever), fmt.Sprintf("%s%d", CBArchiveDelete, item.ID)),
 		))
 	}
-	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(ButtonBack, CBBackList)))
+	rows = append(rows, buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), CBBackList)))
 	return buttonbuilder.IK(rows...)
 }
 
-// PushInlineMenu is attached to the daily evening push message.
-func PushInlineMenu(challengeID int64) tgbotapi.InlineKeyboardMarkup {
+func PushInlineMenu(lang i18n.Lang, challengeID int64) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(
-			buttonbuilder.IB(ButtonMarkDone, fmt.Sprintf("%s%d", CBPushDone, challengeID)),
-			buttonbuilder.IB(ButtonMarkSkip, fmt.Sprintf("%s%d", CBPushSkip, challengeID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonDone), fmt.Sprintf("%s%d", CBPushDone, challengeID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyChallengeButtonSkip), fmt.Sprintf("%s%d", CBPushSkip, challengeID)),
 		),
 	)
 }
 
-// --- calendar range-picker (creation flow) ---------------------------------
+// Mon(0)..Sun(6) and Jan(0)..Dec(11) — reuse Track's calendar translations
+// rather than minting duplicate month/weekday keys (see keys.go's Challenge
+// block comment). Each domain owns its own array since Track's is unexported.
+var weekdayShortKeys = [...]string{
+	i18n.KeyTrackCalendarMon, i18n.KeyTrackCalendarTue, i18n.KeyTrackCalendarWed,
+	i18n.KeyTrackCalendarThu, i18n.KeyTrackCalendarFri, i18n.KeyTrackCalendarSat, i18n.KeyTrackCalendarSun,
+}
 
-var monthNamesEN = [...]string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
-var weekdayShortEN = [...]string{"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"}
+var monthNameKeys = [...]string{
+	i18n.KeyTrackCalendarMonth01, i18n.KeyTrackCalendarMonth02, i18n.KeyTrackCalendarMonth03,
+	i18n.KeyTrackCalendarMonth04, i18n.KeyTrackCalendarMonth05, i18n.KeyTrackCalendarMonth06,
+	i18n.KeyTrackCalendarMonth07, i18n.KeyTrackCalendarMonth08, i18n.KeyTrackCalendarMonth09,
+	i18n.KeyTrackCalendarMonth10, i18n.KeyTrackCalendarMonth11, i18n.KeyTrackCalendarMonth12,
+}
 
-// CalendarInlineMenu renders a month calendar for picking a challenge's
-// start/end date — tap twice (start, then end); mirrors the shape of
-// track.TrackReportPeriodCalendarInlineMenu but kept as an independent,
-// smaller copy so this module doesn't reach into Track's callback space.
-func CalendarInlineMenu(month time.Time, from, to time.Time) tgbotapi.InlineKeyboardMarkup {
+func monthName(lang i18n.Lang, m time.Month) string {
+	return i18n.T(lang, monthNameKeys[m-1])
+}
+
+// deliberately a separate copy of track's calendar picker, to avoid reaching into Track's callback space
+func CalendarInlineMenu(lang i18n.Lang, month time.Time, from, to time.Time) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, 10)
 	first := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, time.UTC)
 	last := first.AddDate(0, 1, -1)
@@ -133,17 +132,17 @@ func CalendarInlineMenu(month time.Time, from, to time.Time) tgbotapi.InlineKeyb
 
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("«Y", CBCalPrevYear),
-		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%s %d", monthNamesEN[first.Month()-1], first.Year()), "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(fmt.Sprintf("%s %d", monthName(lang, first.Month()), first.Year()), "noop"),
 		tgbotapi.NewInlineKeyboardButtonData("Y»", CBCalNextYear),
 	))
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData("◀", CBCalPrev),
-		tgbotapi.NewInlineKeyboardButtonData("Month", "noop"),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackCalendarMonth), "noop"),
 		tgbotapi.NewInlineKeyboardButtonData("▶", CBCalNext),
 	))
 	weekHeader := make([]tgbotapi.InlineKeyboardButton, 0, 7)
-	for _, w := range weekdayShortEN {
-		weekHeader = append(weekHeader, tgbotapi.NewInlineKeyboardButtonData(w, "noop"))
+	for _, k := range weekdayShortKeys {
+		weekHeader = append(weekHeader, tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, k), "noop"))
 	}
 	rows = append(rows, weekHeader)
 
@@ -175,15 +174,15 @@ func CalendarInlineMenu(month time.Time, from, to time.Time) tgbotapi.InlineKeyb
 		}
 	}
 
-	confirmLabel := ButtonSelectEnd
+	confirmLabel := i18n.T(lang, i18n.KeyTrackLabelSelectEndDate)
 	confirmCB := "noop"
 	if !from.IsZero() && !to.IsZero() {
-		confirmLabel = ButtonConfirm
+		confirmLabel = i18n.T(lang, i18n.KeyTrackLabelConfirmRange)
 		confirmCB = CBCalDone
 	}
 	rows = append(rows, tgbotapi.NewInlineKeyboardRow(
 		tgbotapi.NewInlineKeyboardButtonData(confirmLabel, confirmCB),
-		tgbotapi.NewInlineKeyboardButtonData(ButtonCancel, CBCalCancel),
+		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyCommonCancelX), CBCalCancel),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }

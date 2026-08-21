@@ -27,8 +27,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// Module routes UI actions to services and renders bot responses.
-
 type Handler interface {
 	Track()
 }
@@ -44,18 +42,14 @@ type Module struct {
 	adminsvc        service.AdminService
 	challengesvc    service.ChallengeService
 	roadmapsvc      service.RoadmapService
-	// adminUsername is the Telegram @handle (no leading "@") allowed to see
-	// the admin screen — see IsAdmin. Empty disables the admin feature
-	// entirely rather than matching everyone.
+	roadmapaisvc    service.RoadmapAIService
+	// empty adminUsername disables the admin feature entirely, not "matches everyone" — see IsAdmin.
 	adminUsername string
 }
 
-// adminUsersPageSize is how many users are listed per page on the admin
-// screen.
 const adminUsersPageSize = 15
 
-// New creates handler module with all service dependencies.
-func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, roadmapsvc service.RoadmapService, adminUsername string) *Module {
+func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service.ProfileService, tracksvc service.TrackerService, timersvc service.TimerService, learningsvc service.LearningService, subscriptionsvc service.SubscriptionService, adminsvc service.AdminService, challengesvc service.ChallengeService, roadmapsvc service.RoadmapService, roadmapaisvc service.RoadmapAIService, adminUsername string) *Module {
 	return &Module{
 		bot:             bot,
 		profilesvc:      profilesvc,
@@ -67,15 +61,12 @@ func New(bot *tgbotapi.BotAPI, entrysvc service.EntryService, profilesvc service
 		adminsvc:        adminsvc,
 		challengesvc:    challengesvc,
 		roadmapsvc:      roadmapsvc,
+		roadmapaisvc:    roadmapaisvc,
 		adminUsername:   strings.TrimPrefix(strings.TrimSpace(adminUsername), "@"),
 	}
 }
 
-// IsAdmin reports whether ctx belongs to the configured admin user, matched
-// by Telegram @handle (case-insensitive). False whenever adminUsername is
-// unset or the user has no @handle — this is the actual access check, not
-// just whether the admin button is shown, so callers must call it directly
-// rather than trusting screen/button visibility.
+// the real access check, not just whether the admin button is shown — callers must call this directly.
 func (m *Module) IsAdmin(ctx *tgctx.MsgContext) bool {
 	if m.adminUsername == "" || ctx.Username == "" {
 		return false
@@ -83,8 +74,6 @@ func (m *Module) IsAdmin(ctx *tgctx.MsgContext) bool {
 	return strings.EqualFold(ctx.Username, m.adminUsername)
 }
 
-// ShowEntryMenu renders the main entry screen: a one-time welcome for a
-// brand-new user, a plain "home" message for anyone returning to it.
 func (m *Module) ShowEntryMenu(ctx *tgctx.MsgContext) {
 	if ctx.IsNewUser {
 		m.ShowWelcome(ctx)
@@ -93,16 +82,12 @@ func (m *Module) ShowEntryMenu(ctx *tgctx.MsgContext) {
 	m.ShowHomeMenu(ctx)
 }
 
-// ShowWelcome renders the first-time greeting (only meant for a user's very
-// first /start), followed immediately by the onboarding tour.
+// call only for a user's actual first /start; every other case should use ShowHomeMenu.
 func (m *Module) ShowWelcome(ctx *tgctx.MsgContext) {
 	m.sendEntryMenu(ctx, entry.WelcomeText(ctx.Language))
 	m.ShowOnboardingStep(ctx, 0, false)
 }
 
-// ShowOnboardingStep renders one step of the "here's what you can do" tour
-// — reached automatically on a user's first /start (see ShowWelcome), and
-// revisitable anytime via Profile's "🎓 How it works".
 func (m *Module) ShowOnboardingStep(ctx *tgctx.MsgContext, step int, edit bool) {
 	text := onboarding.StepText(step)
 	menu := onboarding.StepInlineMenu(step)
@@ -124,9 +109,7 @@ func (m *Module) ShowOnboardingStep(ctx *tgctx.MsgContext, step int, edit bool) 
 	}
 }
 
-// ShowHomeMenu renders the entry screen for a user who already knows the
-// bot — every other "go home" action (Home button, /start after the first
-// time, post-activation redirect, etc.) should use this, not ShowWelcome.
+// every "go home" action except a user's actual first /start (that's ShowWelcome) should use this.
 func (m *Module) ShowHomeMenu(ctx *tgctx.MsgContext) {
 	m.sendEntryMenu(ctx, entry.HomeMenuText(ctx.Language))
 }
@@ -141,11 +124,6 @@ func (m *Module) sendEntryMenu(ctx *tgctx.MsgContext, text string) {
 	}
 }
 
-// ShowAdminMenu renders the admin "who's using the bot" screen: a total
-// count plus one page of users (see admin.UsersInlineMenu for paging).
-// Silently does nothing for a non-admin caller — this is the actual access
-// check (see IsAdmin), the button/command being hidden from other users is
-// only a UI nicety on top of it.
 func (m *Module) ShowAdminMenu(ctx *tgctx.MsgContext) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -163,10 +141,6 @@ func (m *Module) ShowAdminMenu(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowAdminUsersMenu renders the paginated users list as a fresh message:
-// a reply-keyboard carrier (Back/Home) plus the inline listing, mirroring
-// the dual-message pattern used elsewhere (e.g. ShowTrackActivitySelectionMenu).
-// Silently does nothing for a non-admin caller.
 func (m *Module) ShowAdminUsersMenu(ctx *tgctx.MsgContext, offset int) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -178,10 +152,6 @@ func (m *Module) ShowAdminUsersMenu(ctx *tgctx.MsgContext, offset int) {
 	m.sendOrEditAdminUsers(ctx, offset, false)
 }
 
-// ShowAdminUsersMenuInPlace re-renders the users list by editing the
-// existing inline message (used for Prev/Next paging, so clicking through
-// pages doesn't spam a new reply-keyboard message each time). Silently does
-// nothing for a non-admin caller.
 func (m *Module) ShowAdminUsersMenuInPlace(ctx *tgctx.MsgContext, offset int) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -227,8 +197,6 @@ func (m *Module) sendOrEditAdminUsers(ctx *tgctx.MsgContext, offset int, inPlace
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowAdminOverview renders bot-wide usage stats. Silently does nothing for
-// a non-admin caller.
 func (m *Module) ShowAdminOverview(ctx *tgctx.MsgContext) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -242,8 +210,6 @@ func (m *Module) ShowAdminOverview(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, admin.OverviewStatsText(stats)))
 }
 
-// ShowAdminUserDetail renders one user's drill-down view. Silently does
-// nothing for a non-admin caller.
 func (m *Module) ShowAdminUserDetail(ctx *tgctx.MsgContext, dbID int64, edit bool) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -258,8 +224,6 @@ func (m *Module) ShowAdminUserDetail(ctx *tgctx.MsgContext, dbID int64, edit boo
 	m.sendOrEditAdmin(ctx, edit, admin.UserDetailText(detail), &menu)
 }
 
-// ShowAdminUserDeleteConfirm renders the "are you sure" step before
-// deleting a user. Silently does nothing for a non-admin caller.
 func (m *Module) ShowAdminUserDeleteConfirm(ctx *tgctx.MsgContext, dbID int64) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -278,8 +242,6 @@ func (m *Module) ShowAdminUserDeleteConfirm(ctx *tgctx.MsgContext, dbID int64) {
 	m.sendOrEditAdmin(ctx, true, admin.UserDeleteConfirmText(detail), &menu)
 }
 
-// DeleteAdminUser permanently removes a user. Silently does nothing for a
-// non-admin caller.
 func (m *Module) DeleteAdminUser(ctx *tgctx.MsgContext, dbID int64) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -297,8 +259,6 @@ func (m *Module) DeleteAdminUser(ctx *tgctx.MsgContext, dbID int64) {
 	m.sendOrEditAdmin(ctx, true, admin.UserDeletedText(dbID), &menu)
 }
 
-// sendOrEditAdmin sends a fresh message or edits the current inline message
-// — shared by the admin drill-down/overview screens.
 func (m *Module) sendOrEditAdmin(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
 	if edit && ctx.MessageID > 0 {
 		var out tgbotapi.Chattable
@@ -322,8 +282,6 @@ func (m *Module) sendOrEditAdmin(ctx *tgctx.MsgContext, edit bool, text string, 
 	}
 }
 
-// PromptAdminBroadcast asks the admin to type the message to send to every
-// user. Silently does nothing for a non-admin caller.
 func (m *Module) PromptAdminBroadcast(ctx *tgctx.MsgContext) {
 	if !m.IsAdmin(ctx) {
 		return
@@ -333,9 +291,7 @@ func (m *Module) PromptAdminBroadcast(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowAdminBroadcastConfirm previews the pending broadcast and its
-// recipient count before sending. Returns false (and sends nothing useful)
-// if the recipient list couldn't be loaded.
+// returns false if recipients failed to load; caller must not proceed to the confirm step then.
 func (m *Module) ShowAdminBroadcastConfirm(ctx *tgctx.MsgContext, text string) bool {
 	ids, err := m.entrysvc.ListAllTelegramIDs(ctx.Ctx)
 	if err != nil {
@@ -352,8 +308,6 @@ func (m *Module) ShowAdminBroadcastConfirm(ctx *tgctx.MsgContext, text string) b
 	return true
 }
 
-// SendAdminBroadcast sends the pending text to every registered user,
-// tolerating individual send failures (e.g. a user blocked the bot).
 func (m *Module) SendAdminBroadcast(ctx *tgctx.MsgContext, text string) {
 	ids, err := m.entrysvc.ListAllTelegramIDs(ctx.Ctx)
 	if err != nil {
@@ -373,12 +327,10 @@ func (m *Module) SendAdminBroadcast(ctx *tgctx.MsgContext, text string) {
 	m.sendOrEditAdmin(ctx, true, admin.BroadcastResultText(sent, failed), nil)
 }
 
-// CancelAdminBroadcast abandons a pending broadcast.
 func (m *Module) CancelAdminBroadcast(ctx *tgctx.MsgContext) {
 	m.sendOrEditAdmin(ctx, true, "❌ Broadcast cancelled.", nil)
 }
 
-// ShowProfileMenu loads profile stats and renders profile screen.
 func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.profilesvc.GetProfileStats(ctx.Ctx, ctx.UserID)
 	if err != nil {
@@ -398,9 +350,7 @@ func (m *Module) ShowProfileMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
-// languageCodeByButton maps a language-picker reply button's text to the
-// ISO code stored in users.language (see migration 0001_users_init.up.sql's
-// users_allowed_language CHECK constraint: ru/en/de/uk/ar).
+// keys must match the users_allowed_language CHECK constraint (migration 0001_users_init.up.sql).
 var languageCodeByButton = map[string]string{
 	profile.ProfileButtonLanguageRussian:   "ru",
 	profile.ProfileButtonLanguageEnglish:   "en",
@@ -409,7 +359,6 @@ var languageCodeByButton = map[string]string{
 	profile.ProfileButtonLanguageArabian:   "ar",
 }
 
-// ShowLanguagePicker asks the user to pick their interface language.
 func (m *Module) ShowLanguagePicker(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLanguagePrompt))
 	msg.ReplyMarkup = profile.ProfileLanguageManageReplyMenu(ctx.Language)
@@ -418,11 +367,7 @@ func (m *Module) ShowLanguagePicker(ctx *tgctx.MsgContext) {
 	}
 }
 
-// ProcessLanguageSelection saves the language behind the reply button the
-// user tapped (see languageCodeByButton) and returns to the profile screen.
-// Returns false — without changing anything — if ctx.Text isn't one of the
-// picker's buttons, so the caller keeps waiting for a valid tap instead of
-// silently dropping the selection.
+// returns false (no state change) on an unrecognized button, so the caller keeps waiting for a valid tap.
 func (m *Module) ProcessLanguageSelection(ctx *tgctx.MsgContext) bool {
 	code, ok := languageCodeByButton[ctx.Text]
 	if !ok {
@@ -436,18 +381,10 @@ func (m *Module) ProcessLanguageSelection(ctx *tgctx.MsgContext) bool {
 		return false
 	}
 
-	// Switch ctx over to the newly-picked language right away — both for the
-	// confirmation below (so it reads in the language just chosen, not the
-	// old one) and for the ShowProfileMenu call after it, so the profile
-	// screen already renders in the new language on this same round trip.
-	// The dispatcher independently invalidates the cached session language
-	// (sess.langLoaded = false) so the NEXT message also picks it up fresh
-	// from DB rather than relying on this in-request mutation.
+	// updates ctx now so this reply + ShowProfileMenu render in the new language; dispatcher invalidates the cache separately.
 	ctx.Language = i18n.Normalize(code)
 
-	// ctx.Text is the language button itself (e.g. "🇷🇺 Русский") — those are
-	// deliberately not translated (see profile.ProfileLanguageManageReplyMenu),
-	// so it's already the right thing to substitute in regardless of language.
+	// ctx.Text is the tapped button's own label, intentionally left untranslated, so it's safe to reuse verbatim.
 	hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileLanguageSaved, ctx.Text))
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
@@ -456,8 +393,6 @@ func (m *Module) ProcessLanguageSelection(ctx *tgctx.MsgContext) bool {
 	return true
 }
 
-// ShowLocationRequest asks the user to share their location so the bot can
-// detect their real timezone instead of assuming one for everyone.
 func (m *Module) ShowLocationRequest(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileTimezonePrompt))
 	msg.ReplyMarkup = profile.ProfileLocationReplyMenu(ctx.Language)
@@ -466,8 +401,6 @@ func (m *Module) ShowLocationRequest(ctx *tgctx.MsgContext) {
 	}
 }
 
-// ProcessLocationTimeZone resolves the shared location to an IANA timezone,
-// saves it, and confirms to the user.
 func (m *Module) ProcessLocationTimeZone(ctx *tgctx.MsgContext, lat, lng float64) {
 	tzName, err := geotz.Lookup(lat, lng)
 	if err != nil {
@@ -482,9 +415,7 @@ func (m *Module) ProcessLocationTimeZone(ctx *tgctx.MsgContext, lat, lng float64
 		return
 	}
 
-	// tzName is an IANA identifier (e.g. "Europe/Berlin") — a technical
-	// value, not translatable text, so it's inserted as-is regardless of
-	// language.
+	// tzName is an IANA identifier (e.g. "Europe/Berlin"), not translatable text, so it's inserted as-is.
 	hide := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyProfileTimezoneSaved, tzName))
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
@@ -492,7 +423,6 @@ func (m *Module) ProcessLocationTimeZone(ctx *tgctx.MsgContext, lat, lng float64
 	m.ShowProfileMenu(ctx)
 }
 
-// ShowTrackingMenu loads tracking stats and renders tracking home screen.
 func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.tracksvc.GetMainStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
@@ -513,7 +443,6 @@ func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
-// ShowReportsHub renders report type selector.
 func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 	text := i18n.T(ctx.Language, i18n.KeyTrackReportsHubTitle)
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "📈")
@@ -528,12 +457,8 @@ func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
 }
 
-// ShowTodayChart renders today's activity distribution as text bars.
-// heatmapWeeks is how many weeks the "🔥 Heatmap" report covers.
 const heatmapWeeks = 8
 
-// heatmapWindow returns the Monday-aligned grid start and today's midnight
-// (both in loc) for the current 8-week heatmap window.
 func heatmapWindow(loc *time.Location) (gridStart, todayMidnight time.Time) {
 	today := apptime.NowIn(loc)
 	todayMidnight = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, loc)
@@ -544,9 +469,7 @@ func heatmapWindow(loc *time.Location) (gridStart, todayMidnight time.Time) {
 	return gridStart, todayMidnight
 }
 
-// ShowHeatmap renders a GitHub-style calendar heatmap of the last 8 weeks:
-// which days had any tracked time at all, across every activity. Each day
-// is a tappable button — see ShowHeatmapDayDetail.
+// marks a day if ANY activity had tracked time, not per-activity; see ShowHeatmapDayDetail for the breakdown.
 func (m *Module) ShowHeatmap(ctx *tgctx.MsgContext, edit bool) {
 	loc := ctx.Location
 	gridStart, todayMidnight := heatmapWindow(loc)
@@ -582,8 +505,6 @@ func (m *Module) ShowHeatmap(ctx *tgctx.MsgContext, edit bool) {
 	}
 }
 
-// ShowHeatmapDayDetail drills into one day: total tracked time (with a
-// per-activity breakdown) and any word reviews answered that day.
 func (m *Module) ShowHeatmapDayDetail(ctx *tgctx.MsgContext, day time.Time) {
 	loc := ctx.Location
 	dayStart := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, loc)
@@ -700,7 +621,6 @@ func (m *Module) ShowTodayChart(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowPeriodMenu renders period report configuration screen.
 func (m *Module) ShowPeriodMenu(ctx *tgctx.MsgContext, selected map[int64]bool, month, from, to time.Time) {
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -727,7 +647,6 @@ func (m *Module) ShowPeriodMenu(ctx *tgctx.MsgContext, selected map[int64]bool, 
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowPeriodTextReport builds and sends period report in text form.
 func (m *Module) ShowPeriodTextReport(ctx *tgctx.MsgContext, from, to time.Time, activityIDs []int64, selectedOnly bool) {
 	stats, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, ctx.Location)
 	if err != nil {
@@ -759,7 +678,6 @@ func (m *Module) ShowPeriodTextReport(ctx *tgctx.MsgContext, from, to time.Time,
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, b.String()))
 }
 
-// ShowPeriodChartReport builds and sends period report in chart-like form.
 func (m *Module) ShowPeriodChartReport(ctx *tgctx.MsgContext, from, to time.Time, activityIDs []int64) {
 	stats, err := m.tracksvc.GetPeriodReport(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, ctx.Location)
 	if err != nil {
@@ -796,7 +714,6 @@ func (m *Module) ShowPeriodChartReport(ctx *tgctx.MsgContext, from, to time.Time
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, b.String()))
 }
 
-// ShowPeriodCalendar renders inline calendar for period selection.
 func (m *Module) ShowPeriodCalendar(ctx *tgctx.MsgContext, month, from, to time.Time) {
 	text := i18n.T(ctx.Language, i18n.KeyTrackCalendarPickTitle, formatDateOrDash(from), formatDateOrDash(to))
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
@@ -808,7 +725,6 @@ func (m *Module) ShowPeriodCalendar(ctx *tgctx.MsgContext, month, from, to time.
 	_, _ = m.bot.Send(edit)
 }
 
-// appendGranularityText appends bucketed totals (hour/day/month) to report.
 func (m *Module) appendGranularityText(ctx *tgctx.MsgContext, b *strings.Builder, from, to time.Time, activityIDs []int64) {
 	if len(activityIDs) == 0 {
 		return
@@ -824,9 +740,6 @@ func (m *Module) appendGranularityText(ctx *tgctx.MsgContext, b *strings.Builder
 		labelFmt = "15:00"
 	}
 
-	// Hourly buckets show which activity(ies) filled each hour, not just a
-	// total — a flat total minute count wasn't enough to tell what was
-	// actually tracked at a glance.
 	if granularity == "hour" {
 		rows, err := m.tracksvc.GetHourlyBucketsByActivity(ctx.Ctx, ctx.DBUserID, from, to.Add(24*time.Hour), activityIDs, ctx.Location)
 		if err != nil || len(rows) == 0 {
@@ -854,9 +767,7 @@ func (m *Module) appendGranularityText(ctx *tgctx.MsgContext, b *strings.Builder
 	}
 }
 
-// appendHourlyByActivityLines groups per-(hour, activity) rows (pre-sorted
-// by hour, then duration descending) into one report line per hour, e.g.
-// "- 10:00: 🏋 Deep work 30m, 📖 Reading 17m".
+// assumes rows are pre-sorted by hour, then duration descending — grouping breaks silently otherwise.
 func appendHourlyByActivityLines(ctx *tgctx.MsgContext, b *strings.Builder, rows []models.HourActivityDuration, labelFmt string) {
 	i := 0
 	for i < len(rows) {
@@ -877,17 +788,14 @@ func activityDisplayNameFromParts(emoji, name string) string {
 	return name
 }
 
-// ShowTodayReport is an alias to chart-style today report.
 func (m *Module) ShowTodayReport(ctx *tgctx.MsgContext) {
 	m.ShowTodayChart(ctx)
 }
 
-// ShowTodayReportBySelected opens selected-activities screen for today report.
 func (m *Module) ShowTodayReportBySelected(ctx *tgctx.MsgContext) {
 	m.ShowTodaySelectActivities(ctx, map[int64]bool{})
 }
 
-// ShowTodaySelectActivities renders multi-select activities for today chart.
 func (m *Module) ShowTodaySelectActivities(ctx *tgctx.MsgContext, selected map[int64]bool) {
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -910,7 +818,6 @@ func (m *Module) ShowTodaySelectActivities(ctx *tgctx.MsgContext, selected map[i
 	_, _ = m.bot.Send(msg)
 }
 
-// PromptCreateActivity asks user to type a new activity name.
 func (m *Module) PromptCreateActivity(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackCreatePrompt))
 	msg.ParseMode = "Markdown"
@@ -921,7 +828,6 @@ func (m *Module) PromptCreateActivity(ctx *tgctx.MsgContext) {
 	}
 }
 
-// ProcessCreateActivity validates and creates activity from plain text input.
 func (m *Module) ProcessCreateActivity(ctx *tgctx.MsgContext) bool {
 	name := strings.TrimSpace(ctx.Text)
 	if name == "" {
@@ -947,7 +853,6 @@ func (m *Module) ProcessCreateActivity(ctx *tgctx.MsgContext) bool {
 	return true
 }
 
-// ShowTrackActivitySelectionMenu renders active activities and selection state.
 func (m *Module) ShowTrackActivitySelectionMenu(ctx *tgctx.MsgContext) {
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -975,7 +880,64 @@ func (m *Module) ShowTrackActivitySelectionMenu(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(msg)
 }
 
-// HandleTrackToggleCallback toggles one activity in selected set.
+// PromptSetActivityTarget asks for a daily time target (in minutes) for one
+// activity — the 🎯 button on the activity list.
+func (m *Module) PromptSetActivityTarget(ctx *tgctx.MsgContext, activityID int64) {
+	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list activities failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackManageLoadFailed)))
+		return
+	}
+	name := activityDisplayName(models.TrackActivityItem{})
+	for _, it := range items {
+		if it.ID == activityID {
+			name = activityDisplayName(it)
+			break
+		}
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, track.TrackActivityTargetPromptText(ctx.Language, name))
+	msg.ParseMode = "Markdown"
+	_, _ = m.bot.Send(msg)
+}
+
+// ProcessSetActivityTarget parses the typed minutes and saves the
+// activity's target. Same contract as ProcessCreateCustomTimer: every
+// failure path returns false so the caller keeps waiting for a retry.
+func (m *Module) ProcessSetActivityTarget(ctx *tgctx.MsgContext, activityID int64) bool {
+	minutes, err := strconv.Atoi(strings.TrimSpace(ctx.Text))
+	if err != nil {
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackActivityTargetInvalid)))
+		return false
+	}
+
+	if err := m.tracksvc.SetActivityTarget(ctx.Ctx, ctx.DBUserID, activityID, minutes); err != nil {
+		if errors.Is(err, models.ErrActivityTargetInvalid) {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackActivityTargetInvalid)))
+			return false
+		}
+		log.Error().Err(err).Msg("set activity target failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackActivityTargetSaveFailed)))
+		return false
+	}
+
+	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
+	name := ""
+	if err == nil {
+		for _, it := range items {
+			if it.ID == activityID {
+				name = activityDisplayName(it)
+				break
+			}
+		}
+	}
+	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackActivityTargetSavedFmt, minutes, name))
+	confirm.ParseMode = "Markdown"
+	_, _ = m.bot.Send(confirm)
+	m.ShowTrackActivitySelectionMenu(ctx)
+	return true
+}
+
 func (m *Module) HandleTrackToggleCallback(ctx *tgctx.MsgContext) {
 	payload := strings.TrimPrefix(ctx.Text, "act_toggle_:")
 	activityID, err := strconv.ParseInt(payload, 10, 64)
@@ -1011,7 +973,6 @@ func (m *Module) HandleTrackToggleCallback(ctx *tgctx.MsgContext) {
 	}
 }
 
-// DeleteSelectedActivities removes all currently selected activities.
 func (m *Module) DeleteSelectedActivities(ctx *tgctx.MsgContext) {
 	deleted, err := m.tracksvc.DeleteSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1024,7 +985,6 @@ func (m *Module) DeleteSelectedActivities(ctx *tgctx.MsgContext) {
 	m.ShowTrackActivitySelectionMenu(ctx)
 }
 
-// ArchiveSelectedActivities moves selected activities to archive.
 func (m *Module) ArchiveSelectedActivities(ctx *tgctx.MsgContext) {
 	archived, err := m.tracksvc.ArchiveSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1045,7 +1005,6 @@ func (m *Module) ArchiveSelectedActivities(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(msg)
 }
 
-// ArchiveSelectedActivitiesInPlace archives selected activities and edits current message.
 func (m *Module) ArchiveSelectedActivitiesInPlace(ctx *tgctx.MsgContext) {
 	archived, err := m.tracksvc.ArchiveSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1075,17 +1034,14 @@ func (m *Module) ArchiveSelectedActivitiesInPlace(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(edit)
 }
 
-// ShowArchiveMenu opens archive as a new message.
 func (m *Module) ShowArchiveMenu(ctx *tgctx.MsgContext) {
 	m.renderArchiveMenu(ctx, false)
 }
 
-// ShowArchiveMenuInPlace opens archive by editing current message.
 func (m *Module) ShowArchiveMenuInPlace(ctx *tgctx.MsgContext) {
 	m.renderArchiveMenu(ctx, true)
 }
 
-// renderArchiveMenu renders archived activities list in normal or in-place mode.
 func (m *Module) renderArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.tracksvc.ListArchivedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1134,7 +1090,6 @@ func (m *Module) renderArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowTrackActivitySelectionMenuInPlace edits current message with activities list.
 func (m *Module) ShowTrackActivitySelectionMenuInPlace(ctx *tgctx.MsgContext) {
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "🗂")
 	msgReply.ReplyMarkup = track.TrackActivityManageReplyMenu(ctx.Language)
@@ -1166,7 +1121,6 @@ func (m *Module) ShowTrackActivitySelectionMenuInPlace(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(edit)
 }
 
-// RestoreArchivedActivity restores one activity from archive to active list.
 func (m *Module) RestoreArchivedActivity(ctx *tgctx.MsgContext) {
 	idRaw := strings.TrimPrefix(ctx.Text, track.TrackCBArchiveRestore)
 	activityID, err := strconv.ParseInt(idRaw, 10, 64)
@@ -1186,7 +1140,6 @@ func (m *Module) RestoreArchivedActivity(ctx *tgctx.MsgContext) {
 	m.ShowArchiveMenuInPlace(ctx)
 }
 
-// DeleteArchivedForever permanently removes one archived activity.
 func (m *Module) DeleteArchivedForever(ctx *tgctx.MsgContext) {
 	idRaw := strings.TrimPrefix(ctx.Text, track.TrackCBArchiveDelete)
 	activityID, err := strconv.ParseInt(idRaw, 10, 64)
@@ -1206,7 +1159,6 @@ func (m *Module) DeleteArchivedForever(ctx *tgctx.MsgContext) {
 	m.ShowArchiveMenuInPlace(ctx)
 }
 
-// findArchivedActivityName resolves archived activity label for confirmations.
 func (m *Module) findArchivedActivityName(ctx *tgctx.MsgContext, activityID int64) string {
 	items, err := m.tracksvc.ListArchivedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1220,9 +1172,6 @@ func (m *Module) findArchivedActivityName(ctx *tgctx.MsgContext, activityID int6
 	return fmt.Sprintf("#%d", activityID)
 }
 
-// ShowTrackTimerMenu renders timer interval selector: built-in 15/30 min
-// choices plus any custom intervals the user has added, all as reply
-// buttons (tap = activate; see TrackButtonTimerDelete for removal).
 func (m *Module) ShowTrackTimerMenu(ctx *tgctx.MsgContext) {
 	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1235,9 +1184,6 @@ func (m *Module) ShowTrackTimerMenu(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowTrackTimerDeleteMenu lists custom intervals as reply buttons; tapping
-// one deletes it (see DeleteCustomTimer). If there are none, it just
-// re-shows the main timer picker instead of an empty delete screen.
 func (m *Module) ShowTrackTimerDeleteMenu(ctx *tgctx.MsgContext) bool {
 	custom, err := m.timersvc.ListCustomIntervals(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1256,15 +1202,12 @@ func (m *Module) ShowTrackTimerDeleteMenu(ctx *tgctx.MsgContext) bool {
 	return true
 }
 
-// PromptCreateCustomTimer asks user to type a custom interval in minutes.
 func (m *Module) PromptCreateCustomTimer(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerCustomPrompt))
 	_, _ = m.bot.Send(msg)
 }
 
-// ProcessCreateCustomTimer validates and saves a custom interval typed by
-// the user, then re-renders the timer picker with it included. Returns true
-// once the "waiting for input" state should be cleared.
+// unlike ProcessCreateCollectionName/ProcessCreateRoadmapName, every failure path returns false so the caller keeps waiting for a retry.
 func (m *Module) ProcessCreateCustomTimer(ctx *tgctx.MsgContext) bool {
 	minutes, err := strconv.Atoi(strings.TrimSpace(ctx.Text))
 	if err != nil {
@@ -1295,8 +1238,6 @@ func (m *Module) ProcessCreateCustomTimer(ctx *tgctx.MsgContext) bool {
 	return true
 }
 
-// DeleteCustomTimer removes a custom interval and returns to the main timer
-// picker with it gone.
 func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	if err := m.timersvc.RemoveCustomInterval(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil && !errors.Is(err, models.ErrCustomTimerNotFound) {
 		log.Error().Err(err).Msg("delete custom timer failed")
@@ -1308,7 +1249,6 @@ func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	m.ShowTrackTimerMenu(ctx)
 }
 
-// ActivateTrackTimer enables periodic prompts for selected activities.
 func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	items, err := m.tracksvc.ListSelectedActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1334,7 +1274,6 @@ func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	m.ShowHomeMenu(ctx)
 }
 
-// StopTrackTimer disables active tracking timer.
 func (m *Module) StopTrackTimer(ctx *tgctx.MsgContext) {
 	if err := m.timersvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
 		log.Error().Err(err).Msg("stop timer failed")
@@ -1344,9 +1283,7 @@ func (m *Module) StopTrackTimer(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopped)))
 }
 
-// SendPromptMessage sends periodic "what are you doing now?" prompt. dueAt
-// is the moment this prompt was actually scheduled for — embedded in the
-// buttons so a late answer credits the right window (see RecordPromptAnswer).
+// dueAt is embedded in the buttons so a late answer still credits the originally scheduled window.
 func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int64, intervalMin int, dueAt time.Time) error {
 	items, err := m.tracksvc.ListSelectedActivities(ctx, userID)
 	if err != nil {
@@ -1356,10 +1293,7 @@ func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int
 		return nil
 	}
 
-	// This runs off the scheduler, not a live user request, so there's no
-	// tgctx.MsgContext with a pre-loaded Language — look it up directly.
-	// chatID is the user's Telegram id (private-chat DMs only, no groups),
-	// which is what GetProfileStats expects.
+	// scheduler call, no MsgContext to read language from — look it up directly; chatID is the DM chat id.
 	lang := i18n.Default
 	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err != nil {
 		log.Error().Err(err).Int64("user_id", userID).Msg("load language for prompt failed")
@@ -1373,7 +1307,6 @@ func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int
 	return err
 }
 
-// RecordPromptAnswer stores one prompt response as tracked time interval.
 func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 	payload := strings.TrimPrefix(ctx.Text, track.TrackCBPromptActivity)
 	parts := strings.Split(payload, ":")
@@ -1399,10 +1332,7 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackPromptInvalidPayload)))
 		return
 	}
-	// dueAt is when this prompt was actually scheduled — credited as-is
-	// (not "now") so answering several stacked prompts together still
-	// splits the time across their real windows instead of stacking
-	// duplicate credit onto the moment they were finally tapped.
+	// dueAt (not "now") is credited so answering several stacked prompts together doesn't double-credit one moment.
 	dueAt := time.Unix(dueAtUnix, 0).UTC()
 
 	if err := m.timersvc.RecordPromptAnswerWithInterval(ctx.Ctx, ctx.DBUserID, activityID, intervalMin, dueAt); err != nil {
@@ -1430,7 +1360,6 @@ func (m *Module) RecordPromptAnswer(ctx *tgctx.MsgContext) {
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
 }
 
-// findActivityName resolves active activity label for confirmations.
 func (m *Module) findActivityName(ctx *tgctx.MsgContext, activityID int64) string {
 	items, err := m.tracksvc.ListActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1444,7 +1373,6 @@ func (m *Module) findActivityName(ctx *tgctx.MsgContext, activityID int64) strin
 	return fmt.Sprintf("#%d", activityID)
 }
 
-// formatReportDuration formats duration as "Xh Ym".
 func formatReportDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0
@@ -1461,7 +1389,6 @@ func formatReportDuration(d time.Duration) string {
 	}
 }
 
-// formatDateOrDash returns date in YYYY-MM-DD or dash for empty time.
 func formatDateOrDash(t time.Time) string {
 	if t.IsZero() {
 		return "—"
@@ -1469,7 +1396,6 @@ func formatDateOrDash(t time.Time) string {
 	return t.Format("2006-01-02")
 }
 
-// percentOf returns percentage string for part/total durations.
 func percentOf(part, total time.Duration) string {
 	if total <= 0 || part <= 0 {
 		return "0%"
@@ -1478,7 +1404,6 @@ func percentOf(part, total time.Duration) string {
 	return fmt.Sprintf("%.1f%%", p)
 }
 
-// ShowLearningMenu loads learning stats and renders learning screen.
 func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.learningsvc.GetLearningStats(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
@@ -1499,7 +1424,6 @@ func (m *Module) ShowLearningMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
-// ShowLearningStatsDetail renders the full "📈 Statistics" breakdown.
 func (m *Module) ShowLearningStatsDetail(ctx *tgctx.MsgContext, edit bool) {
 	detail, err := m.learningsvc.GetStatsDetail(ctx.Ctx, ctx.DBUserID, ctx.Location)
 	if err != nil {
@@ -1511,23 +1435,16 @@ func (m *Module) ShowLearningStatsDetail(ctx *tgctx.MsgContext, edit bool) {
 	m.sendOrEditLearning(ctx, edit, learning.LearningStatsDetailText(ctx.Language, detail), &menu)
 }
 
-// PromptCreateCollection asks the user to type a name for a new collection.
 func (m *Module) PromptCreateCollection(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreatePrompt))
 	msg.ReplyMarkup = learning.LearningWaitingReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msg)
 }
 
-// ProcessCreateCollectionName validates and creates a collection from typed
-// text, then immediately prompts for words. done is true once the "waiting
-// for a name" state should be cleared (on both success and unrecoverable
-// input, matching ProcessCreateActivity's contract).
+// done is true on success and on unrecoverable failure, not just success — caller must stop waiting either way.
 func (m *Module) ProcessCreateCollectionName(ctx *tgctx.MsgContext) (collectionID int64, done bool) {
 	name := strings.TrimSpace(ctx.Text)
-	// A pasted "word - translation" list lands here too, since this and the
-	// word-entry step share the same plain reply keyboard — catch it before
-	// it becomes a garbage multi-line collection name (see the bug report
-	// this guards against: a whole word list swallowed as one giant name).
+	// catches a pasted word list before it becomes one giant garbage collection name (a real bug this guards against).
 	if strings.Contains(name, "\n") {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningCreateNotAList)))
 		return 0, false
@@ -1559,8 +1476,6 @@ func (m *Module) ProcessCreateCollectionName(ctx *tgctx.MsgContext) (collectionI
 	return id, true
 }
 
-// PromptAddWords asks the user to paste word lines for a collection. First
-// is true right after collection creation (slightly different copy).
 func (m *Module) PromptAddWords(ctx *tgctx.MsgContext, collectionID int64, first bool) {
 	key := i18n.KeyLearningAddWordsPromptMore
 	if first {
@@ -1571,9 +1486,6 @@ func (m *Module) PromptAddWords(ctx *tgctx.MsgContext, collectionID int64, first
 	_, _ = m.bot.Send(msg)
 }
 
-// ProcessAddWords parses pasted "word - translation" lines and appends them
-// to a collection. The caller keeps the "waiting for words" state active
-// afterward — the user may paste more, and only exits via the "Done" button.
 func (m *Module) ProcessAddWords(ctx *tgctx.MsgContext, collectionID int64) {
 	added, skipped, err := m.learningsvc.AddWordsFromText(ctx.Ctx, ctx.DBUserID, collectionID, ctx.Text)
 	if err != nil {
@@ -1593,9 +1505,6 @@ func (m *Module) ProcessAddWords(ctx *tgctx.MsgContext, collectionID int64) {
 	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
 }
 
-// ShowWordBase lists a user's active collections; edit renders it by
-// replacing an existing inline message instead of sending a new one, used
-// when reached from another inline screen.
 func (m *Module) ShowWordBase(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1611,11 +1520,7 @@ func (m *Module) ShowWordBase(ctx *tgctx.MsgContext, edit bool) {
 	m.sendOrEditLearning(ctx, edit, learning.LearningWordBaseTitle(ctx.Language, len(items)), &menu)
 }
 
-// ShowReviewCollectionPicker lets the user choose which collections feed
-// the review rotation — reached from "Start reviews"/"Manage reviews" on
-// the main menu. Toggling here applies immediately regardless of whether
-// reviews are already running (see ShowReviewIntervalPicker for the
-// separate "not running yet" activation step).
+// toggling here applies immediately regardless of whether reviews are already running; ShowReviewIntervalPicker is the separate "not yet activated" step.
 func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1644,8 +1549,6 @@ func (m *Module) ShowReviewCollectionPicker(ctx *tgctx.MsgContext, edit bool) {
 	m.sendOrEditLearning(ctx, edit, learning.LearningReviewPickTitle(ctx.Language, active, stats.TimerActive, stats.TimerInterval), &menu)
 }
 
-// HandleReviewPickToggle flips a collection's review-rotation flag and
-// re-renders the picker.
 func (m *Module) HandleReviewPickToggle(ctx *tgctx.MsgContext, collectionID int64) {
 	if err := m.learningsvc.ToggleCollectionActive(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
 		log.Error().Err(err).Msg("toggle collection active from review picker failed")
@@ -1653,9 +1556,7 @@ func (m *Module) HandleReviewPickToggle(ctx *tgctx.MsgContext, collectionID int6
 	m.ShowReviewCollectionPicker(ctx, true)
 }
 
-// HandleReviewContinue moves from the collection picker to the interval
-// picker, refusing to proceed with nothing selected. ok is false when the
-// picker should stay open (caller must not advance the screen).
+// ok is false when nothing is selected yet — caller must not advance past the picker.
 func (m *Module) HandleReviewContinue(ctx *tgctx.MsgContext) (ok bool) {
 	items, err := m.learningsvc.ListCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1674,7 +1575,6 @@ func (m *Module) HandleReviewContinue(ctx *tgctx.MsgContext) (ok bool) {
 	return false
 }
 
-// ShowCollectionDetail renders one collection's words and actions.
 func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64, edit bool) {
 	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)
 	if err != nil {
@@ -1702,7 +1602,6 @@ func (m *Module) ShowCollectionDetail(ctx *tgctx.MsgContext, collectionID int64,
 	m.sendOrEditLearning(ctx, edit, learning.LearningCollectionDetailTitle(ctx.Language, name, len(words)), &menu)
 }
 
-// PromptRenameCollection asks the user to type a new name for a collection.
 func (m *Module) PromptRenameCollection(ctx *tgctx.MsgContext, collectionID int64) {
 	name, err := m.learningsvc.CollectionName(ctx.Ctx, ctx.DBUserID, collectionID)
 	if err != nil {
@@ -1715,8 +1614,7 @@ func (m *Module) PromptRenameCollection(ctx *tgctx.MsgContext, collectionID int6
 	_, _ = m.bot.Send(msg)
 }
 
-// ProcessRenameCollection validates and applies a new collection name.
-// done is true once the "waiting for a new name" state should be cleared.
+// done is false only while the name itself is invalid/duplicate; true even on an unrecoverable save failure.
 func (m *Module) ProcessRenameCollection(ctx *tgctx.MsgContext, collectionID int64) (done bool) {
 	name := strings.TrimSpace(ctx.Text)
 	if strings.Contains(name, "\n") || len(name) < 2 || len(name) > 60 {
@@ -1745,8 +1643,6 @@ func (m *Module) ProcessRenameCollection(ctx *tgctx.MsgContext, collectionID int
 	return true
 }
 
-// HandleCollectionToggle flips whether a collection is included in review
-// pushes and re-renders its detail view.
 func (m *Module) HandleCollectionToggle(ctx *tgctx.MsgContext, collectionID int64) {
 	if err := m.learningsvc.ToggleCollectionActive(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
 		log.Error().Err(err).Msg("toggle collection active failed")
@@ -1754,7 +1650,6 @@ func (m *Module) HandleCollectionToggle(ctx *tgctx.MsgContext, collectionID int6
 	m.ShowCollectionDetail(ctx, collectionID, true)
 }
 
-// HandleWordDelete removes one word and re-renders its collection's detail view.
 func (m *Module) HandleWordDelete(ctx *tgctx.MsgContext, wordID, collectionID int64) {
 	if err := m.learningsvc.DeleteWord(ctx.Ctx, ctx.DBUserID, wordID); err != nil {
 		log.Error().Err(err).Msg("delete word failed")
@@ -1762,7 +1657,6 @@ func (m *Module) HandleWordDelete(ctx *tgctx.MsgContext, wordID, collectionID in
 	m.ShowCollectionDetail(ctx, collectionID, true)
 }
 
-// HandleCollectionArchive archives a collection and returns to the word base.
 func (m *Module) HandleCollectionArchive(ctx *tgctx.MsgContext, collectionID int64) {
 	if err := m.learningsvc.ArchiveCollection(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
 		log.Error().Err(err).Msg("archive collection failed")
@@ -1770,7 +1664,6 @@ func (m *Module) HandleCollectionArchive(ctx *tgctx.MsgContext, collectionID int
 	m.ShowWordBase(ctx, true)
 }
 
-// ShowLearningArchiveMenu lists archived collections.
 func (m *Module) ShowLearningArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.learningsvc.ListArchivedCollections(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -1786,7 +1679,6 @@ func (m *Module) ShowLearningArchiveMenu(ctx *tgctx.MsgContext, edit bool) {
 	m.sendOrEditLearning(ctx, edit, learning.LearningArchiveTitle(ctx.Language, len(items)), &menu)
 }
 
-// RestoreArchivedCollection moves a collection back to the active list.
 func (m *Module) RestoreArchivedCollection(ctx *tgctx.MsgContext, collectionID int64) {
 	if err := m.learningsvc.RestoreCollection(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
 		log.Error().Err(err).Msg("restore collection failed")
@@ -1794,7 +1686,6 @@ func (m *Module) RestoreArchivedCollection(ctx *tgctx.MsgContext, collectionID i
 	m.ShowLearningArchiveMenu(ctx, true)
 }
 
-// DeleteArchivedCollectionForever permanently removes an archived collection.
 func (m *Module) DeleteArchivedCollectionForever(ctx *tgctx.MsgContext, collectionID int64) {
 	if err := m.learningsvc.DeleteCollectionForever(ctx.Ctx, ctx.DBUserID, collectionID); err != nil {
 		log.Error().Err(err).Msg("delete collection forever failed")
@@ -1802,9 +1693,6 @@ func (m *Module) DeleteArchivedCollectionForever(ctx *tgctx.MsgContext, collecti
 	m.ShowLearningArchiveMenu(ctx, true)
 }
 
-// sendOrEditLearning sends a fresh message or edits the current inline
-// message with Markdown text and an optional inline keyboard — shared by
-// every Learning sub-screen.
 func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
 	if edit && ctx.MessageID > 0 {
 		var out tgbotapi.Chattable
@@ -1818,10 +1706,8 @@ func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text strin
 			out = e
 		}
 		if _, err := m.bot.Send(out); err != nil {
-			// Edit can legitimately fail (message too old, deleted, or some
-			// other transient API error) — previously this was silently
-			// swallowed, leaving the user staring at an unchanged screen
-			// with no feedback at all. Fall back to a fresh message instead.
+			// edit can fail (stale/deleted message); previously swallowed silently, leaving a frozen
+			// screen — fall back to a fresh message instead.
 			log.Error().Err(err).Msg("edit learning screen failed, sending fresh message instead")
 			m.sendOrEditLearning(ctx, false, text, menu)
 		}
@@ -1837,31 +1723,26 @@ func (m *Module) sendOrEditLearning(ctx *tgctx.MsgContext, edit bool, text strin
 	}
 }
 
-// ShowReviewIntervalPicker shows the review-push interval picker.
 func (m *Module) ShowReviewIntervalPicker(ctx *tgctx.MsgContext) {
 	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningReviewIntervalPrompt))
 	msg.ReplyMarkup = learning.LearningPushIntervalReplyMenu(ctx.Language, learning.BuiltInPushIntervals)
 	_, _ = m.bot.Send(msg)
 }
 
-// ActivateReviews enables periodic review pushes at the given interval.
 func (m *Module) ActivateReviews(ctx *tgctx.MsgContext, intervalMin int) {
 	if err := m.learningsvc.Activate(ctx.Ctx, ctx.DBUserID, intervalMin); err != nil {
 		log.Error().Err(err).Msg("activate learning reviews failed")
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningReviewActivateFailed)))
 		return
 	}
-	// Clear the interval-picker reply keyboard on the confirmation message
-	// itself (rather than a separate blank message) so there's no window
-	// where a stray tap on the old keyboard can land as stray text on
-	// whatever screen comes next.
+	// clears the old keyboard on this same message to avoid a window where a stray tap lands as text
+	// on the next screen.
 	confirm := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyLearningReviewActivated, intervalMin))
 	confirm.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(confirm)
 	m.ShowLearningMenu(ctx)
 }
 
-// StopReviews disables periodic review pushes.
 func (m *Module) StopReviews(ctx *tgctx.MsgContext) {
 	if err := m.learningsvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
 		log.Error().Err(err).Msg("stop learning reviews failed")
@@ -1869,9 +1750,7 @@ func (m *Module) StopReviews(ctx *tgctx.MsgContext) {
 	m.ShowLearningMenu(ctx)
 }
 
-// SendLearningPromptMessage sends one review card (term only) for the most
-// overdue due word, if any. Called off the scheduler, not a live user
-// request — mirrors SendPromptMessage's language lookup.
+// scheduler call (no MsgContext) — same language lookup as SendPromptMessage.
 func (m *Module) SendLearningPromptMessage(ctx context.Context, chatID int64, userID int64) error {
 	due, err := m.learningsvc.PickDueWord(ctx, userID)
 	if err != nil {
@@ -1895,7 +1774,6 @@ func (m *Module) SendLearningPromptMessage(ctx context.Context, chatID int64, us
 	return err
 }
 
-// ShowReviewReveal reveals a review card's translation and grading buttons.
 func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
 	collectionName, term, translation, err := m.learningsvc.PeekWord(ctx.Ctx, ctx.DBUserID, wordID)
 	if err != nil {
@@ -1903,9 +1781,8 @@ func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
 		return
 	}
 
-	// Preview each grade's resulting delay so the buttons themselves show
-	// "in 10m"/"in 1d" etc, Anki-style, instead of only revealing that
-	// after the user has already picked one.
+	// previews each grade's resulting delay upfront so buttons show "in 10m"/"in 1d" before the
+	// user picks, Anki-style.
 	again, hard, good, easy, err := m.learningsvc.PreviewGradeDelays(ctx.Ctx, ctx.DBUserID, wordID)
 	if err != nil {
 		log.Error().Err(err).Msg("preview grade delays failed")
@@ -1923,8 +1800,6 @@ func (m *Module) ShowReviewReveal(ctx *tgctx.MsgContext, wordID int64) {
 	}
 }
 
-// RecordReviewGrade applies the user's answer to a word's SRS schedule and
-// replaces the review card with a confirmation.
 func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, grade models.LearningGrade) {
 	_, term, _, err := m.learningsvc.PeekWord(ctx.Ctx, ctx.DBUserID, wordID)
 	if err != nil {
@@ -1938,12 +1813,8 @@ func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, grade mo
 		return
 	}
 
-	// Explicitly clear the Again/Hard/Good/Easy buttons (plain
-	// EditMessageText leaves whatever markup the message already had) and
-	// replace them with a way back to the Learning menu — otherwise a
-	// graded card is a dead end with no menu in sight, and the stale
-	// buttons stay tappable, letting a stray second tap silently re-grade
-	// the same word with a different answer.
+	// must replace (not just edit text) to clear the stale grade buttons — otherwise a second tap
+	// can silently re-grade the same word.
 	menu := learning.LearningBackToMainInlineMenu(ctx.Language)
 	edit := tgbotapi.NewEditMessageTextAndMarkup(
 		ctx.ChatID, ctx.MessageID,
@@ -1956,7 +1827,6 @@ func (m *Module) RecordReviewGrade(ctx *tgctx.MsgContext, wordID int64, grade mo
 	}
 }
 
-// ShowSubscriptionMenu loads subscription stats and renders subscription screen.
 func (m *Module) ShowSubscriptionMenu(ctx *tgctx.MsgContext) {
 	stats, err := m.subscriptionsvc.GetSubscriptionStats(ctx.Ctx, ctx.UserID)
 	if err != nil {
@@ -1994,129 +1864,119 @@ func countSelectedActivities(items []models.TrackActivityItem) int {
 	return count
 }
 
-// ---------------------------------------------------------------------
-// Challenges: a user-defined day-range plan with one square per day.
-
-// ShowChallengesMenu lists a user's active challenges.
 func (m *Module) ShowChallengesMenu(ctx *tgctx.MsgContext) {
 	items, err := m.challengesvc.ListChallenges(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list challenges failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Failed to load challenges."))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyChallengeListLoadFailed)))
 		return
 	}
-	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.ListTitle(len(items)))
+	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.ListTitle(ctx.Language, len(items)))
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = challenge.ListInlineMenu(items)
+	msg.ReplyMarkup = challenge.ListInlineMenu(ctx.Language, items)
 	if _, err := m.bot.Send(msg); err != nil {
 		log.Error().Err(err).Msg("send challenges menu failed")
 	}
 }
 
-// PromptCreateChallenge asks for a new challenge's name.
 func (m *Module) PromptCreateChallenge(ctx *tgctx.MsgContext) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.CreatePromptNameText)
-	msg.ReplyMarkup = challenge.WaitingReplyMenu()
+	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.CreatePromptNameText(ctx.Language))
+	msg.ReplyMarkup = challenge.WaitingReplyMenu(ctx.Language)
 	_, _ = m.bot.Send(msg)
 }
 
-// ProcessCreateChallengeName validates a typed name. ok is false when the
-// caller should keep waiting for a better name.
 func (m *Module) ProcessCreateChallengeName(ctx *tgctx.MsgContext) (name string, ok bool) {
 	name = strings.TrimSpace(ctx.Text)
 	if strings.Contains(name, "\n") || len(name) < 2 || len(name) > 60 {
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, "⚠️ Name must be a single line, 2-60 characters. Try again:"))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyCommonNameSingleLineInvalid)))
 		return "", false
 	}
-	hide := tgbotapi.NewMessage(ctx.ChatID, challenge.CreatePromptRangeText)
+	hide := tgbotapi.NewMessage(ctx.ChatID, challenge.CreatePromptRangeText(ctx.Language))
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
 	return name, true
 }
 
-// ShowCreateChallengeCalendar renders the date-range picker for a new challenge.
 func (m *Module) ShowCreateChallengeCalendar(ctx *tgctx.MsgContext, month, from, to time.Time) {
-	msg := tgbotapi.NewMessage(ctx.ChatID, "📅 Pick start and end date:")
-	msg.ReplyMarkup = challenge.CalendarInlineMenu(month, from, to)
+	msg := tgbotapi.NewMessage(ctx.ChatID, challenge.CreateCalendarHeaderText(ctx.Language))
+	msg.ReplyMarkup = challenge.CalendarInlineMenu(ctx.Language, month, from, to)
 	_, _ = m.bot.Send(msg)
 }
 
-// ShowCreateChallengeCalendarInPlace re-renders the picker by editing the
-// current message (month nav, day taps).
 func (m *Module) ShowCreateChallengeCalendarInPlace(ctx *tgctx.MsgContext, month, from, to time.Time) {
 	if ctx.MessageID == 0 {
 		return
 	}
-	edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, "📅 Pick start and end date:", challenge.CalendarInlineMenu(month, from, to))
+	edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, challenge.CreateCalendarHeaderText(ctx.Language), challenge.CalendarInlineMenu(ctx.Language, month, from, to))
 	if _, err := m.bot.Send(edit); err != nil {
 		log.Error().Err(err).Msg("edit create-challenge calendar failed")
 	}
 }
 
-// CreateChallenge validates and creates a challenge, confirms, and shows
-// the challenges list. ok is false on validation failure (message already sent).
 func (m *Module) CreateChallenge(ctx *tgctx.MsgContext, name string, from, to time.Time) bool {
 	id, err := m.challengesvc.CreateChallenge(ctx.Ctx, ctx.DBUserID, name, from, to, ctx.Location)
 	if err != nil {
-		var msg string
+		var msgKey string
 		switch {
 		case errors.Is(err, models.ErrChallengeExists):
-			msg = "⚠️ You already have a challenge with that name."
+			msgKey = i18n.KeyChallengeCreateExists
 		case errors.Is(err, models.ErrChallengeInvalidRange):
-			msg = "⚠️ Challenge must be 1-100 days, end date on or after start date."
+			msgKey = i18n.KeyChallengeCreateInvalidRange
 		case errors.Is(err, models.ErrChallengeInvalidName):
-			msg = "⚠️ Invalid name."
+			msgKey = i18n.KeyCommonNameSingleLineInvalid
 		default:
 			log.Error().Err(err).Msg("create challenge failed")
-			msg = "⚠️ Failed to create challenge. Please try again."
+			msgKey = i18n.KeyChallengeCreateFailed
 		}
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, msg))
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, msgKey)))
 		m.ShowChallengesMenu(ctx)
 		return false
 	}
 	totalDays := int(to.Sub(from).Hours()/24) + 1
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, challenge.CreatedText(name, totalDays)))
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, challenge.CreatedText(ctx.Language, name, totalDays)))
 	_ = id
 	m.ShowChallengesMenu(ctx)
 	return true
 }
 
-// ShowChallengeGrid renders one challenge's day-grid.
 func (m *Module) ShowChallengeGrid(ctx *tgctx.MsgContext, challengeID int64, edit bool) {
 	item, err := m.challengesvc.GetChallenge(ctx.Ctx, ctx.DBUserID, challengeID)
 	if err != nil {
-		m.sendOrEditChallenge(ctx, edit, "⚠️ Challenge not found.", nil)
+		m.sendOrEditChallenge(ctx, edit, i18n.T(ctx.Language, i18n.KeyChallengeNotFound), nil)
 		return
 	}
 	days, err := m.challengesvc.ListDays(ctx.Ctx, ctx.DBUserID, challengeID)
 	if err != nil {
 		log.Error().Err(err).Msg("list challenge days failed")
-		m.sendOrEditChallenge(ctx, edit, "⚠️ Failed to load challenge.", nil)
+		m.sendOrEditChallenge(ctx, edit, i18n.T(ctx.Language, i18n.KeyChallengeLoadFailed), nil)
 		return
 	}
 	today := apptime.NowIn(ctx.Location)
 	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-	menu := challenge.GridInlineMenu(challengeID, days, todayMidnight)
-	m.sendOrEditChallenge(ctx, edit, challenge.GridTitle(item), &menu)
+	menu := challenge.GridInlineMenu(ctx.Language, challengeID, days, todayMidnight)
+	m.sendOrEditChallenge(ctx, edit, challenge.GridTitle(ctx.Language, item), &menu)
 }
 
-// ShowChallengeDayConfirm renders the "mark this day" screen.
+// ShowChallengeDayConfirm renders the day-square tap screen: the existing
+// Done/Skip buttons, now with a progress donut, trend strip, and streak
+// above them (via challengesvc.GetDayDetail) instead of a bare status line.
 func (m *Module) ShowChallengeDayConfirm(ctx *tgctx.MsgContext, challengeID int64, day time.Time) {
 	item, err := m.challengesvc.GetChallenge(ctx.Ctx, ctx.DBUserID, challengeID)
 	if err != nil {
-		m.sendOrEditChallenge(ctx, true, "⚠️ Challenge not found.", nil)
+		m.sendOrEditChallenge(ctx, true, i18n.T(ctx.Language, i18n.KeyChallengeNotFound), nil)
 		return
 	}
-	status, err := m.challengesvc.GetDayStatus(ctx.Ctx, ctx.DBUserID, challengeID, day)
+	today := apptime.NowIn(ctx.Location)
+	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	detail, err := m.challengesvc.GetDayDetail(ctx.Ctx, ctx.DBUserID, challengeID, day, todayMidnight)
 	if err != nil {
-		m.sendOrEditChallenge(ctx, true, "⚠️ Day not found.", nil)
+		m.sendOrEditChallenge(ctx, true, i18n.T(ctx.Language, i18n.KeyChallengeDayNotFound), nil)
 		return
 	}
-	menu := challenge.DayConfirmInlineMenu(challengeID, day)
-	m.sendOrEditChallenge(ctx, true, challenge.DayConfirmTitle(item.Name, day, status), &menu)
+	menu := challenge.DayConfirmInlineMenu(ctx.Language, challengeID, day)
+	m.sendOrEditChallenge(ctx, true, challenge.DayConfirmTitle(ctx.Language, item, detail), &menu)
 }
 
-// MarkChallengeDay marks one day done/skipped and returns to the grid.
 func (m *Module) MarkChallengeDay(ctx *tgctx.MsgContext, challengeID int64, day time.Time, done bool) {
 	if err := m.challengesvc.MarkDay(ctx.Ctx, ctx.DBUserID, challengeID, day, done); err != nil {
 		log.Error().Err(err).Msg("mark challenge day failed")
@@ -2124,7 +1984,6 @@ func (m *Module) MarkChallengeDay(ctx *tgctx.MsgContext, challengeID int64, day 
 	m.ShowChallengeGrid(ctx, challengeID, true)
 }
 
-// ArchiveChallenge archives one challenge and returns to the list.
 func (m *Module) ArchiveChallenge(ctx *tgctx.MsgContext, challengeID int64) {
 	if err := m.challengesvc.ArchiveChallenge(ctx.Ctx, ctx.DBUserID, challengeID); err != nil {
 		log.Error().Err(err).Msg("archive challenge failed")
@@ -2132,23 +1991,21 @@ func (m *Module) ArchiveChallenge(ctx *tgctx.MsgContext, challengeID int64) {
 	m.ShowChallengesMenu(ctx)
 }
 
-// ShowChallengeArchive lists archived challenges.
 func (m *Module) ShowChallengeArchive(ctx *tgctx.MsgContext, edit bool) {
 	items, err := m.challengesvc.ListArchivedChallenges(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list archived challenges failed")
-		m.sendOrEditChallenge(ctx, edit, "⚠️ Failed to load archive.", nil)
+		m.sendOrEditChallenge(ctx, edit, i18n.T(ctx.Language, i18n.KeyTrackArchiveLoadFailed), nil)
 		return
 	}
 	if len(items) == 0 {
-		m.sendOrEditChallenge(ctx, edit, "🔁 No archived challenges.", nil)
+		m.sendOrEditChallenge(ctx, edit, i18n.T(ctx.Language, i18n.KeyChallengeArchiveEmpty), nil)
 		return
 	}
-	menu := challenge.ArchiveInlineMenu(items)
-	m.sendOrEditChallenge(ctx, edit, challenge.ArchiveTitle(len(items)), &menu)
+	menu := challenge.ArchiveInlineMenu(ctx.Language, items)
+	m.sendOrEditChallenge(ctx, edit, challenge.ArchiveTitle(ctx.Language, len(items)), &menu)
 }
 
-// RestoreChallenge moves an archived challenge back to active.
 func (m *Module) RestoreChallenge(ctx *tgctx.MsgContext, challengeID int64) {
 	if err := m.challengesvc.RestoreChallenge(ctx.Ctx, ctx.DBUserID, challengeID, ctx.Location); err != nil {
 		log.Error().Err(err).Msg("restore challenge failed")
@@ -2156,7 +2013,6 @@ func (m *Module) RestoreChallenge(ctx *tgctx.MsgContext, challengeID int64) {
 	m.ShowChallengeArchive(ctx, true)
 }
 
-// DeleteChallengeForever permanently removes an archived challenge.
 func (m *Module) DeleteChallengeForever(ctx *tgctx.MsgContext, challengeID int64) {
 	if err := m.challengesvc.DeleteChallengeForever(ctx.Ctx, ctx.DBUserID, challengeID); err != nil {
 		log.Error().Err(err).Msg("delete challenge forever failed")
@@ -2164,8 +2020,6 @@ func (m *Module) DeleteChallengeForever(ctx *tgctx.MsgContext, challengeID int64
 	m.ShowChallengeArchive(ctx, true)
 }
 
-// sendOrEditChallenge sends a fresh message or edits the current inline
-// message — shared by the Challenge screens.
 func (m *Module) sendOrEditChallenge(ctx *tgctx.MsgContext, edit bool, text string, menu *tgbotapi.InlineKeyboardMarkup) {
 	if edit && ctx.MessageID > 0 {
 		var out tgbotapi.Chattable
@@ -2194,11 +2048,7 @@ func (m *Module) sendOrEditChallenge(ctx *tgctx.MsgContext, edit bool, text stri
 	}
 }
 
-// SendChallengePush sends the daily evening "did you do it?" push for one
-// challenge, run off the scheduler (not a live user request), then
-// reschedules tomorrow's push using the user's own timezone. Skips
-// sending (without error, but still reschedules) if the user already
-// marked today via the grid.
+// skips sending (no error) if the day's already marked via the grid, but still reschedules tomorrow's push.
 func (m *Module) SendChallengePush(ctx context.Context, chatID, dbUserID, challengeID int64, challengeName string, startDate, endDate time.Time) error {
 	loc := apptime.Location
 	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err == nil && stats.TimeZone != nil {
@@ -2218,21 +2068,23 @@ func (m *Module) SendChallengePush(ctx context.Context, chatID, dbUserID, challe
 		return err
 	}
 	if status != models.ChallengeDayPending {
-		return nil // already marked via the grid earlier today
+		return nil
 	}
 
 	totalDays := int(endDate.Sub(startDate).Hours()/24) + 1
 	dayNum := int(todayMidnight.Sub(startDate).Hours()/24) + 1
 
-	msg := tgbotapi.NewMessage(chatID, challenge.PushText(challengeName, dayNum, totalDays))
+	lang := i18n.Default
+	if stats, err := m.profilesvc.GetProfileStats(ctx, chatID); err == nil && stats.Language != nil {
+		lang = i18n.Normalize(*stats.Language)
+	}
+	msg := tgbotapi.NewMessage(chatID, challenge.PushText(lang, challengeName, dayNum, totalDays))
 	msg.ParseMode = "Markdown"
-	msg.ReplyMarkup = challenge.PushInlineMenu(challengeID)
+	msg.ReplyMarkup = challenge.PushInlineMenu(lang, challengeID)
 	_, err = m.bot.Send(msg)
 	return err
 }
 
-// RecordChallengePushAnswer marks today done/skipped from a tap on the
-// evening push message.
 func (m *Module) RecordChallengePushAnswer(ctx *tgctx.MsgContext, challengeID int64, done bool) {
 	today := apptime.NowIn(ctx.Location)
 	todayMidnight := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
@@ -2240,12 +2092,12 @@ func (m *Module) RecordChallengePushAnswer(ctx *tgctx.MsgContext, challengeID in
 		log.Error().Err(err).Msg("record challenge push answer failed")
 		return
 	}
-	result := "❌ Marked as skipped."
+	resultKey := i18n.KeyChallengePushMarkedSkipped
 	if done {
-		result = "✅ Marked as done — nice work!"
+		resultKey = i18n.KeyChallengePushMarkedDone
 	}
 	if ctx.MessageID > 0 {
-		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, result)
+		edit := tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, resultKey))
 		_, _ = m.bot.Send(edit)
 	}
 }
@@ -2540,7 +2392,7 @@ func (m *Module) ShowRoadmapDetail(ctx *tgctx.MsgContext, roadmapID int64, edit 
 		return
 	}
 
-	menu := roadmap.RoadmapDetailInlineMenu(ctx.Language, item, cards)
+	menu := roadmap.RoadmapDetailInlineMenu(ctx.Language, item, cards, m.roadmapaisvc.Enabled())
 	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapDetailText(ctx.Language, item, len(cards)), &menu)
 }
 
@@ -2745,12 +2597,15 @@ func (m *Module) HandleRoadmapDigestToggle(ctx *tgctx.MsgContext, cardID int64) 
 		return
 	}
 
-	text, menu, hasCards, err := m.buildRoadmapDigest(ctx.Ctx, ctx.DBUserID, ctx.Language)
+	// No AI advice on a re-render: this runs in the dispatcher's serial
+	// update loop, and the note would also change under the user on every
+	// tick. The advice is written once, on the scheduled push.
+	text, menu, cards, err := m.buildRoadmapDigest(ctx.Ctx, ctx.DBUserID, ctx.Language)
 	if err != nil {
 		log.Error().Err(err).Msg("rebuild roadmap digest failed")
 		return
 	}
-	if !hasCards {
+	if len(cards) == 0 {
 		m.sendOrEditRoadmap(ctx, true, i18n.T(ctx.Language, i18n.KeyRoadmapDigestEmpty), nil)
 		return
 	}
@@ -2911,13 +2766,13 @@ func (m *Module) StopRoadmapReminders(ctx *tgctx.MsgContext) {
 // buildRoadmapDigest assembles a reminder digest: the pending-card text plus
 // a keyboard with one tick button per card. hasCards is false when nothing is
 // pending, in which case there is nothing worth sending.
-func (m *Module) buildRoadmapDigest(ctx context.Context, userID int64, lang i18n.Lang) (string, tgbotapi.InlineKeyboardMarkup, bool, error) {
+func (m *Module) buildRoadmapDigest(ctx context.Context, userID int64, lang i18n.Lang) (string, tgbotapi.InlineKeyboardMarkup, []models.RoadmapDigestCard, error) {
 	cards, err := m.roadmapsvc.PickDigestCards(ctx, userID)
 	if err != nil {
-		return "", tgbotapi.InlineKeyboardMarkup{}, false, err
+		return "", tgbotapi.InlineKeyboardMarkup{}, nil, err
 	}
 	if len(cards) == 0 {
-		return "", tgbotapi.InlineKeyboardMarkup{}, false, nil
+		return "", tgbotapi.InlineKeyboardMarkup{}, nil, nil
 	}
 
 	// Per-technology done/total counts for the digest's group headers — the
@@ -2929,12 +2784,12 @@ func (m *Module) buildRoadmapDigest(ctx context.Context, userID int64, lang i18n
 		}
 		item, err := m.roadmapsvc.Roadmap(ctx, userID, c.RoadmapID)
 		if err != nil {
-			return "", tgbotapi.InlineKeyboardMarkup{}, false, err
+			return "", tgbotapi.InlineKeyboardMarkup{}, nil, err
 		}
 		byRoadmap[c.RoadmapID] = item
 	}
 
-	return roadmap.RoadmapDigestText(lang, cards, byRoadmap), roadmap.RoadmapDigestInlineMenu(lang, cards), true, nil
+	return roadmap.RoadmapDigestText(lang, cards, byRoadmap), roadmap.RoadmapDigestInlineMenu(lang, cards), cards, nil
 }
 
 // SendRoadmapDigestMessage sends one reminder digest of the easiest pending
@@ -2952,12 +2807,24 @@ func (m *Module) SendRoadmapDigestMessage(ctx context.Context, chatID int64, use
 		lang = i18n.Normalize(*stats.Language)
 	}
 
-	text, menu, hasCards, err := m.buildRoadmapDigest(ctx, userID, lang)
+	text, menu, cards, err := m.buildRoadmapDigest(ctx, userID, lang)
 	if err != nil {
 		return err
 	}
-	if !hasCards {
+	if len(cards) == 0 {
 		return nil
+	}
+
+	// The advice is a bonus on top of the digest, so a failed or disabled
+	// provider costs the note and nothing else — the reminder still goes out.
+	// Safe to call inline: the scheduler runs on its own goroutine, unlike
+	// the dispatcher.
+	if m.roadmapaisvc.Enabled() {
+		if advice, err := m.roadmapaisvc.DigestAdvice(ctx, userID, cards, string(lang)); err != nil {
+			log.Warn().Err(err).Int64("user_id", userID).Msg("roadmap digest advice failed, sending the digest without it")
+		} else {
+			text += i18n.T(lang, i18n.KeyRoadmapAIDigestHintFmt, advice)
+		}
 	}
 
 	msg := tgbotapi.NewMessage(chatID, text)

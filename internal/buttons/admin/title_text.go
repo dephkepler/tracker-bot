@@ -5,7 +5,6 @@ import (
 	"tracker-bot/internal/models"
 )
 
-// OverviewStatsText renders the bot-wide "📊 Overview" screen.
 func OverviewStatsText(s models.AdminOverviewStats) string {
 	return fmt.Sprintf(
 		"📊 Overview\n\n👥 Users: %d\n⏱ Active track timers: %d\n🎲 Active review pushes: %d\n🗂 Activities: %d\n📚 Learning collections: %d\n🧠 Learning words: %d",
@@ -13,7 +12,6 @@ func OverviewStatsText(s models.AdminOverviewStats) string {
 	)
 }
 
-// UserDetailText renders one user's drill-down view.
 func UserDetailText(d models.AdminUserDetail) string {
 	return fmt.Sprintf(
 		"👤 User #%d\n\nTelegram: %s (id `%d`)\nLanguage: %s\nTimezone: %s\nRegistered: %s\n\n🗂 Activities: %d\n📚 Learning collections: %d (%d words)\n⏱ Track timer: %s\n🎲 Reviews: %s",
@@ -24,25 +22,20 @@ func UserDetailText(d models.AdminUserDetail) string {
 	)
 }
 
-// UserDeleteConfirmText renders the "are you sure" step before deleting a user.
 func UserDeleteConfirmText(d models.AdminUserDetail) string {
 	return fmt.Sprintf("⚠️ Really delete user #%d (%s)?\n\nThis permanently removes their profile, activities, sessions, and learning data. This cannot be undone.", d.DBID, usernameLabel(d.UserName))
 }
 
-// UserDeletedText confirms a completed deletion.
 func UserDeletedText(dbID int64) string {
 	return fmt.Sprintf("🗑 User #%d deleted.", dbID)
 }
 
-// BroadcastPromptText asks the admin for the broadcast message.
 const BroadcastPromptText = "📢 Send the message you want to broadcast to all users:"
 
-// BroadcastConfirmText previews the pending broadcast before sending.
 func BroadcastConfirmText(text string, total int) string {
 	return fmt.Sprintf("📢 Send this to %d user(s)?\n\n—\n%s\n—", total, text)
 }
 
-// BroadcastResultText reports how a broadcast went.
 func BroadcastResultText(sent, failed int) string {
 	if failed == 0 {
 		return fmt.Sprintf("✅ Sent to %d user(s).", sent)

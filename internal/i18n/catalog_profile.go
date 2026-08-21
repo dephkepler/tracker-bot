@@ -1,12 +1,7 @@
 package i18n
 
-// catalogProfile holds the Profile screen and its two edit flows (language
-// picker, timezone-via-shared-location). Note: the language picker's own
-// 5 buttons ("🇷🇺 Русский", "Deutsch", ...) are intentionally NOT in this
-// catalog — each always shows its language's own native name regardless of
-// the viewer's current interface language (like every other app's language
-// picker), so they're plain constants in internal/buttons/profile, not
-// translated text.
+// The language picker's own button labels (native names like "Deutsch") live as plain
+// constants in internal/buttons/profile, not here — they must not be translated per-viewer.
 var catalogProfile = map[string]entry{
 	KeyProfileTitle: {
 		RU: "👤 Профиль",

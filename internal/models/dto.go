@@ -25,6 +25,9 @@ type MainStats struct {
 	TodayTracked        time.Duration
 	TodaySessions       int
 	StreakDays          int
+	// TargetMinutes is the current activity's own configured daily target;
+	// nil when it hasn't been set (callers fall back to a default).
+	TargetMinutes *int
 }
 
 type TrackActivityItem struct {
@@ -32,6 +35,10 @@ type TrackActivityItem struct {
 	Name     string
 	Emoji    string
 	Selected bool
+	// TargetMinutes is the daily time target this activity is measured
+	// against on the Track main screen's progress bar; nil means not
+	// configured yet (callers fall back to a default).
+	TargetMinutes *int
 }
 
 type CustomTimerOption struct {
@@ -303,6 +310,33 @@ type RoadmapDigestCard struct {
 	Text        string
 	Kind        RoadmapCardKind
 	Difficulty  int
+}
+
+// RoadmapQuiz is one generated question about a card, carried through the
+// UI between asking and grading. Nothing about a quiz is persisted: the
+// question lives in the session while the user types an answer, and the only
+// lasting effect a quiz can have is the user choosing to tick the card done.
+type RoadmapQuiz struct {
+	CardID   int64
+	CardText string
+	Question string
+}
+
+// RoadmapQuizVerdict is how an answer was judged. Three levels rather than a
+// pass/fail bit, because "you got the main idea but missed X" is the common
+// case and the most useful thing to say back.
+type RoadmapQuizVerdict string
+
+const (
+	RoadmapQuizCorrect RoadmapQuizVerdict = "correct"
+	RoadmapQuizPartial RoadmapQuizVerdict = "partial"
+	RoadmapQuizWrong   RoadmapQuizVerdict = "wrong"
+)
+
+// RoadmapQuizGrade is the judgement of one answer, in the user's language.
+type RoadmapQuizGrade struct {
+	Verdict  RoadmapQuizVerdict
+	Feedback string
 }
 
 // RoadmapCardStat is one technology's row in the statistics breakdown.

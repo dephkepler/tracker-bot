@@ -9,15 +9,12 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// ChallengeScheduler periodically checks due challenges and sends the daily
-// evening "did you do it?" push — mirrors TimerScheduler/LearningScheduler.
 type ChallengeScheduler struct {
 	ctx          context.Context
 	challengesvc service.ChallengeService
 	challenge    *handlers.Module
 }
 
-// NewChallengeScheduler creates scheduler instance.
 func NewChallengeScheduler(ctx context.Context, challengesvc service.ChallengeService, challenge *handlers.Module) *ChallengeScheduler {
 	return &ChallengeScheduler{
 		ctx:          ctx,
@@ -26,8 +23,7 @@ func NewChallengeScheduler(ctx context.Context, challengesvc service.ChallengeSe
 	}
 }
 
-// Run starts background ticker loop. A once-a-day push doesn't need tight
-// polling — 60s keeps drift small without hammering the DB.
+// 60s poll is plenty for a once-a-day push, without hammering the DB.
 func (s *ChallengeScheduler) Run() {
 	ticker := time.NewTicker(60 * time.Second)
 	go func() {
@@ -43,7 +39,6 @@ func (s *ChallengeScheduler) Run() {
 	}()
 }
 
-// tick processes one scheduler cycle at provided UTC time.
 func (s *ChallengeScheduler) tick(now time.Time) {
 	due, err := s.challengesvc.ListDueChallenges(s.ctx, now, 100)
 	if err != nil {
@@ -52,9 +47,7 @@ func (s *ChallengeScheduler) tick(now time.Time) {
 	}
 
 	for _, item := range due {
-		// SendChallengePush also reschedules tomorrow's push (using the
-		// user's own timezone) regardless of whether it actually sent —
-		// see its doc comment.
+		// SendChallengePush reschedules tomorrow's push regardless of whether this one sent.
 		if err := s.challenge.SendChallengePush(s.ctx, item.TgUserID, item.DBUserID, item.ChallengeID, item.ChallengeName, item.StartDate, item.EndDate); err != nil {
 			log.Error().Err(err).Int64("challenge_id", item.ChallengeID).Msg("challenge scheduler: send push failed")
 		}

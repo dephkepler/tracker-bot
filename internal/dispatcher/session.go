@@ -5,41 +5,38 @@ import (
 	"time"
 )
 
-// userSession holds every piece of per-user, in-memory state the dispatcher
-// juggles between messages: what screen they're on, what (if anything) it's
-// waiting for them to type/share next, their resolved timezone, and the
-// scratch state for building a report. This replaces what used to be ten
-// separate parallel maps on Dispatcher, keyed by the same Telegram user id.
-//
-// Concurrency: sessionStore.get is safe to call from multiple goroutines,
-// but the *userSession it returns is not independently locked — field reads
-// and writes on it are only safe because Dispatcher.Run processes updates
-// one at a time. If updates are ever handled concurrently, this struct needs
-// its own mutex too.
+// userSession fields are unsynchronized — safe only because Dispatcher.Run
+// processes updates for all users serially. Handling updates concurrently
+// would need a mutex on this struct too.
 type userSession struct {
 	dbID int64
 
 	screen       string
-	screenLoaded bool // true once loaded from user_ui_state (or set explicitly)
+	screenLoaded bool
 
-	tz       string // IANA zone name, "" until the user shares a location
-	tzLoaded bool   // true once loaded from the users table (or set explicitly)
+	tz       string
+	tzLoaded bool
 
-	lang       string // raw users.language code, "" until loaded/set — see i18n.Normalize
-	langLoaded bool   // true once loaded from the users table (or invalidated after a change)
+	// lang is the raw users.language code — run it through i18n.Normalize
+	// before use, it isn't normalized here.
+	lang       string
+	langLoaded bool
 
 	waitingActivityName       bool
 	waitingLocation           bool
 	waitingLanguage           bool
 	waitingPeriodRange        bool
 	waitingCustomTimerMinutes bool
+	waitingTrackTargetMinutes bool
+	// pendingTrackTargetActivityID is only meaningful while
+	// waitingTrackTargetMinutes is true.
+	pendingTrackTargetActivityID int64
 
 	waitingLearningCollectionName   bool
 	waitingLearningWords            bool
 	waitingLearningRenameCollection bool
-	// learningCollectionID is the collection currently being edited — set
-	// when creating a collection or opening "Add words" on an existing one,
-	// used while waitingLearningWords is true.
+	// learningCollectionID is only meaningful while waitingLearningWords is
+	// true (set on collection create or "Add words").
 	learningCollectionID int64
 
 	waitingRoadmapGoalName   bool
@@ -48,6 +45,10 @@ type userSession struct {
 	waitingRoadmapCriteria   bool
 	waitingRoadmapRename     bool
 	waitingRoadmapCards      bool
+	// waitingRoadmapAICards is the same paste flow as waitingRoadmapCards
+	// but tagged by the model instead of by inline tags. Two flags rather
+	// than one plus a mode, so neither path can silently become the other.
+	waitingRoadmapAICards bool
 	// roadmapID / roadmapGoalID are whichever technology and goal the user is
 	// currently working inside — set when one is created or opened, and read
 	// while any waitingRoadmap* flag above is true (the typed text carries no
@@ -56,16 +57,16 @@ type userSession struct {
 	roadmapGoalID int64
 
 	waitingAdminBroadcastText bool
-	// pendingBroadcastText holds the typed broadcast message between the
-	// confirm-step prompt and the admin tapping Send/Cancel on it.
+	// pendingBroadcastText holds the typed broadcast between the prompt and
+	// the admin's Send/Cancel tap on the confirm step.
 	pendingBroadcastText string
 
 	waitingChallengeName bool
 	// pendingChallengeName holds the typed name between the name prompt and
 	// the date-range calendar's confirm step.
 	pendingChallengeName string
-	// challengeID is the challenge currently open (grid view) — set when a
-	// challenge is opened, used to resolve taps that only carry a day.
+	// challengeID is the open challenge (grid view) — taps only carry a
+	// day, so this is what resolves which challenge they belong to.
 	challengeID       int64
 	challengeCalMonth time.Time
 	challengeCalFrom  time.Time
@@ -81,8 +82,6 @@ type userSession struct {
 	lastSeen time.Time
 }
 
-// sessionStore is a concurrency-safe registry of userSessions, keyed by
-// Telegram user id.
 type sessionStore struct {
 	mu       sync.Mutex
 	sessions map[int64]*userSession
@@ -92,7 +91,8 @@ func newSessionStore() *sessionStore {
 	return &sessionStore{sessions: make(map[int64]*userSession)}
 }
 
-// get returns the session for userID, creating an empty one on first touch.
+// get is not a pure lookup: it creates the session on first touch and
+// bumps lastSeen on every call, existing session or not.
 func (s *sessionStore) get(userID int64) *userSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -106,11 +106,9 @@ func (s *sessionStore) get(userID int64) *userSession {
 	return sess
 }
 
-// sweep evicts sessions untouched for longer than maxAge, so a long-running
-// process doesn't grow this map forever. Safe to run periodically in the
-// background (see Dispatcher.sweepLoop) — an evicted user simply gets a
-// fresh session next time they message the bot, rehydrated from the
-// database (screen, timezone) exactly like on a cold process start.
+// sweep evicts sessions idle longer than maxAge; safe to run periodically
+// since an evicted user just rehydrates from the database on their next
+// message, same as a cold process start.
 func (s *sessionStore) sweep(maxAge time.Duration) {
 	cutoff := time.Now().Add(-maxAge)
 	s.mu.Lock()

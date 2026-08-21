@@ -154,14 +154,21 @@ func RoadmapOrphansInlineMenu(lang i18n.Lang, items []models.RoadmapItem) tgbota
 // (tap to tick), a difficulty cycle, and a delete — then the
 // technology-level actions. An unattached technology gets an extra "attach to
 // a goal" row, and its Back leads to the orphan list rather than a goal.
-func RoadmapDetailInlineMenu(lang i18n.Lang, item models.RoadmapItem, cards []models.RoadmapCardItem) tgbotapi.InlineKeyboardMarkup {
-	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(cards)+5)
+func RoadmapDetailInlineMenu(lang i18n.Lang, item models.RoadmapItem, cards []models.RoadmapCardItem, aiEnabled bool) tgbotapi.InlineKeyboardMarkup {
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(cards)+6)
 	for _, c := range cards {
-		rows = append(rows, buttonbuilder.IR(
+		row := buttonbuilder.IR(
 			buttonbuilder.IB(CardButtonLabel(c), fmt.Sprintf("%s%d", RoadmapCBCardToggle, c.ID)),
 			buttonbuilder.IB("🎚", fmt.Sprintf("%s%d", RoadmapCBCardDiff, c.ID)),
 			buttonbuilder.IB("🗑", fmt.Sprintf("%s%d", RoadmapCBCardDelete, c.ID)),
-		))
+		)
+		if aiEnabled && !c.IsDone {
+			// Only on pending cards: quizzing something already ticked off
+			// is the one case where the button has nothing to offer, and a
+			// fourth button on every row costs real width.
+			row = append(row, buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonAIQuiz), fmt.Sprintf("%s%d", RoadmapCBAIQuiz, c.ID)))
+		}
+		rows = append(rows, row)
 	}
 
 	toggleLabel := i18n.T(lang, i18n.KeyRoadmapLabelExcludedReminder)
@@ -175,6 +182,12 @@ func RoadmapDetailInlineMenu(lang i18n.Lang, item models.RoadmapItem, cards []mo
 		buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonAddCards), fmt.Sprintf("%s%d", RoadmapCBAddCards, item.ID)),
 		buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonSetCriteria), fmt.Sprintf("%s%d", RoadmapCBSetCriteria, item.ID)),
 	))
+	if aiEnabled {
+		rows = append(rows, buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonAIPlan), fmt.Sprintf("%s%d", RoadmapCBAIPlan, item.ID)),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonAIPaste), fmt.Sprintf("%s%d", RoadmapCBAIPaste, item.ID)),
+		))
+	}
 	rows = append(rows, buttonbuilder.IR(
 		buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonRename), fmt.Sprintf("%s%d", RoadmapCBRename, item.ID)),
 		buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonArchiveThis), fmt.Sprintf("%s%d", RoadmapCBArchiveThis, item.ID)),
@@ -205,6 +218,17 @@ func RoadmapAssignGoalInlineMenu(lang i18n.Lang, roadmapID int64, goals []models
 		buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), fmt.Sprintf("%s%d", RoadmapCBOpen, roadmapID)),
 	))
 	return buttonbuilder.IK(rows...)
+}
+
+// RoadmapQuizResultInlineMenu offers the one action a graded answer leads to:
+// ticking the card. The toggle resolves its own technology, so the grade
+// message turns into that technology's checklist when tapped.
+func RoadmapQuizResultInlineMenu(lang i18n.Lang, cardID int64) tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyRoadmapButtonQuizDone), fmt.Sprintf("%s%d", RoadmapCBCardToggle, cardID)),
+		),
+	)
 }
 
 // ParseAssignPayload splits a "<roadmapID>:<goalID>" assign payload.

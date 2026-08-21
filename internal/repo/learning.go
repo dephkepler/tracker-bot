@@ -12,10 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// LearningRepository persists word-learning collections, words and their
-// SRS/push-scheduling state.
 type LearningRepository interface {
-	// Collections.
 	CreateCollection(ctx context.Context, userID int64, name string) (int64, error)
 	ListCollections(ctx context.Context, userID int64, archived bool) ([]models.LearningCollectionItem, error)
 	GetCollectionName(ctx context.Context, userID, collectionID int64) (string, error)
@@ -25,26 +22,22 @@ type LearningRepository interface {
 	RestoreCollection(ctx context.Context, userID, collectionID int64) error
 	DeleteCollectionForever(ctx context.Context, userID, collectionID int64) error
 
-	// Words.
 	AddWords(ctx context.Context, collectionID int64, pairs []models.LearningWordItem) (int, error)
 	ListWords(ctx context.Context, userID, collectionID int64) ([]models.LearningWordItem, error)
 	DeleteWord(ctx context.Context, userID, wordID int64) error
 	GetWordForGrading(ctx context.Context, userID, wordID int64) (collectionName, term, translation string, easeFactor float32, intervalDays, repetitions int, err error)
 	UpdateWordSchedule(ctx context.Context, wordID int64, easeFactor float32, intervalDays, repetitions int, nextReviewAt time.Time, learned bool) error
 
-	// Review delivery.
 	PickDueWord(ctx context.Context, userID int64, now time.Time) (*models.LearningDueWord, error)
 	RecordReview(ctx context.Context, wordID, userID int64, correct bool, now time.Time) error
 	ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error)
 
-	// Push scheduling — mirrors TimerRepository's shape (migrations/0004).
 	UpsertPushInterval(ctx context.Context, userID int64, intervalMin int, nextPushAt time.Time) error
 	GetPushSettings(ctx context.Context, userID int64) (intervalMin int, nextPushAt time.Time, enabled bool, err error)
 	SetNextPush(ctx context.Context, userID int64, nextPushAt time.Time) error
 	DisablePush(ctx context.Context, userID int64) error
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.LearningDueUser, error)
 
-	// Stats.
 	CountWords(ctx context.Context, userID int64) (total, dueToday, learned int, err error)
 	ListReviewDates(ctx context.Context, userID int64, since time.Time) ([]time.Time, error)
 	GetCollectionStats(ctx context.Context, userID int64) ([]models.LearningCollectionStat, error)
@@ -55,12 +48,10 @@ type learningRepository struct {
 	db *pgxpool.Pool
 }
 
-// NewLearningRepository creates repository backed by pgx pool.
 func NewLearningRepository(db *pgxpool.Pool) LearningRepository {
 	return &learningRepository{db: db}
 }
 
-// CreateCollection inserts a new, active, non-archived collection.
 func (r *learningRepository) CreateCollection(ctx context.Context, userID int64, name string) (int64, error) {
 	q := `
 	INSERT INTO learning_collections (user_id, name)
@@ -79,8 +70,6 @@ func (r *learningRepository) CreateCollection(ctx context.Context, userID int64,
 	return id, nil
 }
 
-// ListCollections returns a user's collections (archived or not) with word
-// counts, ordered by creation time.
 func (r *learningRepository) ListCollections(ctx context.Context, userID int64, archived bool) ([]models.LearningCollectionItem, error) {
 	q := `
 	SELECT c.id, c.name, c.is_active, c.is_archived, COUNT(w.id)
@@ -110,7 +99,6 @@ func (r *learningRepository) ListCollections(ctx context.Context, userID int64, 
 	return out, nil
 }
 
-// GetCollectionName resolves a collection's name, scoped to its owner.
 func (r *learningRepository) GetCollectionName(ctx context.Context, userID, collectionID int64) (string, error) {
 	q := `SELECT name FROM learning_collections WHERE id = $1 AND user_id = $2;`
 	var name string
@@ -124,8 +112,6 @@ func (r *learningRepository) GetCollectionName(ctx context.Context, userID, coll
 	return name, nil
 }
 
-// RenameCollection updates a collection's display name, scoped to its
-// owner.
 func (r *learningRepository) RenameCollection(ctx context.Context, userID, collectionID int64, newName string) error {
 	q := `UPDATE learning_collections SET name = $3 WHERE id = $1 AND user_id = $2;`
 	tag, err := r.db.Exec(ctx, q, collectionID, userID, newName)
@@ -142,7 +128,6 @@ func (r *learningRepository) RenameCollection(ctx context.Context, userID, colle
 	return nil
 }
 
-// ToggleCollectionActive flips is_active, scoped to the owning user.
 func (r *learningRepository) ToggleCollectionActive(ctx context.Context, userID, collectionID int64) error {
 	q := `
 	UPDATE learning_collections
@@ -159,7 +144,6 @@ func (r *learningRepository) ToggleCollectionActive(ctx context.Context, userID,
 	return nil
 }
 
-// ArchiveCollection moves a collection to the archive.
 func (r *learningRepository) ArchiveCollection(ctx context.Context, userID, collectionID int64) error {
 	q := `UPDATE learning_collections SET is_archived = TRUE WHERE id = $1 AND user_id = $2;`
 	tag, err := r.db.Exec(ctx, q, collectionID, userID)
@@ -172,7 +156,6 @@ func (r *learningRepository) ArchiveCollection(ctx context.Context, userID, coll
 	return nil
 }
 
-// RestoreCollection moves an archived collection back to the active list.
 func (r *learningRepository) RestoreCollection(ctx context.Context, userID, collectionID int64) error {
 	q := `UPDATE learning_collections SET is_archived = FALSE WHERE id = $1 AND user_id = $2;`
 	tag, err := r.db.Exec(ctx, q, collectionID, userID)
@@ -185,8 +168,7 @@ func (r *learningRepository) RestoreCollection(ctx context.Context, userID, coll
 	return nil
 }
 
-// DeleteCollectionForever permanently removes a collection and its words
-// (ON DELETE CASCADE on learning_words.collection_id).
+// also deletes the collection's words via ON DELETE CASCADE, not shown in this query.
 func (r *learningRepository) DeleteCollectionForever(ctx context.Context, userID, collectionID int64) error {
 	q := `DELETE FROM learning_collections WHERE id = $1 AND user_id = $2;`
 	tag, err := r.db.Exec(ctx, q, collectionID, userID)
@@ -199,8 +181,7 @@ func (r *learningRepository) DeleteCollectionForever(ctx context.Context, userID
 	return nil
 }
 
-// AddWords bulk-inserts word pairs into a collection, due immediately (SRS
-// defaults from the table's column defaults). Returns the number inserted.
+// new words are due immediately, via the table's column defaults.
 func (r *learningRepository) AddWords(ctx context.Context, collectionID int64, pairs []models.LearningWordItem) (int, error) {
 	if len(pairs) == 0 {
 		return 0, nil
@@ -220,7 +201,6 @@ func (r *learningRepository) AddWords(ctx context.Context, collectionID int64, p
 	return len(pairs), nil
 }
 
-// ListWords returns every word in one collection, scoped to its owner.
 func (r *learningRepository) ListWords(ctx context.Context, userID, collectionID int64) ([]models.LearningWordItem, error) {
 	q := `
 	SELECT w.id, w.term, w.translation, w.learned, w.next_review_at, w.interval_days, w.repetitions
@@ -249,7 +229,6 @@ func (r *learningRepository) ListWords(ctx context.Context, userID, collectionID
 	return out, nil
 }
 
-// DeleteWord removes one word, scoped to its owner via the collection join.
 func (r *learningRepository) DeleteWord(ctx context.Context, userID, wordID int64) error {
 	q := `
 	DELETE FROM learning_words w
@@ -266,8 +245,6 @@ func (r *learningRepository) DeleteWord(ctx context.Context, userID, wordID int6
 	return nil
 }
 
-// GetWordForGrading loads a word's current SRS state for grading, scoped to
-// its owner.
 func (r *learningRepository) GetWordForGrading(ctx context.Context, userID, wordID int64) (string, string, string, float32, int, int, error) {
 	q := `
 	SELECT c.name, w.term, w.translation, w.ease_factor, w.interval_days, w.repetitions
@@ -290,7 +267,6 @@ func (r *learningRepository) GetWordForGrading(ctx context.Context, userID, word
 	return collectionName, term, translation, easeFactor, intervalDays, repetitions, nil
 }
 
-// UpdateWordSchedule persists new SRS state after grading.
 func (r *learningRepository) UpdateWordSchedule(ctx context.Context, wordID int64, easeFactor float32, intervalDays, repetitions int, nextReviewAt time.Time, learned bool) error {
 	q := `
 	UPDATE learning_words
@@ -304,8 +280,7 @@ func (r *learningRepository) UpdateWordSchedule(ctx context.Context, wordID int6
 	return nil
 }
 
-// PickDueWord returns the single most-overdue due word from the user's
-// active, non-archived collections, or nil if none is due.
+// returns nil, nil (not an error) when no word is currently due.
 func (r *learningRepository) PickDueWord(ctx context.Context, userID int64, now time.Time) (*models.LearningDueWord, error) {
 	q := `
 	SELECT w.id, c.name, w.term, w.translation
@@ -327,7 +302,6 @@ func (r *learningRepository) PickDueWord(ctx context.Context, userID int64, now 
 	return &due, nil
 }
 
-// RecordReview appends one review-history row (used for stats/streak).
 func (r *learningRepository) RecordReview(ctx context.Context, wordID, userID int64, correct bool, now time.Time) error {
 	q := `INSERT INTO learning_reviews (word_id, user_id, correct, reviewed_at) VALUES ($1, $2, $3, $4);`
 	_, err := r.db.Exec(ctx, q, wordID, userID, correct, now)
@@ -337,8 +311,6 @@ func (r *learningRepository) RecordReview(ctx context.Context, wordID, userID in
 	return nil
 }
 
-// ListReviewsOnDay returns every review the user answered within
-// [from, to), most recent first — for the heatmap day drill-down.
 func (r *learningRepository) ListReviewsOnDay(ctx context.Context, userID int64, from, to time.Time) ([]models.LearningReviewEntry, error) {
 	q := `
 	SELECT w.term, w.translation, r.correct, r.reviewed_at
@@ -367,8 +339,6 @@ func (r *learningRepository) ListReviewsOnDay(ctx context.Context, userID int64,
 	return out, nil
 }
 
-// UpsertPushInterval enables review pushes and saves interval + next push
-// timestamp — mirrors TimerRepository.UpsertInterval.
 func (r *learningRepository) UpsertPushInterval(ctx context.Context, userID int64, intervalMin int, nextPushAt time.Time) error {
 	q := `
 	INSERT INTO user_learning_settings (user_id, interval_min, next_push_at, enabled, updated_at)
@@ -390,8 +360,7 @@ func (r *learningRepository) UpsertPushInterval(ctx context.Context, userID int6
 	return nil
 }
 
-// GetPushSettings returns the raw persisted row for user, if any. enabled is
-// false and err is nil when the user has no row yet.
+// no row for the user is not an error: returns enabled=false, err=nil.
 func (r *learningRepository) GetPushSettings(ctx context.Context, userID int64) (int, time.Time, bool, error) {
 	q := `SELECT interval_min, next_push_at, enabled FROM user_learning_settings WHERE user_id = $1;`
 	var (
@@ -409,7 +378,6 @@ func (r *learningRepository) GetPushSettings(ctx context.Context, userID int64) 
 	return intervalMin, nextPushAt, enabled, nil
 }
 
-// SetNextPush updates next scheduled push time for user.
 func (r *learningRepository) SetNextPush(ctx context.Context, userID int64, nextPushAt time.Time) error {
 	q := `UPDATE user_learning_settings SET next_push_at = $2, updated_at = now() WHERE user_id = $1;`
 	tag, err := r.db.Exec(ctx, q, userID, nextPushAt)
@@ -422,7 +390,6 @@ func (r *learningRepository) SetNextPush(ctx context.Context, userID int64, next
 	return nil
 }
 
-// DisablePush turns off review pushes for user.
 func (r *learningRepository) DisablePush(ctx context.Context, userID int64) error {
 	q := `UPDATE user_learning_settings SET enabled = FALSE, updated_at = now() WHERE user_id = $1;`
 	_, err := r.db.Exec(ctx, q, userID)
@@ -432,7 +399,6 @@ func (r *learningRepository) DisablePush(ctx context.Context, userID int64) erro
 	return nil
 }
 
-// ListDueUsers returns users whose next_push_at is due.
 func (r *learningRepository) ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.LearningDueUser, error) {
 	q := `
 	SELECT uls.user_id, u.tg_user_id, uls.interval_min
@@ -464,8 +430,6 @@ func (r *learningRepository) ListDueUsers(ctx context.Context, now time.Time, li
 	return out, nil
 }
 
-// CountWords returns total/due-today/learned word counts across all of a
-// user's active, non-archived collections.
 func (r *learningRepository) CountWords(ctx context.Context, userID int64) (int, int, int, error) {
 	q := `
 	SELECT
@@ -484,9 +448,6 @@ func (r *learningRepository) CountWords(ctx context.Context, userID int64) (int,
 	return total, dueToday, learned, nil
 }
 
-// ListReviewDates returns distinct UTC calendar dates (as midnight
-// timestamps) the user answered at least one review on, since the given
-// time — used to compute a day streak in the service layer.
 func (r *learningRepository) ListReviewDates(ctx context.Context, userID int64, since time.Time) ([]time.Time, error) {
 	q := `
 	SELECT DISTINCT date_trunc('day', reviewed_at)
@@ -514,8 +475,6 @@ func (r *learningRepository) ListReviewDates(ctx context.Context, userID int64, 
 	return out, nil
 }
 
-// GetCollectionStats returns per-collection word/due/learned counts for the
-// detailed "📈 Statistics" screen.
 func (r *learningRepository) GetCollectionStats(ctx context.Context, userID int64) ([]models.LearningCollectionStat, error) {
 	q := `
 	SELECT c.name,
@@ -548,8 +507,6 @@ func (r *learningRepository) GetCollectionStats(ctx context.Context, userID int6
 	return out, nil
 }
 
-// GetAccuracy returns how many of the user's recorded reviews were
-// answered correctly, out of the total.
 func (r *learningRepository) GetAccuracy(ctx context.Context, userID int64) (int, int, error) {
 	q := `
 	SELECT COUNT(*) FILTER (WHERE correct), COUNT(*)

@@ -1,6 +1,4 @@
-// Package geotz resolves an IANA timezone name from geographic coordinates,
-// fully offline (data is embedded in the binary via tzf-dist — no network
-// call, no filesystem lookup, works fine in a minimal container).
+// resolves timezone from lat/lng entirely offline, via tzf-dist data embedded in the binary.
 package geotz
 
 import (
@@ -15,15 +13,13 @@ var finder tzf.F
 func init() {
 	f, err := tzf.NewDefaultFinder()
 	if err != nil {
-		// Embedded data failing to parse means the binary itself is broken —
-		// there is no reasonable fallback, fail fast at startup.
+		// embedded data failing to parse means the binary is broken; no fallback — fail fast.
 		panic(fmt.Errorf("geotz: init finder: %w", err))
 	}
 	finder = f
 }
 
-// Lookup returns the IANA timezone name for the given coordinates (e.g. a
-// Telegram-shared location), validated to be loadable via time.LoadLocation.
+// also validates the result loads via time.LoadLocation, in case tzf returns a stale/unknown zone.
 func Lookup(lat, lng float64) (string, error) {
 	// tzf takes longitude before latitude.
 	name := finder.GetTimezoneName(lng, lat)

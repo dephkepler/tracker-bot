@@ -9,13 +9,11 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// StepInlineMenu renders one tour step's navigation: Back (if not the first
-// step), Next/Finish, and Skip — except the last step, which instead offers
-// direct jumps into each real feature plus Home.
 func StepInlineMenu(step int) tgbotapi.InlineKeyboardMarkup {
 	if step >= StepCount-1 {
 		return buttonbuilder.IK(
-			buttonbuilder.IR(buttonbuilder.IB(ButtonGoTrack, "back_to_main")), // literal used by every Track inline menu's own Back
+			// must match the literal "back_to_main" used by every Track inline menu's own Back button.
+			buttonbuilder.IR(buttonbuilder.IB(ButtonGoTrack, "back_to_main")),
 			buttonbuilder.IR(buttonbuilder.IB(ButtonGoLearning, learningbtn.LearningCBBackMain)),
 			buttonbuilder.IR(buttonbuilder.IB(ButtonGoChallenges, challengebtn.CBBackList)),
 			buttonbuilder.IR(buttonbuilder.IB(ButtonHome, "go_home")),

@@ -15,12 +15,8 @@ type EntryRepository interface {
 	Create(ctx context.Context, stats *models.UserInput) (int64, error)
 	CountAll(ctx context.Context) (int, error)
 	ListPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error)
-	// ListAllTelegramIDs returns every registered user's Telegram id —
-	// used for admin broadcast.
 	ListAllTelegramIDs(ctx context.Context) ([]int64, error)
-	// Delete permanently removes a user and everything owned by them
-	// (activities, sessions, timer settings, learning data, ...) via the
-	// existing ON DELETE CASCADE foreign keys.
+	// Delete cascades via FK to remove everything the user owns (activities, sessions, learning data, ...).
 	Delete(ctx context.Context, dbUserID int64) error
 }
 type entryRepository struct {
@@ -77,7 +73,6 @@ func (repo *entryRepository) GetDBIDByTgUserID(ctx context.Context, tgUserID int
 	return id, nil
 }
 
-// CountAll returns the total number of registered users.
 func (r *entryRepository) CountAll(ctx context.Context) (int, error) {
 	var n int
 	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM users;`).Scan(&n); err != nil {
@@ -86,7 +81,6 @@ func (r *entryRepository) CountAll(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-// ListPage returns one page of users, newest first.
 func (r *entryRepository) ListPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error) {
 	q := `
 	SELECT id, tg_user_id, username, created_at
@@ -114,7 +108,6 @@ func (r *entryRepository) ListPage(ctx context.Context, limit, offset int) ([]mo
 	return out, nil
 }
 
-// ListAllTelegramIDs returns every registered user's Telegram id.
 func (r *entryRepository) ListAllTelegramIDs(ctx context.Context) ([]int64, error) {
 	rows, err := r.db.Query(ctx, `SELECT tg_user_id FROM users;`)
 	if err != nil {
@@ -136,7 +129,6 @@ func (r *entryRepository) ListAllTelegramIDs(ctx context.Context) ([]int64, erro
 	return out, nil
 }
 
-// Delete permanently removes a user by database id.
 func (r *entryRepository) Delete(ctx context.Context, dbUserID int64) error {
 	tag, err := r.db.Exec(ctx, `DELETE FROM users WHERE id = $1;`, dbUserID)
 	if err != nil {

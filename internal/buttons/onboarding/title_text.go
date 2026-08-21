@@ -1,6 +1,5 @@
 package onboarding
 
-// stepTexts holds the tour's content, one entry per step (see StepCount).
 var stepTexts = [StepCount]string{
 	"👋 *Here's what you can do here:*\n\n" +
 		"📈 *Track* — log time on real-life activities, get reminded, see reports\n" +
@@ -30,7 +29,7 @@ var stepTexts = [StepCount]string{
 	"✅ *That's the tour!*\n\nJump straight in, or explore anytime from 🏠 Home.",
 }
 
-// StepText returns one tour step's message text, clamped to a valid index.
+// clamps step to a valid index instead of panicking on out-of-range.
 func StepText(step int) string {
 	if step < 0 {
 		step = 0

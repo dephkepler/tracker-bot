@@ -12,13 +12,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Inline button menus
-
-// LearningEntryInlineMenu renders the main Learning screen's actions. The
-// review button always opens the same collection picker (see
-// LearningReviewPickInlineMenu) — its label just hints whether reviews are
-// already running, so changing what's in rotation never requires stopping
-// the schedule first.
+// the review button always opens the same picker; its label only hints whether reviews are running.
 func LearningEntryInlineMenu(lang i18n.Lang, reviewsActive bool) tgbotapi.InlineKeyboardMarkup {
 	reviewLabel := i18n.T(lang, i18n.KeyLearningButtonStartReviews)
 	if reviewsActive {
@@ -43,16 +37,12 @@ func LearningEntryInlineMenu(lang i18n.Lang, reviewsActive bool) tgbotapi.Inline
 	)
 }
 
-// LearningBackToMainInlineMenu is a single "back to the Learning menu" row,
-// used by read-only screens (e.g. Statistics) that have no other action.
 func LearningBackToMainInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), LearningCBBackMain)),
 	)
 }
 
-// LearningWordBaseInlineMenu lists active collections; tapping one opens its
-// detail view (see LearningCollectionDetailInlineMenu).
 func LearningWordBaseInlineMenu(lang i18n.Lang, items []models.LearningCollectionItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+1)
 	for _, item := range items {
@@ -68,13 +58,7 @@ func LearningWordBaseInlineMenu(lang i18n.Lang, items []models.LearningCollectio
 	return buttonbuilder.IK(rows...)
 }
 
-// LearningReviewPickInlineMenu lets the user choose which collections feed
-// the review rotation — each row toggles the same is_active flag as
-// LearningWordBaseInlineMenu, just scoped to this screen so the toggle
-// re-renders the picker instead of navigating into a collection's detail
-// view. Toggling here takes effect immediately, whether reviews are
-// running or not — when active, the bottom row offers Stop instead of
-// Continue, since there's no separate "apply" step.
+// toggling a collection here takes effect immediately, with no separate "apply" step.
 func LearningReviewPickInlineMenu(lang i18n.Lang, items []models.LearningCollectionItem, active bool) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+2)
 	for _, item := range items {
@@ -95,8 +79,6 @@ func LearningReviewPickInlineMenu(lang i18n.Lang, items []models.LearningCollect
 	return buttonbuilder.IK(rows...)
 }
 
-// LearningCollectionDetailInlineMenu shows one collection's words (each with
-// a delete button) plus collection-level actions.
 func LearningCollectionDetailInlineMenu(lang i18n.Lang, collectionID int64, active bool, words []models.LearningWordItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(words)+3)
 	for _, w := range words {
@@ -128,8 +110,6 @@ func LearningCollectionDetailInlineMenu(lang i18n.Lang, collectionID int64, acti
 	return buttonbuilder.IK(rows...)
 }
 
-// LearningArchiveInlineMenu lists archived collections with restore/delete
-// actions — mirrors track.TrackArchiveInlineMenu.
 func LearningArchiveInlineMenu(lang i18n.Lang, items []models.LearningCollectionItem) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)*2+2)
 	for _, item := range items {
@@ -144,20 +124,13 @@ func LearningArchiveInlineMenu(lang i18n.Lang, items []models.LearningCollection
 	return buttonbuilder.IK(rows...)
 }
 
-// LearningReviewRevealInlineMenu is the first state of a review card: only
-// the term is shown, tap to reveal the translation.
 func LearningReviewRevealInlineMenu(lang i18n.Lang, wordID int64) tgbotapi.InlineKeyboardMarkup {
 	return buttonbuilder.IK(
 		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyLearningButtonShowAnswer), fmt.Sprintf("%s%d", LearningCBReviewReveal, wordID))),
 	)
 }
 
-// LearningReviewGradeInlineMenu is the revealed state: user grades how well
-// they recalled the word, Anki-style (Again/Hard/Good/Easy — see
-// models.LearningGrade) — this drives how much the next interval grows or
-// shrinks, not just whether it counts as "correct". Each button previews
-// its resulting delay (e.g. "🔴 Again (10m)"), matching real Anki, so the
-// user sees the consequence before picking rather than only after.
+// grade drives the next SRS interval (models.LearningGrade), not just a correct/incorrect flag.
 func LearningReviewGradeInlineMenu(lang i18n.Lang, wordID int64, again, hard, good, easy time.Duration) tgbotapi.InlineKeyboardMarkup {
 	label := func(key string, d time.Duration) string {
 		return fmt.Sprintf("%s (%s)", i18n.T(lang, key), FormatGradeDelay(d))
@@ -174,9 +147,7 @@ func LearningReviewGradeInlineMenu(lang i18n.Lang, wordID int64, again, hard, go
 	)
 }
 
-// FormatGradeDelay renders a grade-preview duration compactly, e.g. "10m",
-// "15m", "1d", "4d" — deliberately not translated (plain unit
-// abbreviations), same reasoning as track.FormatTimerButton's "min" suffix.
+// unit abbreviations ("10m", "1d") are deliberately not translated, like track.FormatTimerButton.
 func FormatGradeDelay(d time.Duration) string {
 	if d < time.Hour {
 		return fmt.Sprintf("%dm", int(d.Minutes()+0.5))
@@ -188,28 +159,21 @@ func FormatGradeDelay(d time.Duration) string {
 	return fmt.Sprintf("%dd", days)
 }
 
-// Reply button menus
-
-// LearningWaitingReplyMenu is shown while the bot is waiting for typed
-// input (collection name, word lines) — lets the user bail out.
 func LearningWaitingReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonCancelX))),
 	)
 }
 
-// LearningAddWordsReplyMenu is shown while pasting word lines — "Done"
-// leaves the flow, unlike single-shot prompts which auto-exit.
+// unlike single-shot prompts (which auto-exit), this flow needs an explicit "Done" to leave.
 func LearningAddWordsReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
 		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonDone))),
 	)
 }
 
-// pushIntervalPrefix marks a review-push interval reply button, e.g. "⏱ 60 min".
 const pushIntervalPrefix = "⏱ "
 
-// LearningPushIntervalReplyMenu renders the review-push interval picker.
 func LearningPushIntervalReplyMenu(lang i18n.Lang, intervals []int) tgbotapi.ReplyKeyboardMarkup {
 	rows := make([][]tgbotapi.KeyboardButton, 0, (len(intervals)+1)/2+1)
 	for i := 0; i < len(intervals); i += 2 {
@@ -226,14 +190,11 @@ func LearningPushIntervalReplyMenu(lang i18n.Lang, intervals []int) tgbotapi.Rep
 	return buttonbuilder.RK(rows...)
 }
 
-// FormatPushIntervalButton renders one interval as reply-button text, e.g.
-// "⏱ 60 min". Not translated — a plain unit abbreviation, same reasoning as
-// track.FormatTimerButton's own "min" suffix.
+// not translated, same reasoning as FormatGradeDelay/track.FormatTimerButton.
 func FormatPushIntervalButton(minutes int) string {
 	return fmt.Sprintf("%s%d min", pushIntervalPrefix, minutes)
 }
 
-// ParsePushIntervalButtonMinutes is the inverse of FormatPushIntervalButton.
 func ParsePushIntervalButtonMinutes(text string) (int, bool) {
 	if !strings.HasPrefix(text, pushIntervalPrefix) {
 		return 0, false

@@ -17,9 +17,10 @@ type ReplyModule struct {
 	profile      *handlers.Module
 	learning     *handlers.Module
 	roadmap      *handlers.Module
+	challenge    *handlers.Module
 }
 
-func New(bot tgclient.BotAPI, track *handlers.Module, subscription *handlers.Module, entry *handlers.Module, profile *handlers.Module, learning *handlers.Module, roadmap *handlers.Module) *ReplyModule {
+func New(bot tgclient.BotAPI, track *handlers.Module, subscription *handlers.Module, entry *handlers.Module, profile *handlers.Module, learning *handlers.Module, roadmap *handlers.Module, challenge *handlers.Module) *ReplyModule {
 	return &ReplyModule{
 		bot:          bot,
 		track:        track,
@@ -28,20 +29,18 @@ func New(bot tgclient.BotAPI, track *handlers.Module, subscription *handlers.Mod
 		profile:      profile,
 		learning:     learning,
 		roadmap:      roadmap,
+		challenge:    challenge,
 	}
 }
 
-// replyButtonsByKey maps a translation key (see internal/i18n) to its
-// handler — keyed by key rather than the literal button text, since the
-// text is rendered per-user-language (see internal/buttons/entry.
-// EntryReplyMenu) and would otherwise only match one language.
+// keyed by translation key, not literal button text, since text renders per-user-language.
 func (r *ReplyModule) replyButtonsByKey() map[string]func(*tgctx.MsgContext) {
 	return map[string]func(*tgctx.MsgContext){
-		i18n.KeyEntryButtonProfile:      r.handleShowProfileMenu,
-		i18n.KeyEntryButtonTrack:        r.handleShowTrackingMenu,
-		i18n.KeyEntryButtonLearning:     r.handleShowLearningMenu,
-		i18n.KeyEntryButtonRoadmap:      r.handleShowRoadmapMenu,
-		i18n.KeyEntryButtonSubscription: r.handleShowSubscriptionMenu,
+		i18n.KeyEntryButtonProfile:   r.handleShowProfileMenu,
+		i18n.KeyEntryButtonTrack:     r.handleShowTrackingMenu,
+		i18n.KeyEntryButtonLearning:  r.handleShowLearningMenu,
+		i18n.KeyEntryButtonRoadmap:   r.handleShowRoadmapMenu,
+		i18n.KeyEntryButtonChallenge: r.handleShowChallengesMenu,
 	}
 }
 
@@ -76,6 +75,6 @@ func (r *ReplyModule) handleShowRoadmapMenu(ctx *tgctx.MsgContext) {
 	r.roadmap.ShowRoadmapMenu(ctx)
 }
 
-func (r *ReplyModule) handleShowSubscriptionMenu(ctx *tgctx.MsgContext) {
-	r.subscription.ShowSubscriptionMenu(ctx)
+func (r *ReplyModule) handleShowChallengesMenu(ctx *tgctx.MsgContext) {
+	r.challenge.ShowChallengesMenu(ctx)
 }

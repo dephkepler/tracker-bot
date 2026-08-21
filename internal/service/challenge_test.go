@@ -360,3 +360,129 @@ func TestChallengeService_MarkDay_UpdatesStatus(t *testing.T) {
 	}
 	_ = repo
 }
+
+// --- challengeStreaks -----------------------------------------------------
+
+func mkDays(startDate string, statuses ...models.ChallengeDayStatus) []models.ChallengeDay {
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		panic(err)
+	}
+	out := make([]models.ChallengeDay, len(statuses))
+	for i, s := range statuses {
+		out[i] = models.ChallengeDay{Date: start.AddDate(0, 0, i), Status: s}
+	}
+	return out
+}
+
+func day(s string) time.Time {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		panic(err)
+	}
+	return t
+}
+
+func TestChallengeStreaks_LiveRunEndingToday(t *testing.T) {
+	D, P := models.ChallengeDayDone, models.ChallengeDayPending
+	days := mkDays("2026-01-01", D, D, D, D, P, P, P, P, P, P) // today = 2026-01-05, still pending
+	current, best := challengeStreaks(days, day("2026-01-05"))
+	if current != 4 {
+		t.Errorf("current = %d, want 4 (Jan 1-4 done, today still pending gets grace)", current)
+	}
+	if best != 4 {
+		t.Errorf("best = %d, want 4", best)
+	}
+}
+
+func TestChallengeStreaks_ExplicitSkipTodayBreaksImmediately(t *testing.T) {
+	D, S := models.ChallengeDayDone, models.ChallengeDaySkipped
+	days := mkDays("2026-01-01", D, D, D, D, S)
+	current, best := challengeStreaks(days, day("2026-01-05"))
+	if current != 0 {
+		t.Errorf("current = %d, want 0 (today explicitly skipped, no grace)", current)
+	}
+	if best != 4 {
+		t.Errorf("best = %d, want 4 (the run before the skip)", best)
+	}
+}
+
+func TestChallengeStreaks_GapInThePastDoesNotAffectCurrent(t *testing.T) {
+	D, S := models.ChallengeDayDone, models.ChallengeDaySkipped
+	days := mkDays("2026-01-01", D, D, S, D, D, D) // gap on day 3, live run of 3 since
+	current, best := challengeStreaks(days, day("2026-01-06"))
+	if current != 3 {
+		t.Errorf("current = %d, want 3", current)
+	}
+	if best != 3 {
+		t.Errorf("best = %d, want 3 (the trailing run after the gap, longer than the leading run of 2)", best)
+	}
+}
+
+func TestChallengeStreaks_BestCanExceedCurrent(t *testing.T) {
+	D, S := models.ChallengeDayDone, models.ChallengeDaySkipped
+	days := mkDays("2026-01-01", D, D, D, D, D, S, D) // best run of 5 in the past, current run of 1
+	current, best := challengeStreaks(days, day("2026-01-07"))
+	if current != 1 {
+		t.Errorf("current = %d, want 1", current)
+	}
+	if best != 5 {
+		t.Errorf("best = %d, want 5", best)
+	}
+}
+
+func TestChallengeStreaks_NoDaysDoneYet(t *testing.T) {
+	P := models.ChallengeDayPending
+	days := mkDays("2026-01-01", P, P, P)
+	current, best := challengeStreaks(days, day("2026-01-03"))
+	if current != 0 || best != 0 {
+		t.Errorf("current=%d best=%d, want 0/0", current, best)
+	}
+}
+
+// --- challengeTrend ---------------------------------------------------------
+
+func TestChallengeTrend_ClipsToChallengeStart(t *testing.T) {
+	D, P := models.ChallengeDayDone, models.ChallengeDayPending
+	days := mkDays("2026-01-01", D, D, D) // only 3 days recorded — younger than the 14-day window
+	trend := challengeTrend(days, day("2026-01-03"), 14)
+	if len(trend) != 3 {
+		t.Fatalf("len(trend) = %d, want 3 (clipped to challenge start, no phantom pre-start days)", len(trend))
+	}
+	want := []models.ChallengeDayStatus{D, D, D}
+	for i, s := range want {
+		if trend[i] != s {
+			t.Errorf("trend[%d] = %v, want %v", i, trend[i], s)
+		}
+	}
+	_ = P
+}
+
+func TestChallengeTrend_WindowMidChallenge(t *testing.T) {
+	D, S, P := models.ChallengeDayDone, models.ChallengeDaySkipped, models.ChallengeDayPending
+	statuses := make([]models.ChallengeDayStatus, 0, 20)
+	for i := 0; i < 20; i++ {
+		switch {
+		case i < 10:
+			statuses = append(statuses, D)
+		case i < 12:
+			statuses = append(statuses, S)
+		default:
+			statuses = append(statuses, P)
+		}
+	}
+	days := mkDays("2026-01-01", statuses...)
+
+	// Tapped day is day 20 (2026-01-20); a 14-day window ending there starts
+	// at day 7 (2026-01-07), well past the challenge's own start.
+	trend := challengeTrend(days, day("2026-01-20"), 14)
+	if len(trend) != 14 {
+		t.Fatalf("len(trend) = %d, want 14", len(trend))
+	}
+	if trend[0] != D {
+		t.Errorf("trend[0] (2026-01-07) = %v, want done", trend[0])
+	}
+	if trend[len(trend)-1] != P {
+		t.Errorf("last trend entry (2026-01-20) = %v, want pending", trend[len(trend)-1])
+	}
+}
