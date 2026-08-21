@@ -277,7 +277,9 @@ func TestDevBypassCannotBeConfiguredWithAPublicOrigin(t *testing.T) {
 func TestIdentityIsCached(t *testing.T) {
 	cfg := testWebConfig()
 	entrysvc, profilesvc := newFakes()
-	srv, err := NewServer(t.Context(), cfg, testBotToken, entrysvc, profilesvc, newFakeTrackSvc())
+	deps := testDeps()
+	deps.Entry, deps.Profile = entrysvc, profilesvc
+	srv, err := NewServer(t.Context(), cfg, deps)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}

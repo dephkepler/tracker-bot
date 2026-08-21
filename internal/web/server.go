@@ -32,38 +32,70 @@ type Server struct {
 	ctx context.Context
 
 	// verifier is nil only in dev-bypass mode, where nothing is verified.
-	verifier *tgauth.Verifier
-	identity *Identity
-	tracksvc service.TrackerService
+	verifier     *tgauth.Verifier
+	identity     *Identity
+	tracksvc     service.TrackerService
+	roadmapsvc   service.RoadmapService
+	roadmapaisvc service.RoadmapAIService
+	// jobs holds AI calls in flight: they outlast the request that started
+	// them, because a phone will not hold a connection open for a minute.
+	jobs *jobs
+}
+
+// Deps is what the server needs from the rest of the application.
+//
+// A struct rather than positional parameters: these are five interfaces of
+// similar shape, and passing the wrong one would compile and then quietly serve
+// the wrong data. A new domain adds a field here and nothing else changes.
+type Deps struct {
+	// BotToken signs nothing here — it is the key init data is verified
+	// against, so the dashboard authenticates against the same bot the user is
+	// talking to.
+	BotToken string
+
+	Entry     service.EntryService
+	Profile   service.ProfileService
+	Tracker   service.TrackerService
+	Roadmap   service.RoadmapService
+	RoadmapAI service.RoadmapAIService
+}
+
+func (d Deps) validate() error {
+	switch {
+	case d.Entry == nil:
+		return errors.New("web: entry service is required")
+	case d.Profile == nil:
+		return errors.New("web: profile service is required")
+	case d.Tracker == nil:
+		return errors.New("web: tracker service is required")
+	case d.Roadmap == nil:
+		return errors.New("web: roadmap service is required")
+	case d.RoadmapAI == nil:
+		return errors.New("web: roadmap ai service is required")
+	}
+	return nil
 }
 
 // NewServer builds the listener but does not start it.
-//
-// botToken signs nothing here — it is the key init data is verified against, so
-// the dashboard authenticates against the same bot the user is talking to.
-func NewServer(
-	ctx context.Context,
-	cfg config.Web,
-	botToken string,
-	entrysvc service.EntryService,
-	profilesvc service.ProfileService,
-	tracksvc service.TrackerService,
-) (*Server, error) {
+func NewServer(ctx context.Context, cfg config.Web, deps Deps) (*Server, error) {
 	if ctx == nil {
 		return nil, errors.New("web: nil context")
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
-	if entrysvc == nil || profilesvc == nil || tracksvc == nil {
-		return nil, errors.New("web: entry, profile and tracker services are required")
+	if err := deps.validate(); err != nil {
+		return nil, err
 	}
 
 	srv := &Server{
-		cfg:      cfg,
-		ctx:      ctx,
-		identity: NewIdentity(entrysvc, profilesvc),
-		tracksvc: tracksvc,
+		cfg:          cfg,
+		ctx:          ctx,
+		identity:     NewIdentity(deps.Entry, deps.Profile),
+		tracksvc:     deps.Tracker,
+		roadmapsvc:   deps.Roadmap,
+		roadmapaisvc: deps.RoadmapAI,
+		jobs:         newJobs(ctx),
 	}
 
 	if cfg.DevTgUserID != 0 {
@@ -73,7 +105,7 @@ func NewServer(
 			Int64("tg_user_id", cfg.DevTgUserID).
 			Msg("dashboard auth is BYPASSED — every request is served as this user")
 	} else {
-		verifier, err := tgauth.NewVerifier(botToken, cfg.InitDataMaxAge)
+		verifier, err := tgauth.NewVerifier(deps.BotToken, cfg.InitDataMaxAge)
 		if err != nil {
 			return nil, err
 		}
@@ -110,6 +142,15 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/track/series", s.api(s.handleTrackSeries))
 	mux.Handle("GET /api/v1/track/heatmap", s.api(s.handleTrackHeatmap))
 	mux.Handle("GET /api/v1/track/day", s.api(s.handleTrackDay))
+
+	mux.Handle("GET /api/v1/roadmap", s.api(s.handleRoadmap))
+	// PUT, not POST: it carries the state wanted rather than flipping the
+	// current one, so a retry is harmless.
+	mux.Handle("PUT /api/v1/roadmap/cards/{id}/done", s.api(s.handleRoadmapCardDone))
+	mux.Handle("POST /api/v1/roadmap/technologies/{id}/plan", s.api(s.handleRoadmapPlan))
+	mux.Handle("POST /api/v1/roadmap/cards/{id}/quiz", s.api(s.handleRoadmapQuiz))
+	mux.Handle("POST /api/v1/roadmap/cards/{id}/quiz/grade", s.api(s.handleRoadmapQuizGrade))
+	mux.Handle("GET /api/v1/ai/jobs/{id}", s.api(s.handleAIJob))
 
 	// Anything unrouted answers JSON rather than net/http's text 404, so the
 	// frontend's error path never has to parse two shapes.

@@ -2,7 +2,10 @@ package web
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -263,4 +266,29 @@ func boolParam(r *http.Request, name string) bool {
 	default:
 		return false
 	}
+}
+
+// pathID reads a positive integer path segment.
+func pathID(r *http.Request, name string) (int64, *paramError) {
+	raw := r.PathValue(name)
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, badParam("%s must be a positive id, got %q", name, raw)
+	}
+	return id, nil
+}
+
+// decodeBody reads a small JSON body, rejecting anything unexpected rather than
+// ignoring it: a client sending "done_at" instead of "done" should hear about
+// it, not watch the request quietly do nothing.
+func decodeBody(r *http.Request, out any) error {
+	dec := json.NewDecoder(io.LimitReader(r.Body, maxBodyBytes))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(out); err != nil {
+		if errors.Is(err, io.EOF) {
+			return badParam("a JSON body is required")
+		}
+		return badParam("body is not the expected JSON: %v", err)
+	}
+	return nil
 }

@@ -47,6 +47,11 @@ type RoadmapRepository interface {
 	// Both return the owning roadmap, so the caller can re-render the right
 	// screen without carrying it through the callback payload.
 	ToggleCardDone(ctx context.Context, userID, cardID int64) (roadmapID int64, err error)
+	// SetCardDone writes an explicit state rather than flipping the current
+	// one. The dashboard needs this: an HTTP request can be retried or arrive
+	// twice, and a toggle would then undo itself, so the API says what it wants
+	// instead of asking for a flip.
+	SetCardDone(ctx context.Context, userID, cardID int64, done bool) (roadmapID int64, err error)
 	CycleCardDifficulty(ctx context.Context, userID, cardID int64) (roadmapID int64, err error)
 	DeleteCard(ctx context.Context, userID, cardID int64) error
 
@@ -464,6 +469,20 @@ func (r *roadmapRepository) ListCards(ctx context.Context, userID, roadmapID int
 
 // done_at is cleared on the way back to pending, so it always reflects the
 // current state rather than "the last time this was ever ticked".
+func (r *roadmapRepository) SetCardDone(ctx context.Context, userID, cardID int64, done bool) (int64, error) {
+	// done_at is cleared when unticking, so it never outlives the tick it
+	// belongs to — it is the only completion timestamp in this domain.
+	q := `
+	UPDATE roadmap_cards c
+	SET is_done = $3,
+		done_at = CASE WHEN $3 THEN now() ELSE NULL END
+	FROM roadmaps r
+	WHERE c.id = $1 AND r.id = c.roadmap_id AND r.user_id = $2
+	RETURNING c.roadmap_id;
+	`
+	return r.cardMutation(ctx, q, cardID, userID, done)
+}
+
 func (r *roadmapRepository) ToggleCardDone(ctx context.Context, userID, cardID int64) (int64, error) {
 	q := `
 	UPDATE roadmap_cards c
@@ -490,9 +509,12 @@ func (r *roadmapRepository) CycleCardDifficulty(ctx context.Context, userID, car
 	return r.cardMutation(ctx, q, cardID, userID)
 }
 
-func (r *roadmapRepository) cardMutation(ctx context.Context, q string, cardID, userID int64) (int64, error) {
+// cardMutation runs an update that is scoped to the user through the roadmaps
+// join and returns the owning technology. args are the query's parameters in
+// order, starting with the card id and the user id.
+func (r *roadmapRepository) cardMutation(ctx context.Context, q string, args ...any) (int64, error) {
 	var roadmapID int64
-	if err := r.db.QueryRow(ctx, q, cardID, userID).Scan(&roadmapID); err != nil {
+	if err := r.db.QueryRow(ctx, q, args...).Scan(&roadmapID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return 0, models.ErrRoadmapCardNotFound
 		}

@@ -13,9 +13,9 @@ import (
 // newTrackServer wires a server around a tracker fake the test can inspect.
 func newTrackServer(t *testing.T) (*Server, *fakeTrackSvc) {
 	t.Helper()
-	entrysvc, profilesvc := newFakes()
-	tracksvc := newFakeTrackSvc()
-	srv, err := NewServer(t.Context(), testWebConfig(), testBotToken, entrysvc, profilesvc, tracksvc)
+	deps := testDeps()
+	tracksvc := deps.Tracker.(*fakeTrackSvc)
+	srv, err := NewServer(t.Context(), testWebConfig(), deps)
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}

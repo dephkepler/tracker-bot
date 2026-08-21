@@ -243,3 +243,158 @@ func (f *fakeTrackSvc) GetTrackedDaysInRange(context.Context, int64, time.Time, 
 }
 
 var _ service.TrackerService = (*fakeTrackSvc)(nil)
+
+// fakeRoadmapSvc embeds the interface rather than stubbing all thirty of its
+// methods: an un-overridden one panics on the nil embedded value, which is the
+// behaviour wanted — the dashboard has no business calling it. Same trick as
+// fakeTargetRepo in the service package's own tests.
+type fakeRoadmapSvc struct {
+	service.RoadmapService
+
+	goals   []models.RoadmapGoalItem
+	techs   map[int64][]models.RoadmapItem
+	orphans []models.RoadmapItem
+	cards   map[int64][]models.RoadmapCardItem
+	err     error
+
+	// setDone records the writes, so a test can assert what was asked for
+	// rather than only what came back.
+	setDone []cardWrite
+}
+
+type cardWrite struct {
+	cardID int64
+	done   bool
+}
+
+func newFakeRoadmapSvc() *fakeRoadmapSvc {
+	return &fakeRoadmapSvc{
+		goals: []models.RoadmapGoalItem{
+			{ID: 1, Name: "выйти на мидла", TotalRoadmaps: 1, TotalCards: 3, DoneCards: 1},
+		},
+		techs: map[int64][]models.RoadmapItem{
+			1: {{ID: 10, Name: "Kafka", MasteryCriteria: "могу отладить отстающего консьюмера", Active: true, TotalCards: 3, DoneCards: 1}},
+		},
+		orphans: []models.RoadmapItem{{ID: 11, Name: "Docker", TotalCards: 1, DoneCards: 0}},
+		cards: map[int64][]models.RoadmapCardItem{
+			10: {
+				{ID: 100, Text: "Партиции и офсеты", Kind: models.RoadmapCardTopic, Difficulty: 1, IsDone: true, DoneAt: &fakeDoneAt},
+				{ID: 101, Text: "Группы консьюмеров", Kind: models.RoadmapCardTopic, Difficulty: 2},
+				{ID: 102, Text: "Kafka: The Definitive Guide", Kind: models.RoadmapCardBook, Difficulty: 3},
+			},
+			11: {{ID: 110, Text: "Слои образов", Kind: models.RoadmapCardTopic, Difficulty: 2}},
+		},
+	}
+}
+
+var fakeDoneAt = time.Date(2026, time.August, 20, 9, 30, 0, 0, time.UTC)
+
+func (f *fakeRoadmapSvc) ListGoals(context.Context, int64) ([]models.RoadmapGoalItem, error) {
+	return f.goals, f.err
+}
+
+func (f *fakeRoadmapSvc) ListRoadmaps(_ context.Context, _ int64, goalID int64) ([]models.RoadmapItem, error) {
+	return f.techs[goalID], f.err
+}
+
+func (f *fakeRoadmapSvc) ListOrphanRoadmaps(context.Context, int64) ([]models.RoadmapItem, error) {
+	return f.orphans, f.err
+}
+
+func (f *fakeRoadmapSvc) ListCards(_ context.Context, _ int64, roadmapID int64) ([]models.RoadmapCardItem, error) {
+	return f.cards[roadmapID], f.err
+}
+
+func (f *fakeRoadmapSvc) SetCardDone(_ context.Context, _ int64, cardID int64, done bool) (int64, error) {
+	if f.err != nil {
+		return 0, f.err
+	}
+	for _, list := range f.cards {
+		for i := range list {
+			if list[i].ID == cardID {
+				list[i].IsDone = done
+				f.setDone = append(f.setDone, cardWrite{cardID: cardID, done: done})
+				return 10, nil
+			}
+		}
+	}
+	return 0, models.ErrRoadmapCardNotFound
+}
+
+// fakeRoadmapAISvc answers without a provider. Its interface is small enough to
+// implement outright, and every method here is one the dashboard calls.
+type fakeRoadmapAISvc struct {
+	enabled  bool
+	err      error
+	added    int
+	rejected int
+	question string
+	grade    models.RoadmapQuizGrade
+
+	// gotLang records the language threaded down, and gotAnswer what was sent
+	// for grading.
+	gotLang   string
+	gotAnswer string
+}
+
+func newFakeRoadmapAISvc() *fakeRoadmapAISvc {
+	return &fakeRoadmapAISvc{
+		enabled:  true,
+		added:    6,
+		rejected: 1,
+		question: "Как ребалансировка влияет на порядок обработки?",
+		grade:    models.RoadmapQuizGrade{Verdict: models.RoadmapQuizPartial, Feedback: "почти"},
+	}
+}
+
+func (f *fakeRoadmapAISvc) Enabled() bool { return f.enabled }
+
+func (f *fakeRoadmapAISvc) GeneratePlan(_ context.Context, _, _ int64, lang string) (int, int, error) {
+	f.gotLang = lang
+	if f.err != nil {
+		return 0, 0, f.err
+	}
+	return f.added, f.rejected, nil
+}
+
+func (f *fakeRoadmapAISvc) AddCardsFromTextAI(_ context.Context, _, _ int64, _, lang string) (int, int, error) {
+	f.gotLang = lang
+	return f.added, f.rejected, f.err
+}
+
+func (f *fakeRoadmapAISvc) DigestAdvice(_ context.Context, _ int64, _ []models.RoadmapDigestCard, lang string) (string, error) {
+	f.gotLang = lang
+	return "совет", f.err
+}
+
+func (f *fakeRoadmapAISvc) QuizCard(_ context.Context, _, cardID int64, lang string) (models.RoadmapQuiz, error) {
+	f.gotLang = lang
+	if f.err != nil {
+		return models.RoadmapQuiz{}, f.err
+	}
+	return models.RoadmapQuiz{CardID: cardID, CardText: "Группы консьюмеров", Question: f.question}, nil
+}
+
+func (f *fakeRoadmapAISvc) GradeQuizAnswer(_ context.Context, _ models.RoadmapQuiz, answer, lang string) (models.RoadmapQuizGrade, error) {
+	f.gotLang, f.gotAnswer = lang, answer
+	return f.grade, f.err
+}
+
+// testDeps wires a full set of fakes. Tests that need to inspect one reach for
+// it through the returned struct rather than building their own set.
+func testDeps() Deps {
+	entrysvc, profilesvc := newFakes()
+	return Deps{
+		BotToken:  testBotToken,
+		Entry:     entrysvc,
+		Profile:   profilesvc,
+		Tracker:   newFakeTrackSvc(),
+		Roadmap:   newFakeRoadmapSvc(),
+		RoadmapAI: newFakeRoadmapAISvc(),
+	}
+}
+
+var (
+	_ service.RoadmapService   = (*fakeRoadmapSvc)(nil)
+	_ service.RoadmapAIService = (*fakeRoadmapAISvc)(nil)
+)

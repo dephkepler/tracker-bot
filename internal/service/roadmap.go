@@ -45,6 +45,10 @@ type RoadmapService interface {
 	AddCardsFromText(ctx context.Context, userID, roadmapID int64, text string) (added, skipped int, err error)
 	ListCards(ctx context.Context, userID, roadmapID int64) ([]models.RoadmapCardItem, error)
 	ToggleCardDone(ctx context.Context, userID, cardID int64) (roadmapID int64, err error)
+	// SetCardDone writes the state asked for instead of flipping. The bot
+	// toggles because a tap is a toggle; an HTTP client says what it wants, so
+	// a retried or duplicated request lands on the same result.
+	SetCardDone(ctx context.Context, userID, cardID int64, done bool) (roadmapID int64, err error)
 	CycleCardDifficulty(ctx context.Context, userID, cardID int64) (roadmapID int64, err error)
 	DeleteCard(ctx context.Context, userID, cardID int64) error
 
@@ -354,6 +358,10 @@ func parseCardLine(line string) (models.RoadmapCardItem, bool) {
 
 func (srv *roadmapService) ListCards(ctx context.Context, userID, roadmapID int64) ([]models.RoadmapCardItem, error) {
 	return srv.repo.ListCards(ctx, userID, roadmapID)
+}
+
+func (srv *roadmapService) SetCardDone(ctx context.Context, userID, cardID int64, done bool) (int64, error) {
+	return srv.repo.SetCardDone(ctx, userID, cardID, done)
 }
 
 func (srv *roadmapService) ToggleCardDone(ctx context.Context, userID, cardID int64) (int64, error) {

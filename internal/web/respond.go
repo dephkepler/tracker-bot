@@ -35,6 +35,13 @@ const (
 	// codeUnsupportedCombination is a request that is individually valid in
 	// every parameter but asks for something the aggregation cannot do yet.
 	codeUnsupportedCombination = "unsupported_combination"
+
+	// AI outcomes. Split so the client can distinguish "the feature is off"
+	// from "it answered with nothing" from "it did not answer" — three
+	// different things to say to a person.
+	codeAIDisabled = "ai_disabled"
+	codeAIEmpty    = "ai_empty"
+	codeAIFailed   = "ai_failed"
 )
 
 type errorBody struct {

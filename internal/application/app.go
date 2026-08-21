@@ -101,8 +101,14 @@ func (app *Application) Build(ctx context.Context) error {
 	// starting the bot with the feature silently off — same rule as the LLM
 	// registry above.
 	if app.cfg.Web.Enabled {
-		webServer, err := web.NewServer(ctx, app.cfg.Web,
-			app.cfg.Telegram.TelegramToken, entrysvc, provilesvc, tracksvc)
+		webServer, err := web.NewServer(ctx, app.cfg.Web, web.Deps{
+			BotToken:  app.cfg.Telegram.TelegramToken,
+			Entry:     entrysvc,
+			Profile:   provilesvc,
+			Tracker:   tracksvc,
+			Roadmap:   roadmapsvc,
+			RoadmapAI: roadmapaisvc,
+		})
 		if err != nil {
 			return fmt.Errorf("init web server: %w", err)
 		}

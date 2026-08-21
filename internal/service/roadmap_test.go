@@ -402,6 +402,21 @@ func (f *fakeRoadmapRepo) findCard(userID, cardID int64) (*fakeCard, error) {
 	return c, nil
 }
 
+func (f *fakeRoadmapRepo) SetCardDone(_ context.Context, userID, cardID int64, done bool) (int64, error) {
+	c, err := f.findCard(userID, cardID)
+	if err != nil {
+		return 0, err
+	}
+	c.isDone = done
+	if done {
+		now := f.now
+		c.doneAt = &now
+	} else {
+		c.doneAt = nil
+	}
+	return c.roadmapID, nil
+}
+
 func (f *fakeRoadmapRepo) ToggleCardDone(_ context.Context, userID, cardID int64) (int64, error) {
 	c, err := f.findCard(userID, cardID)
 	if err != nil {
