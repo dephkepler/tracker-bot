@@ -56,7 +56,7 @@ export default function OverviewPage() {
             </span>
           </Link>
 
-          <div className='flex justify-center pb-2'>
+          <div className='flex items-center justify-center gap-4 pb-2'>
             <button
               type='button'
               onClick={() => queryClient.invalidateQueries({ queryKey: ['overview'] })}
@@ -64,6 +64,13 @@ export default function OverviewPage() {
             >
               Обновить
             </button>
+            {/* Inside a Mini App there is no address bar, so the only way to
+                reach the init-data page is a link. Deliberately understated:
+                it is a maintenance tool for keeping tgauth's golden vector
+                current, not a feature. */}
+            <Link href='/debug/initdata' className='rounded-control px-3 py-2 text-small text-ink-3'>
+              initData
+            </Link>
           </div>
         </div>
       )}

@@ -32,3 +32,8 @@ config.yaml
 
 .DS_Store
 **/.DS_Store
+
+# A captured Telegram launch plus the token that signed it, for
+# tgauth's TestGoldenVector. Never committed: this repository is public and the
+# token is live. The test skips when the file is absent.
+internal/web/tgauth/testdata/golden.json

@@ -4,8 +4,11 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -283,59 +286,73 @@ func TestNewVerifierRejectsBadArguments(t *testing.T) {
 	}
 }
 
-// TestGoldenVector pins this package against a real Telegram client, and is not
-// filled in yet.
+// goldenVector is a launch captured from a real Telegram client together with
+// the token that signed it. Kept out of git — the repository is public and the
+// token is live — so the test skips when the file is absent.
 //
-// What is already established: the HMAC construction itself — the "WebAppData"
-// key derivation, the sorted newline-joined check string over decoded values,
-// and the hex comparison — has been cross-checked against an independent
-// implementation. A signature produced by a separate Python script verified
-// here on the first attempt, which is evidence signFields alone cannot give,
-// since it and expectedHash are the same reading of the spec written twice.
+// To capture one: open the deployment's /debug/initdata/ page inside Telegram,
+// copy the string, and write it with the bot's token into
+// testdata/golden.json:
 //
-// What only a real client could settle — and did, by rejecting every launch
-// with "hash mismatch" — was the payload shape: this package used to exclude
-// the "signature" field from the check string, which no test could catch
-// because signFields made the same mistake. Filling the vector in below is what
-// would catch the next mistake of that kind.
-//
-// To fill it in — this is step 9 of the plan, the first time the Mini App opens
-// against a live client:
-//
-//  1. create a scratch bot with BotFather and register a Mini App on it;
-//  2. open it once and log Telegram.WebApp.initData;
-//  3. paste the string and that bot's token into the constants below;
-//  4. revoke the scratch token with BotFather, so what is committed is dead;
-//  5. delete the t.Skip.
-//
-// Until then, treat the HMAC as unverified against reality: every test above
-// only proves this package is self-consistent.
-func TestGoldenVector(t *testing.T) {
-	const (
-		goldenToken    = ""
-		goldenInitData = ""
-	)
+//	{"token": "1234567:AA…", "init_data": "user=%7B…&auth_date=…&hash=…"}
+type goldenVector struct {
+	Token    string `json:"token"`
+	InitData string `json:"init_data"`
+}
 
-	if goldenToken == "" || goldenInitData == "" {
-		t.Skip("no golden vector captured yet — see the comment above, step 9 of the plan")
+// TestGoldenVector is the only test here that can catch this package and its
+// own signing helper being wrong in the same way.
+//
+// Everything above signs its fixtures with signFields, which is the same
+// reading of the specification as expectedHash, written twice by the same
+// author. When that reading was wrong — the check string left out the
+// "signature" field — all of it stayed green and every real launch was
+// rejected in production. Only a string produced by an actual client can
+// settle what the payload looks like.
+func TestGoldenVector(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("testdata", "golden.json"))
+	if errors.Is(err, os.ErrNotExist) {
+		t.Skip("no testdata/golden.json — see the comment above for how to capture one")
+	}
+	if err != nil {
+		t.Fatalf("read the golden vector: %v", err)
 	}
 
-	v, err := NewVerifier(goldenToken, 24*time.Hour)
+	var golden goldenVector
+	if err := json.Unmarshal(raw, &golden); err != nil {
+		t.Fatalf("testdata/golden.json is not valid JSON: %v", err)
+	}
+	if golden.Token == "" || golden.InitData == "" {
+		t.Fatal("testdata/golden.json needs both token and init_data")
+	}
+
+	v, err := NewVerifier(golden.Token, 24*time.Hour)
 	if err != nil {
 		t.Fatalf("NewVerifier: %v", err)
 	}
-	// The capture is older than any real window, so freshness is pinned to it.
-	values, err := url.ParseQuery(goldenInitData)
-	if err != nil {
-		t.Fatalf("ParseQuery: %v", err)
-	}
-	secs, err := strconv.ParseInt(values.Get("auth_date"), 10, 64)
-	if err != nil {
-		t.Fatalf("auth_date: %v", err)
-	}
-	v.now = func() time.Time { return time.Unix(secs, 0).Add(time.Minute) }
 
-	if _, err := v.Verify(goldenInitData); err != nil {
-		t.Fatalf("golden vector failed to verify: %v — the HMAC construction is wrong", err)
+	// The capture ages out of any real window, so freshness is pinned to when
+	// it was taken. The signature is what this test is about, not the clock.
+	values, err := url.ParseQuery(golden.InitData)
+	if err != nil {
+		t.Fatalf("init_data is not a query string: %v", err)
 	}
+	authDate, err := strconv.ParseInt(values.Get("auth_date"), 10, 64)
+	if err != nil {
+		t.Fatalf("init_data has no usable auth_date: %v", err)
+	}
+	v.now = func() time.Time { return time.Unix(authDate, 0).Add(time.Minute) }
+
+	data, err := v.Verify(golden.InitData)
+	if err != nil {
+		t.Fatalf("a real launch failed to verify: %v\n\n"+
+			"This means the HMAC construction disagrees with Telegram — the check "+
+			"string, the field exclusions, or the value encoding. The generated "+
+			"cases above cannot see it, because they share the assumption.", err)
+	}
+	if data.User.ID == 0 {
+		t.Fatal("verified, but no user id came out of it")
+	}
+
+	t.Logf("verified a real launch for Telegram user %d", data.User.ID)
 }
