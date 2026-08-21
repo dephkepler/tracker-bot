@@ -309,6 +309,11 @@ type goldenVector struct {
 // "signature" field — all of it stayed green and every real launch was
 // rejected in production. Only a string produced by an actual client can
 // settle what the payload looks like.
+//
+// The vector in use was checked to have teeth: recomputing its hash with the
+// old exclusion set does not match the hash Telegram sent, so this test would
+// have failed on the bug that reached production. Its fields are auth_date,
+// hash, query_id, signature and user.
 func TestGoldenVector(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "golden.json"))
 	if errors.Is(err, os.ErrNotExist) {
