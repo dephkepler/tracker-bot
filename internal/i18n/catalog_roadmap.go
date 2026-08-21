@@ -396,4 +396,17 @@ var catalogRoadmap = map[string]entry{
 	KeyRoadmapAIDigestHintFmt: {
 		RU: "\n\n💡 %s", EN: "\n\n💡 %s", DE: "\n\n💡 %s", UK: "\n\n💡 %s", AR: "\n\n💡 %s",
 	},
+
+	// The card list moved into the message text because an inline button is
+	// about 35 characters wide and a card is a sentence — on a button it read
+	// as "Re…tables,…". The buttons below carry the numbers from this list.
+	KeyRoadmapDetailCardsHdr: {
+		RU: "*Карточки*", EN: "*Cards*", DE: "*Karten*", UK: "*Картки*", AR: "*البطاقات*",
+	},
+	KeyRoadmapDetailCardLine: {
+		RU: "%d. %s %s", EN: "%d. %s %s", DE: "%d. %s %s", UK: "%d. %s %s", AR: "%d. %s %s",
+	},
+	KeyRoadmapDetailCardsMore: {
+		RU: "…и ещё %d", EN: "…and %d more", DE: "…und %d weitere", UK: "…і ще %d", AR: "…و%d أخرى",
+	},
 }

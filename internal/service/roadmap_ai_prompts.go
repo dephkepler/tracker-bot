@@ -43,11 +43,14 @@ consider "I know this", produce the cards that get them there.
 Rules:
 - Between 8 and %d cards, ordered easiest first.
 - Each card is one concrete thing to study or do, not a whole subject area.
+- Keep a card's text under %d characters: a short phrase, not a sentence. It is
+  read in a list next to a tappable number, so anything longer stops being
+  scannable. Put the specificity in what you name, not in how much you write.
 - Use kind "topic" for something to learn, and "article", "book" or
   "lecture" only for a specific source you can name. Do not invent URLs.
 - Difficulty is relative to this technology: 1 easy, 2 medium, 3 hard.
 - Do not repeat cards the learner already has; extend the plan instead.
-- %s`, maxGeneratedCards, replyIn(lang))
+- %s`, maxGeneratedCards, maxGeneratedCardTextLen, replyIn(lang))
 }
 
 func planUserPrompt(goalName string, tech models.RoadmapItem, existing []models.RoadmapCardItem) string {

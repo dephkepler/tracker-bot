@@ -2495,7 +2495,7 @@ func (m *Module) ShowRoadmapDetail(ctx *tgctx.MsgContext, roadmapID int64, edit 
 	}
 
 	menu := roadmap.RoadmapDetailInlineMenu(ctx.Language, item, cards, m.roadmapaisvc.Enabled())
-	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapDetailText(ctx.Language, item, len(cards)), &menu)
+	m.sendOrEditRoadmap(ctx, edit, roadmap.RoadmapDetailText(ctx.Language, item, cards), &menu)
 }
 
 // ShowRoadmapOrphans lists technologies attached to no goal — v1 leftovers,

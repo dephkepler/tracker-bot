@@ -11,10 +11,11 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// Cards are freeform lines up to models.MaxRoadmapCardTextLen, but Telegram
-// renders a long button label as one unreadable smear — the full text stays
-// in the DB, the button shows the start of it.
-const cardButtonMaxRunes = 36
+// digestButtonMaxRunes caps the card label in a reminder push, where each card
+// gets a row to itself and so has the whole width. That is still only forty
+// characters or so, which is why the checklist screen numbers its buttons
+// instead and writes the cards out in the message text.
+const digestButtonMaxRunes = 40
 
 // Difficulty and kind are shown as icons rather than words: a card row also
 // carries the card's own text, and three words of metadata in front of it
@@ -156,9 +157,9 @@ func RoadmapOrphansInlineMenu(lang i18n.Lang, items []models.RoadmapItem) tgbota
 // a goal" row, and its Back leads to the orphan list rather than a goal.
 func RoadmapDetailInlineMenu(lang i18n.Lang, item models.RoadmapItem, cards []models.RoadmapCardItem, aiEnabled bool) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(cards)+6)
-	for _, c := range cards {
+	for i, c := range cards {
 		row := buttonbuilder.IR(
-			buttonbuilder.IB(CardButtonLabel(c), fmt.Sprintf("%s%d", RoadmapCBCardToggle, c.ID)),
+			buttonbuilder.IB(CardButtonLabel(i+1, c), fmt.Sprintf("%s%d", RoadmapCBCardToggle, c.ID)),
 			buttonbuilder.IB("🎚", fmt.Sprintf("%s%d", RoadmapCBCardDiff, c.ID)),
 			buttonbuilder.IB("🗑", fmt.Sprintf("%s%d", RoadmapCBCardDelete, c.ID)),
 		)
@@ -249,14 +250,25 @@ func ParseAssignPayload(data string) (roadmapID, goalID int64, ok bool) {
 	return roadmapID, goalID, true
 }
 
-// CardButtonLabel renders one card's button: a done box or its difficulty
-// dot, the kind icon, then the (possibly shortened) text.
-func CardButtonLabel(c models.RoadmapCardItem) string {
+// CardButtonLabel renders one card's button as its number from the list in the
+// message text, plus its state.
+//
+// The text used to be on the button and was unreadable: an inline button is
+// about 35 characters wide, four of them share a row, and a generated card runs
+// to a hundred characters or more, so it arrived as "Re…tables,…". The number
+// ties the button to the line above it, where the card is written out in full.
+func CardButtonLabel(number int, c models.RoadmapCardItem) string {
+	return fmt.Sprintf("%d %s", number, CardStateIcons(c))
+}
+
+// CardStateIcons is the difficulty (or a tick) plus the kind, shared by the
+// button and the list line so the two cannot drift apart.
+func CardStateIcons(c models.RoadmapCardItem) string {
 	lead := difficultyIcon(c.Difficulty)
 	if c.IsDone {
 		lead = "✅"
 	}
-	return lead + kindIcon(c.Kind) + " " + truncateRunes(c.Text, cardButtonMaxRunes)
+	return lead + kindIcon(c.Kind)
 }
 
 // Rune-based, not byte-based, so a Cyrillic or Arabic card isn't cut
@@ -302,7 +314,7 @@ func RoadmapArchiveInlineMenu(lang i18n.Lang, goals []models.RoadmapGoalItem, it
 func RoadmapDigestInlineMenu(lang i18n.Lang, cards []models.RoadmapDigestCard) tgbotapi.InlineKeyboardMarkup {
 	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(cards)+1)
 	for _, c := range cards {
-		label := "✅ " + difficultyIcon(c.Difficulty) + kindIcon(c.Kind) + " " + truncateRunes(c.Text, cardButtonMaxRunes)
+		label := "✅ " + difficultyIcon(c.Difficulty) + kindIcon(c.Kind) + " " + truncateRunes(c.Text, digestButtonMaxRunes)
 		rows = append(rows, buttonbuilder.IR(
 			buttonbuilder.IB(label, fmt.Sprintf("%s%d", RoadmapCBDigestToggle, c.ID)),
 		))

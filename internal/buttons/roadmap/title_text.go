@@ -61,7 +61,18 @@ func RoadmapOrphansTitle(lang i18n.Lang, count int) string {
 
 // RoadmapDetailText renders one technology's header: name, done/total, its
 // mastery criteria, and a hint about the card row's buttons.
-func RoadmapDetailText(lang i18n.Lang, item models.RoadmapItem, cardCount int) string {
+// cardTextMaxRunes caps one card in the list — generous, because a card is
+// meant to be read here.
+const cardTextMaxRunes = 160
+
+// cardListBudgetRunes bounds the list as a whole, which is the constraint that
+// actually matters: a Telegram message holds 4096 characters, and capping only
+// the per-card length let thirty long cards add up to five thousand and the
+// whole screen fail to send. Budgeting the total adapts to however long the
+// cards happen to be instead of relying on a product of two guesses.
+const cardListBudgetRunes = 3000
+
+func RoadmapDetailText(lang i18n.Lang, item models.RoadmapItem, cards []models.RoadmapCardItem) string {
 	var b strings.Builder
 	b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailTitle, item.Name, item.DoneCards, item.TotalCards))
 	b.WriteString("\n")
@@ -71,11 +82,36 @@ func RoadmapDetailText(lang i18n.Lang, item models.RoadmapItem, cardCount int) s
 		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailCriteria, item.MasteryCriteria))
 	}
 	b.WriteString("\n\n")
-	if cardCount == 0 {
+	if len(cards) == 0 {
 		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailNoCards))
-	} else {
-		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailHint))
+		return b.String()
 	}
+
+	// The cards are listed here rather than left to their buttons: an inline
+	// button is roughly 35 characters wide, and a generated card is a sentence.
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailCardsHdr))
+	b.WriteString("\n")
+	shown, spent := 0, 0
+	for i, card := range cards {
+		line := i18n.T(lang, i18n.KeyRoadmapDetailCardLine,
+			i+1, CardStateIcons(card), truncateRunes(card.Text, cardTextMaxRunes))
+		// At least one card is always listed, however long it is: an empty list
+		// under a "Cards" header would be stranger than a truncated one.
+		if shown > 0 && spent+len([]rune(line)) > cardListBudgetRunes {
+			break
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+		spent += len([]rune(line)) + 1
+		shown++
+	}
+	if len(cards) > shown {
+		b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailCardsMore, len(cards)-shown))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(i18n.T(lang, i18n.KeyRoadmapDetailHint))
 	return b.String()
 }
 

@@ -55,6 +55,14 @@ const (
 	// more checklist than anyone works through in a sitting, and the cap
 	// keeps a runaway reply from filling a technology in one go.
 	maxGeneratedCards = 20
+	// maxGeneratedCardTextLen is what the model is told to stay under, and it
+	// is far below models.MaxRoadmapCardTextLen on purpose. The database limit
+	// is 300 because a person pasting their own notes may write a long line;
+	// but a generated card is read in a list beside a tappable number, and
+	// telling the model the storage limit produced 120-character sentences that
+	// were unreadable in the interface. The validator still accepts up to the
+	// database limit — this is guidance for the generator, not a new rule.
+	maxGeneratedCardTextLen = 70
 	// maxTaggedLines bounds one AI-assisted paste. Past this the paste is
 	// tagged by the deterministic parser instead — an unbounded paste would
 	// be an unbounded prompt.
@@ -118,7 +126,7 @@ var cardsSchema = llm.Schema{
 				"properties": map[string]any{
 					"text": map[string]any{
 						"type":        "string",
-						"description": fmt.Sprintf("What to study, at most %d characters. No list marker, no tags.", models.MaxRoadmapCardTextLen),
+						"description": fmt.Sprintf("What to study — a short phrase under %d characters, no list marker and no tags.", maxGeneratedCardTextLen),
 					},
 					"kind": map[string]any{
 						"type":        "string",
