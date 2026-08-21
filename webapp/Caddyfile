@@ -12,9 +12,12 @@
 }
 
 {$DASHBOARD_SITE} {
+	# No email is configured on purpose. ACME does not require one — it only
+	# buys expiry notices — and a Caddyfile has no conditionals, so
+	# `email {$VAR}` with the variable unset expands to a bare `email` and
+	# Caddy refuses to start. That is exactly how this crash-looped once.
 	tls {
 		issuer acme {
-			email {$CADDY_ACME_EMAIL}
 			disable_tlsalpn_challenge
 		}
 	}

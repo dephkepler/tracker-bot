@@ -81,7 +81,6 @@ services:
       - app
     environment:
       DASHBOARD_SITE: "${DASHBOARD_SITE:-132-243-194-137.sslip.io}"
-      CADDY_ACME_EMAIL: "${CADDY_ACME_EMAIL:-}"
     ports:
       # 80 is only for the ACME HTTP-01 challenge; 443 on this host belongs to
       # an unrelated service, so TLS is served on 8443.
