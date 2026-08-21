@@ -108,6 +108,18 @@ func (app *Application) Build(ctx context.Context) error {
 		}
 		app.webServer = webServer
 		log.Info().Str("addr", app.cfg.Web.Addr).Msg("dashboard enabled")
+
+		// Put the dashboard on the button beside the message field. Best effort
+		// on purpose: this is a convenience, and Telegram being briefly
+		// unreachable must not stop the bot from starting.
+		if url := app.cfg.Web.DashboardURL(); url != "" {
+			if err := tgclient.SetWebAppMenuButton(ctx, app.cfg.Telegram.TelegramToken,
+				app.cfg.Web.MenuButtonText, url); err != nil {
+				log.Warn().Err(err).Msg("could not set the Mini App menu button")
+			} else {
+				log.Info().Str("url", url).Msg("Mini App menu button set")
+			}
+		}
 	}
 
 	return nil

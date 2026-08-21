@@ -106,3 +106,17 @@ func TestMiniAppURL(t *testing.T) {
 		})
 	}
 }
+
+func TestDashboardURL(t *testing.T) {
+	cases := map[string]string{
+		"https://host:8443":  "https://host:8443/",
+		"https://host:8443/": "https://host:8443/",
+		"":                   "",
+	}
+	for origin, want := range cases {
+		w := Web{PublicOrigin: origin}
+		if got := w.DashboardURL(); got != want {
+			t.Fatalf("DashboardURL(%q) = %q, want %q", origin, got, want)
+		}
+	}
+}

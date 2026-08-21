@@ -104,6 +104,11 @@ type Web struct {
 	// the bot's database connections with it.
 	MaxInflight int `env:"WEB_MAX_INFLIGHT" env-default:"8"`
 
+	// MenuButtonText labels the button beside the message field. A single
+	// global default, so it cannot follow each user's language the way the rest
+	// of the UI does; configurable so changing it needs no rebuild.
+	MenuButtonText string `env:"WEB_MENU_BUTTON_TEXT" env-default:"Панель"`
+
 	// DevTgUserID skips signature verification and pins every request to this
 	// Telegram user. Local development only — it is the only way to open the
 	// dashboard in an ordinary browser, and Validate refuses to let it start
@@ -188,6 +193,16 @@ func (c Config) validate() error {
 		return c.Web.Validate()
 	}
 	return nil
+}
+
+// DashboardURL is the page the Mini App opens — the https origin itself, as
+// opposed to MiniAppURL's t.me deep link. Telegram needs the former for a
+// web_app button and the latter for a link.
+func (w Web) DashboardURL() string {
+	if w.PublicOrigin == "" {
+		return ""
+	}
+	return strings.TrimSuffix(w.PublicOrigin, "/") + "/"
 }
 
 // MiniAppURL is the deep link that opens the dashboard inside Telegram. Empty
