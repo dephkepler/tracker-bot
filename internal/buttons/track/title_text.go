@@ -66,6 +66,43 @@ func TrackActivityTargetButtonLabel(lang i18n.Lang, item models.TrackActivityIte
 	return i18n.T(lang, i18n.KeyTrackActivityTargetButtonUnset)
 }
 
+// TrackTimerStatusText renders the "which activities are currently
+// activated, and when's the next reminder" screen. now is the reference
+// instant nextPingAt's remaining time is computed against.
+func TrackTimerStatusText(lang i18n.Lang, enabled bool, intervalMin int, nextPingAt, now time.Time, selected []models.TrackActivityItem) string {
+	var b strings.Builder
+	b.WriteString(i18n.T(lang, i18n.KeyTrackTimerStatusTitle))
+	b.WriteString("\n\n")
+	if enabled {
+		remaining := nextPingAt.Sub(now)
+		if remaining < 0 {
+			remaining = 0
+		}
+		b.WriteString(i18n.T(lang, i18n.KeyTrackTimerStatusActiveFmt, intervalMin, formatDuration(remaining)))
+	} else {
+		b.WriteString(i18n.T(lang, i18n.KeyTrackTimerStatusInactive))
+	}
+	b.WriteString("\n\n")
+
+	if len(selected) == 0 {
+		b.WriteString(i18n.T(lang, i18n.KeyTrackTimerStatusNoActivities))
+		return b.String()
+	}
+	b.WriteString(i18n.T(lang, i18n.KeyTrackTimerStatusActivitiesHeader))
+	for _, item := range selected {
+		b.WriteString("\n")
+		b.WriteString(activityLine(item))
+	}
+	return b.String()
+}
+
+func activityLine(item models.TrackActivityItem) string {
+	if item.Emoji != "" {
+		return "• " + item.Emoji + " " + item.Name
+	}
+	return "• " + item.Name
+}
+
 func formatDuration(d time.Duration) string {
 	if d < 0 {
 		d = 0

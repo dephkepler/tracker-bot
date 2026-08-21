@@ -23,22 +23,37 @@ func TrackEntryInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonViewArchive), TrackCBArchiveOpen),
 		),
 		buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackButtonTimerStatus), TrackCBTimerStatus),
+		),
+		buttonbuilder.IR(
 			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonHome), "go_home"),
 		),
 	)
 }
 
+// TrackTimerStatusInlineMenu is the read-only status screen's only action —
+// back to the Track main screen.
+func TrackTimerStatusInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), "back_to_main")),
+	)
+}
+
+// Activate and Delete both act on the same 🟢/⚪ selection from
+// TrackActivitiesInlineMenu — one starts reminders, the other permanently
+// deletes with no confirmation step. They used to share a row, which made
+// it easy to select activities meaning to activate them and hit the wrong
+// neighboring button instead. Kept on separate rows, with Delete last and
+// alone, so it isn't next to anything reachable by an accidental mistap.
 func TrackActivityManageReplyMenu(lang i18n.Lang) tgbotapi.ReplyKeyboardMarkup {
 	return buttonbuilder.RK(
-		buttonbuilder.RR(
-			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonActivityActivate)),
-			buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonActivityDelete)),
-		),
+		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonActivityActivate))),
 		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonViewArchive))),
 		buttonbuilder.RR(
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonBack)),
 			buttonbuilder.RB(i18n.T(lang, i18n.KeyCommonHome)),
 		),
+		buttonbuilder.RR(buttonbuilder.RB(i18n.T(lang, i18n.KeyTrackButtonActivityDelete))),
 	)
 }
 
@@ -202,6 +217,17 @@ func TrackPromptInlineMenu(lang i18n.Lang, items []models.TrackActivityItem, int
 		tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyTrackLabelStopTimer), TrackCBPromptStopTimer),
 	))
 	return tgbotapi.NewInlineKeyboardMarkup(rows...)
+}
+
+// TrackStopTimerConfirmInlineMenu is the "are you sure?" step behind the
+// reminder push's 🛑 button — see the comment on TrackCBPromptStopTimer.
+func TrackStopTimerConfirmInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
+	return buttonbuilder.IK(
+		buttonbuilder.IR(
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyTrackTimerStopConfirmYes), TrackCBPromptStopConfirm),
+			buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonCancelX), TrackCBPromptStopCancel),
+		),
+	)
 }
 
 func TrackArchiveInlineMenu(lang i18n.Lang, items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {

@@ -12,6 +12,9 @@ import (
 type TimerService interface {
 	Activate(ctx context.Context, userID int64, intervalMin int) error
 	Stop(ctx context.Context, userID int64) error
+	// GetSettings surfaces the raw persisted schedule — enabled=false,
+	// err=nil means the user has never activated a timer.
+	GetSettings(ctx context.Context, userID int64) (intervalMin int, nextPingAt time.Time, enabled bool, err error)
 	ListDueUsers(ctx context.Context, now time.Time, limit int) ([]models.TimerDueUser, error)
 	MarkPromptSent(ctx context.Context, userID int64, intervalMin int, now time.Time) error
 	RecordPromptAnswer(ctx context.Context, userID, activityID int64) error
@@ -59,6 +62,10 @@ func (s *timerService) Activate(ctx context.Context, userID int64, intervalMin i
 	}
 
 	return s.timerRepo.UpsertInterval(ctx, userID, intervalMin, nextPingAt)
+}
+
+func (s *timerService) GetSettings(ctx context.Context, userID int64) (int, time.Time, bool, error) {
+	return s.timerRepo.GetSettings(ctx, userID)
 }
 
 func (s *timerService) Stop(ctx context.Context, userID int64) error {

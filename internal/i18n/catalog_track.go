@@ -14,6 +14,9 @@ var catalogTrack = map[string]entry{
 	KeyTrackButtonViewArchive: {
 		RU: "🗄 Архив", EN: "🗄 Archive", DE: "🗄 Archiv", UK: "🗄 Архів", AR: "🗄 الأرشيف",
 	},
+	KeyTrackButtonTimerStatus: {
+		RU: "🔔 Напоминания", EN: "🔔 Reminders", DE: "🔔 Erinnerungen", UK: "🔔 Нагадування", AR: "🔔 التذكيرات",
+	},
 	KeyTrackButtonActivityActivate: {
 		RU: "📳 Активировать", EN: "📳 Activate", DE: "📳 Aktivieren", UK: "📳 Активувати", AR: "📳 تفعيل",
 	},
@@ -187,6 +190,24 @@ var catalogTrack = map[string]entry{
 	KeyTrackTimerPickerTitle: {
 		RU: "⏱ Выбери интервал отслеживания:", EN: "⏱ Select tracking interval:", DE: "⏱ Wähle das Tracking-Intervall:", UK: "⏱ Обери інтервал відстеження:", AR: "⏱ اختر فاصل التتبع:",
 	},
+	KeyTrackTimerStatusTitle: {
+		RU: "🔔 *Напоминания*", EN: "🔔 *Reminders*", DE: "🔔 *Erinnerungen*", UK: "🔔 *Нагадування*", AR: "🔔 *التذكيرات*",
+	},
+	KeyTrackTimerStatusActiveFmt: {
+		RU: "🕐 Каждые *%d* мин (следующее через %s)", EN: "🕐 Every *%d* min (next in %s)", DE: "🕐 Alle *%d* Min (nächste in %s)", UK: "🕐 Кожні *%d* хв (наступне через %s)", AR: "🕐 كل *%d* دقيقة (التالي خلال %s)",
+	},
+	KeyTrackTimerStatusInactive: {
+		RU: "🕐 Напоминания не активны.", EN: "🕐 Reminders are not active.", DE: "🕐 Erinnerungen sind nicht aktiv.", UK: "🕐 Нагадування не активні.", AR: "🕐 التذكيرات غير مفعّلة.",
+	},
+	KeyTrackTimerStatusActivitiesHeader: {
+		RU: "Активные активности:", EN: "Active activities:", DE: "Aktive Aktivitäten:", UK: "Активні активності:", AR: "الأنشطة النشطة:",
+	},
+	KeyTrackTimerStatusNoActivities: {
+		RU: "Ни одной активности не выбрано.", EN: "No activities selected.", DE: "Keine Aktivitäten ausgewählt.", UK: "Жодної активності не обрано.", AR: "لم يتم اختيار أي نشاط.",
+	},
+	KeyTrackTimerStatusLoadFailed: {
+		RU: "⚠️ Не удалось загрузить статус напоминаний.", EN: "⚠️ Failed to load reminder status.", DE: "⚠️ Erinnerungsstatus konnte nicht geladen werden.", UK: "⚠️ Не вдалося завантажити статус нагадувань.", AR: "⚠️ تعذّر تحميل حالة التذكيرات.",
+	},
 	KeyTrackTimerCustomPrompt: {
 		RU: "Введи свой интервал в минутах (1-360):", EN: "Enter custom interval in minutes (1-360):", DE: "Gib ein eigenes Intervall in Minuten ein (1-360):", UK: "Введи свій інтервал у хвилинах (1-360):", AR: "أدخل فاصلاً مخصصًا بالدقائق (1-360):",
 	},
@@ -237,6 +258,19 @@ var catalogTrack = map[string]entry{
 	},
 	KeyTrackTimerStopped: {
 		RU: "⏹ Таймер остановлен", EN: "⏹ Timer stopped", DE: "⏹ Timer gestoppt", UK: "⏹ Таймер зупинено", AR: "⏹ تم إيقاف المؤقت",
+	},
+	KeyTrackTimerStopConfirmPrompt: {
+		RU: "🛑 Остановить все напоминания? Включить обратно можно в любой момент.",
+		EN: "🛑 Stop all reminders? You can turn them back on anytime.",
+		DE: "🛑 Alle Erinnerungen stoppen? Du kannst sie jederzeit wieder aktivieren.",
+		UK: "🛑 Зупинити всі нагадування? Увімкнути назад можна будь-коли.",
+		AR: "🛑 إيقاف كل التذكيرات؟ يمكنك إعادة تشغيلها في أي وقت.",
+	},
+	KeyTrackTimerStopConfirmYes: {
+		RU: "🛑 Да, остановить", EN: "🛑 Yes, stop", DE: "🛑 Ja, stoppen", UK: "🛑 Так, зупинити", AR: "🛑 نعم، أوقف",
+	},
+	KeyTrackTimerStopCancelled: {
+		RU: "Напоминания по-прежнему включены.", EN: "Reminders are still on.", DE: "Erinnerungen sind weiterhin aktiv.", UK: "Нагадування досі увімкнені.", AR: "لا تزال التذكيرات مفعّلة.",
 	},
 
 	KeyTrackPromptQuestion: {

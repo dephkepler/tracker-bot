@@ -1,10 +1,15 @@
 package track
 
 const (
-	TrackCBActivitySelect         = "track:activity:select"
-	TrackCBActivityCreate         = "track:activity:create"
-	TrackCBPromptActivity         = "track:prompt:activity:"
+	TrackCBActivitySelect = "track:activity:select"
+	TrackCBActivityCreate = "track:activity:create"
+	TrackCBPromptActivity = "track:prompt:activity:"
+	// TrackCBPromptStopTimer only opens a confirm step now — it used to stop
+	// immediately, which sat right below the (sometimes single) activity
+	// button on the reminder push and was too easy to hit by accident.
 	TrackCBPromptStopTimer        = "track:prompt:stop"
+	TrackCBPromptStopConfirm      = "track:prompt:stop:confirm"
+	TrackCBPromptStopCancel       = "track:prompt:stop:cancel"
 	TrackCBReportSummary          = "track:report:summary"
 	TrackCBArchiveOpen            = "track:archive:open"
 	TrackCBArchiveSelected        = "track:archive:selected"
@@ -42,6 +47,10 @@ const (
 
 	// TrackCBActivityTarget carries the activity id: "<TrackCBActivityTarget><id>".
 	TrackCBActivityTarget = "track:activity:target:"
+
+	// TrackCBTimerStatus opens the "which activities are activated, next
+	// reminder in X" screen — a read-only view, no confirm step needed.
+	TrackCBTimerStatus = "track:timer:status"
 )
 
 // most button/label text lives in internal/i18n (i18n.KeyTrack*); only non-translatable constants remain here

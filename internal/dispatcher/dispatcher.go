@@ -981,6 +981,8 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 	case data == trackbtn.TrackCBActivitySelect:
 		d.setScreen(ctx.UserID, screenTrackManage)
 		d.track.ShowTrackActivitySelectionMenu(ctx)
+	case data == trackbtn.TrackCBTimerStatus:
+		d.track.ShowTrackTimerStatus(ctx)
 	case data == trackbtn.TrackCBReportSummary, data == trackbtn.TrackCBReportsHub:
 		d.setScreen(ctx.UserID, screenTrackReports)
 		d.track.ShowReportsHub(ctx, true)
@@ -1116,7 +1118,11 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 		d.setScreen(ctx.UserID, screenTrackManage)
 		d.track.ShowTrackActivitySelectionMenuInPlace(ctx)
 	case data == trackbtn.TrackCBPromptStopTimer:
-		d.track.StopTrackTimer(ctx)
+		d.track.PromptStopTrackTimer(ctx)
+	case data == trackbtn.TrackCBPromptStopConfirm:
+		d.track.ConfirmStopTrackTimer(ctx)
+	case data == trackbtn.TrackCBPromptStopCancel:
+		d.track.CancelStopTrackTimer(ctx)
 	case strings.HasPrefix(data, trackbtn.TrackCBPromptActivity):
 		d.track.RecordPromptAnswer(ctx)
 	case strings.HasPrefix(data, trackbtn.TrackCBArchiveRestore):

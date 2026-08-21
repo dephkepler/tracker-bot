@@ -447,6 +447,40 @@ func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
 	}
 }
 
+// ShowTrackTimerStatus renders which activities are currently activated for
+// reminders and how long until the next one — a read-only view reached
+// from the Track main screen's 🔔 button.
+func (m *Module) ShowTrackTimerStatus(ctx *tgctx.MsgContext) {
+	intervalMin, nextPingAt, enabled, err := m.timersvc.GetSettings(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("get timer settings failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStatusLoadFailed)))
+		return
+	}
+	selected, err := m.tracksvc.ListSelectedActivities(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list selected activities failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStatusLoadFailed)))
+		return
+	}
+
+	text := track.TrackTimerStatusText(ctx.Language, enabled, intervalMin, nextPingAt, time.Now().UTC(), selected)
+	menu := track.TrackTimerStatusInlineMenu(ctx.Language)
+
+	if ctx.MessageID > 0 {
+		edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, menu)
+		edit.ParseMode = "Markdown"
+		if _, err := m.bot.Send(edit); err != nil {
+			log.Error().Err(err).Msg("edit timer status failed")
+		}
+		return
+	}
+	msg := tgbotapi.NewMessage(ctx.ChatID, text)
+	msg.ParseMode = "Markdown"
+	msg.ReplyMarkup = menu
+	_, _ = m.bot.Send(msg)
+}
+
 func (m *Module) ShowReportsHub(ctx *tgctx.MsgContext, inPlace bool) {
 	text := i18n.T(ctx.Language, i18n.KeyTrackReportsHubTitle)
 	msgReply := tgbotapi.NewMessage(ctx.ChatID, "📈")
@@ -1278,13 +1312,51 @@ func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	m.ShowHomeMenu(ctx)
 }
 
-func (m *Module) StopTrackTimer(ctx *tgctx.MsgContext) {
-	if err := m.timersvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
-		log.Error().Err(err).Msg("stop timer failed")
-		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopFailed)))
+// PromptStopTrackTimer asks for confirmation before disabling reminders —
+// the reminder push's 🛑 button used to stop immediately, which sat right
+// below the (sometimes single) activity button and was too easy to hit by
+// accident, silently killing reminders with no way back except re-Activate.
+func (m *Module) PromptStopTrackTimer(ctx *tgctx.MsgContext) {
+	menu := track.TrackStopTimerConfirmInlineMenu(ctx.Language)
+	if ctx.MessageID > 0 {
+		edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopConfirmPrompt), menu)
+		if _, err := m.bot.Send(edit); err != nil {
+			log.Error().Err(err).Msg("edit stop-timer confirm failed")
+		}
 		return
 	}
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopped)))
+	msg := tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopConfirmPrompt))
+	msg.ReplyMarkup = menu
+	_, _ = m.bot.Send(msg)
+}
+
+// ConfirmStopTrackTimer actually disables reminders, after PromptStopTrackTimer's confirm step.
+func (m *Module) ConfirmStopTrackTimer(ctx *tgctx.MsgContext) {
+	if err := m.timersvc.Stop(ctx.Ctx, ctx.DBUserID); err != nil {
+		log.Error().Err(err).Msg("stop timer failed")
+		if ctx.MessageID > 0 {
+			_, _ = m.bot.Send(tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopFailed)))
+		} else {
+			_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStopFailed)))
+		}
+		return
+	}
+	text := i18n.T(ctx.Language, i18n.KeyTrackTimerStopped)
+	if ctx.MessageID > 0 {
+		_, _ = m.bot.Send(tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text))
+		return
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
+}
+
+// CancelStopTrackTimer backs out of the confirm step without touching the timer.
+func (m *Module) CancelStopTrackTimer(ctx *tgctx.MsgContext) {
+	text := i18n.T(ctx.Language, i18n.KeyTrackTimerStopCancelled)
+	if ctx.MessageID > 0 {
+		_, _ = m.bot.Send(tgbotapi.NewEditMessageText(ctx.ChatID, ctx.MessageID, text))
+		return
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
 }
 
 // dueAt is embedded in the buttons so a late answer still credits the originally scheduled window.
