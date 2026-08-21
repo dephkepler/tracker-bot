@@ -105,22 +105,32 @@ func TestVerifyAcceptsSpacesAndEmojiInUserFields(t *testing.T) {
 	}
 }
 
-// Newer clients add an Ed25519 "signature" field that is not part of the HMAC
-// input. Including it in the check string breaks against current clients.
-func TestVerifyIgnoresTheSignatureField(t *testing.T) {
+// Current clients send an Ed25519 "signature" field for third-party
+// validation. It is still one of the "received fields", so it belongs in the
+// data-check-string for the bot-token HMAC — only "hash" is left out. Omitting
+// it rejected every real launch in production while this suite stayed green.
+func TestVerifyIncludesTheSignatureFieldInTheCheckString(t *testing.T) {
 	v := newTestVerifier(t, 24*time.Hour)
 	fields := validFields()
-	raw := signFields(t, testToken, fields)
+	fields["signature"] = "GkQr1AvOBmXqDdaHnUYh5Ck7Q0nGZ0Kz2fWnGkTFxSg"
 
-	values, err := url.ParseQuery(raw)
+	if _, err := v.Verify(signFields(t, testToken, fields)); err != nil {
+		t.Fatalf("Verify with a signed signature field: %v", err)
+	}
+}
+
+// The corollary: because the field is part of the string, adding or altering it
+// after signing invalidates the hash, exactly like any other tampering.
+func TestVerifyRejectsSignatureAddedAfterSigning(t *testing.T) {
+	v := newTestVerifier(t, 24*time.Hour)
+	values, err := url.ParseQuery(signFields(t, testToken, validFields()))
 	if err != nil {
 		t.Fatalf("ParseQuery: %v", err)
 	}
-	// Added after signing, exactly as a client would.
-	values.Set("signature", "GkQr1AvOBmXqDdaHnUYh5Ck7Q0nGZ0Kz2fWnGkTFxSg")
+	values.Set("signature", "appended-after-the-fact")
 
-	if _, err := v.Verify(values.Encode()); err != nil {
-		t.Fatalf("Verify with a signature field present: %v", err)
+	if _, err := v.Verify(values.Encode()); !errors.Is(err, ErrBadHash) {
+		t.Fatalf("err = %v, want ErrBadHash", err)
 	}
 }
 
@@ -283,10 +293,11 @@ func TestNewVerifierRejectsBadArguments(t *testing.T) {
 // here on the first attempt, which is evidence signFields alone cannot give,
 // since it and expectedHash are the same reading of the spec written twice.
 //
-// What is still unverified is everything only a real client can show: the exact
-// field set Telegram sends, how it encodes the user object, and whether the
-// signature field behaves as assumed. So the remaining risk is the payload
-// shape, not the algorithm.
+// What only a real client could settle — and did, by rejecting every launch
+// with "hash mismatch" — was the payload shape: this package used to exclude
+// the "signature" field from the check string, which no test could catch
+// because signFields made the same mistake. Filling the vector in below is what
+// would catch the next mistake of that kind.
 //
 // To fill it in — this is step 9 of the plan, the first time the Mini App opens
 // against a live client:

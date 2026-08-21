@@ -161,13 +161,17 @@ func (v *Verifier) Verify(raw string) (InitData, error) {
 //     raw query string. Signing the percent-encoded form passes every test with
 //     an ASCII name and fails the moment a user has a space or an emoji in
 //     theirs — an intermittent, per-user 401.
-//   - "signature" is excluded alongside "hash". Newer clients send an Ed25519
-//     signature for third-party validation which is not part of this HMAC;
-//     folding it in works against older clients and 401s against current ones.
+//   - Only "hash" is excluded. Everything else the client sent goes into the
+//     string, "signature" included. Dropping that one as well is tempting,
+//     since it exists for a different purpose — the Ed25519 third-party
+//     check — but it is *that* check whose string omits both fields; the
+//     bot-token HMAC omits only the hash. Excluding it here rejected every
+//     real launch with "hash mismatch" while a full unit-test suite stayed
+//     green, because the tests encoded the same wrong assumption as the code.
 func expectedHash(secret []byte, values url.Values) string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
-		if key == "hash" || key == "signature" {
+		if key == "hash" {
 			continue
 		}
 		keys = append(keys, key)
