@@ -31,12 +31,22 @@ type TrackerRepository interface {
 	ListArchived(ctx context.Context, userID int64) ([]Activity, error)
 	SelectedListActive(ctx context.Context, userID int64) ([]int64, error)
 	ToggleSelectedActive(ctx context.Context, userID, activityID int64) error
+	// ClearSelected resets the Select-Activity checkboxes without touching
+	// the activities themselves — used after activating reminders, so a
+	// re-Activate doesn't need the previous batch unchecked first.
+	ClearSelected(ctx context.Context, userID int64) error
 	DeleteSelected(ctx context.Context, userID int64) (int64, error)
 	ArchiveSelected(ctx context.Context, userID int64) (int64, error)
 	RestoreArchived(ctx context.Context, userID, activityID int64) error
 	DeleteArchivedForever(ctx context.Context, userID, activityID int64) error
 	// SetActivityTarget sets or updates one activity's daily time target.
 	SetActivityTarget(ctx context.Context, userID, activityID int64, minutes int) error
+
+	// Reminder membership — separate from SelectedListActive/ToggleSelectedActive,
+	// which double as a one-off scratchpad for Archive/Delete selected.
+	ListReminderActive(ctx context.Context, userID int64) ([]int64, error)
+	AddToReminders(ctx context.Context, userID int64, activityIDs []int64) error
+	RemoveFromReminders(ctx context.Context, userID, activityID int64) error
 	GetTodayStats(ctx context.Context, userID int64, tzName string) (time.Duration, int, error)
 	GetTodayActivities(ctx context.Context, userID int64, tzName string) ([]Activity, []time.Duration, []int, error)
 	GetPeriodActivities(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64) ([]Activity, []time.Duration, []int, time.Duration, int, error)
@@ -244,6 +254,86 @@ func (r *trackRepository) ToggleSelectedActive(ctx context.Context, userID, acti
 	}
 
 	return tx.Commit(ctx)
+}
+
+func (r *trackRepository) ClearSelected(ctx context.Context, userID int64) error {
+	if userID <= 0 {
+		return fmt.Errorf("clear selected: invalid userID")
+	}
+	q := `DELETE FROM user_selected_activities WHERE user_id = $1;`
+	if _, err := r.db.Exec(ctx, q, userID); err != nil {
+		return fmt.Errorf("clear selected exec: %w", err)
+	}
+	return nil
+}
+
+func (r *trackRepository) ListReminderActive(ctx context.Context, userID int64) ([]int64, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("list reminder active: invalid userID")
+	}
+	q := `
+	SELECT activity_id
+	FROM user_reminder_activities
+	WHERE user_id = $1
+	ORDER BY activity_id;
+	`
+	rows, err := r.db.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list reminder active query: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]int64, 0, 16)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("list reminder active scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list reminder active rows: %w", err)
+	}
+	return ids, nil
+}
+
+// AddToReminders is additive — activityIDs already present are left alone,
+// so calling it doesn't disturb an activity someone else already added.
+func (r *trackRepository) AddToReminders(ctx context.Context, userID int64, activityIDs []int64) error {
+	if userID <= 0 {
+		return fmt.Errorf("add to reminders: invalid userID")
+	}
+	if len(activityIDs) == 0 {
+		return nil
+	}
+	batch := &pgx.Batch{}
+	q := `INSERT INTO user_reminder_activities(user_id, activity_id) VALUES ($1, $2) ON CONFLICT DO NOTHING;`
+	for _, id := range activityIDs {
+		batch.Queue(q, userID, id)
+	}
+	br := r.db.SendBatch(ctx, batch)
+	defer br.Close()
+	for range activityIDs {
+		if _, err := br.Exec(); err != nil {
+			return fmt.Errorf("add to reminders: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *trackRepository) RemoveFromReminders(ctx context.Context, userID, activityID int64) error {
+	if userID <= 0 || activityID <= 0 {
+		return fmt.Errorf("remove from reminders: invalid ids")
+	}
+	q := `DELETE FROM user_reminder_activities WHERE user_id = $1 AND activity_id = $2;`
+	tag, err := r.db.Exec(ctx, q, userID, activityID)
+	if err != nil {
+		return fmt.Errorf("remove from reminders exec: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return errlocal.ErrActivityNotFound
+	}
+	return nil
 }
 
 func (r *trackRepository) DeleteSelected(ctx context.Context, userID int64) (int64, error) {

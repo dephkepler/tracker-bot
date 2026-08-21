@@ -216,6 +216,8 @@ const (
 	KeyTrackTimerNoneSelected           = "track.timer.none_selected"
 	KeyTrackTimerActivateFailed         = "track.timer.activate_failed"
 	KeyTrackTimerActivated              = "track.timer.activated"
+	KeyTrackTimerActivatedAddedFmt      = "track.timer.activated_added_fmt"
+	KeyTrackTimerRemoveButtonFmt        = "track.timer.remove_button_fmt"
 	KeyTrackTimerStopFailed             = "track.timer.stop_failed"
 	KeyTrackTimerStopped                = "track.timer.stopped"
 	KeyTrackTimerStopConfirmPrompt      = "track.timer.stop_confirm_prompt"

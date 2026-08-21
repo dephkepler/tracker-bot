@@ -983,6 +983,12 @@ func (d *Dispatcher) handleTrackCallback(ctx *tgctx.MsgContext, data string) {
 		d.track.ShowTrackActivitySelectionMenu(ctx)
 	case data == trackbtn.TrackCBTimerStatus:
 		d.track.ShowTrackTimerStatus(ctx)
+	case strings.HasPrefix(data, trackbtn.TrackCBReminderRemove):
+		id, ok := parseCallbackID(data, trackbtn.TrackCBReminderRemove)
+		if !ok {
+			return
+		}
+		d.track.RemoveActivityFromReminders(ctx, id)
 	case data == trackbtn.TrackCBReportSummary, data == trackbtn.TrackCBReportsHub:
 		d.setScreen(ctx.UserID, screenTrackReports)
 		d.track.ShowReportsHub(ctx, true)

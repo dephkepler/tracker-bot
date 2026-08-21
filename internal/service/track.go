@@ -24,6 +24,16 @@ type TrackerService interface {
 	// SetActivityTarget validates and stores one activity's daily time
 	// target (models.MinActivityTargetMinutes..MaxActivityTargetMinutes).
 	SetActivityTarget(ctx context.Context, userID, activityID int64, minutes int) error
+
+	// ListReminderActivities returns activities currently receiving
+	// reminders — distinct from ListSelectedActivities, which is the
+	// Select-Activity screen's one-off batch-select scratchpad.
+	ListReminderActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error)
+	// AddSelectedToReminders adds whatever is currently checked on the
+	// Select-Activity screen to the reminder set (existing members
+	// untouched) and clears the checkboxes. Returns how many were staged.
+	AddSelectedToReminders(ctx context.Context, userID int64) (int, error)
+	RemoveFromReminders(ctx context.Context, userID, activityID int64) error
 	GetTodayReport(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error)
 	GetTodayReportBySelected(ctx context.Context, userID int64, loc *time.Location) (models.ReportTodayStats, error)
 	GetPeriodReport(ctx context.Context, userID int64, from, to time.Time, activityIDs []int64, loc *time.Location) (models.ReportPeriodStats, error)
@@ -153,6 +163,55 @@ func (srv *trackerService) ListSelectedActivities(ctx context.Context, userID in
 		}
 	}
 	return out, nil
+}
+
+func (srv *trackerService) ListReminderActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error) {
+	items, err := srv.ListActivities(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	reminderIDs, err := srv.repo.ListReminderActive(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	inReminders := make(map[int64]struct{}, len(reminderIDs))
+	for _, id := range reminderIDs {
+		inReminders[id] = struct{}{}
+	}
+
+	out := make([]models.TrackActivityItem, 0, len(reminderIDs))
+	for _, item := range items {
+		if _, ok := inReminders[item.ID]; ok {
+			out = append(out, item)
+		}
+	}
+	return out, nil
+}
+
+// AddSelectedToReminders adds whatever is currently checked on the
+// Select-Activity screen to the reminder set (existing members untouched —
+// this is additive) and then clears the checkboxes, so re-opening
+// Select Activity starts blank instead of showing stale checkmarks that
+// look like they still need clearing before adding something new.
+func (srv *trackerService) AddSelectedToReminders(ctx context.Context, userID int64) (int, error) {
+	selectedIDs, err := srv.repo.SelectedListActive(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+	if len(selectedIDs) == 0 {
+		return 0, nil
+	}
+	if err := srv.repo.AddToReminders(ctx, userID, selectedIDs); err != nil {
+		return 0, err
+	}
+	if err := srv.repo.ClearSelected(ctx, userID); err != nil {
+		return 0, err
+	}
+	return len(selectedIDs), nil
+}
+
+func (srv *trackerService) RemoveFromReminders(ctx context.Context, userID, activityID int64) error {
+	return srv.repo.RemoveFromReminders(ctx, userID, activityID)
 }
 
 func (srv *trackerService) ListArchivedActivities(ctx context.Context, userID int64) ([]models.TrackActivityItem, error) {

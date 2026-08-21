@@ -131,8 +131,18 @@ var catalogTrack = map[string]entry{
 	KeyTrackManageEmpty: {
 		RU: "Активностей пока нет. Сначала создай одну.", EN: "No activities yet. Create one first.", DE: "Noch keine Aktivitäten. Erstelle zuerst eine.", UK: "Активностей поки немає. Спочатку створи одну.", AR: "لا توجد أنشطة بعد. أنشئ واحدًا أولاً.",
 	},
+	// The 🟢/⚪ note exists because it's easy to assume a green check just
+	// records "I picked this once" and should be cleared after activating —
+	// it's actually the live reminder membership, so unchecking an already-
+	// active one turns its reminders off. Adding a new activity to an
+	// already-running timer means checking the new one WITHOUT touching the
+	// existing green ones.
 	KeyTrackManageSelectTitle: {
-		RU: "📂 Выбор активности\n\nВыбрано: %d из %d", EN: "📂 Select Activity\n\nSelected: %d of %d", DE: "📂 Aktivität auswählen\n\nAusgewählt: %d von %d", UK: "📂 Вибір активності\n\nВибрано: %d із %d", AR: "📂 اختيار النشاط\n\nتم اختيار: %d من %d",
+		RU: "📂 Выбор активности\n\n🟢 = сейчас в рассылке напоминаний. Тапни, чтобы добавить или убрать — уже зелёные трогать не нужно, если хочешь оставить их активными.\n\nВыбрано: %d из %d",
+		EN: "📂 Select Activity\n\n🟢 = currently getting reminders. Tap to add or remove — leave the ones already 🟢 alone if you want to keep them active.\n\nSelected: %d of %d",
+		DE: "📂 Aktivität auswählen\n\n🟢 = erhält aktuell Erinnerungen. Tippen zum Hinzufügen oder Entfernen — die bereits grünen nicht anfassen, wenn sie aktiv bleiben sollen.\n\nAusgewählt: %d von %d",
+		UK: "📂 Вибір активності\n\n🟢 = зараз у розсилці нагадувань. Тапни, щоб додати або прибрати — вже зелені не чіпай, якщо хочеш лишити їх активними.\n\nВибрано: %d із %d",
+		AR: "📂 اختيار النشاط\n\n🟢 = يتلقّى التذكيرات حاليًا. اضغط للإضافة أو الإزالة — لا تلمس ما هو أخضر بالفعل إذا أردت إبقاءه نشطًا.\n\nتم اختيار: %d من %d",
 	},
 	KeyTrackInvalidActivityID: {
 		RU: "Некорректный ID активности.", EN: "Invalid activity id.", DE: "Ungültige Aktivitäts-ID.", UK: "Некоректний ID активності.", AR: "معرّف نشاط غير صالح.",
@@ -252,6 +262,12 @@ var catalogTrack = map[string]entry{
 	},
 	KeyTrackTimerActivated: {
 		RU: "✅ Таймер запущен: каждые %d мин", EN: "✅ Timer activated: every %d min", DE: "✅ Timer aktiviert: alle %d Min.", UK: "✅ Таймер запущено: кожні %d хв", AR: "✅ تم تفعيل المؤقت: كل %d دقيقة",
+	},
+	KeyTrackTimerActivatedAddedFmt: {
+		RU: "✅ Добавлено в напоминания: %d. Каждые %d мин.", EN: "✅ Added %d to reminders. Every %d min.", DE: "✅ %d zu Erinnerungen hinzugefügt. Alle %d Min.", UK: "✅ Додано до нагадувань: %d. Кожні %d хв.", AR: "✅ تمت إضافة %d إلى التذكيرات. كل %d دقيقة.",
+	},
+	KeyTrackTimerRemoveButtonFmt: {
+		RU: "✖ Убрать %s", EN: "✖ Remove %s", DE: "✖ %s entfernen", UK: "✖ Прибрати %s", AR: "✖ إزالة %s",
 	},
 	KeyTrackTimerStopFailed: {
 		RU: "⚠️ Не удалось остановить таймер.", EN: "⚠️ Failed to stop timer.", DE: "⚠️ Timer konnte nicht gestoppt werden.", UK: "⚠️ Не вдалося зупинити таймер.", AR: "⚠️ تعذّر إيقاف المؤقت.",

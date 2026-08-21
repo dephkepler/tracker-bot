@@ -51,6 +51,9 @@ const (
 	// TrackCBTimerStatus opens the "which activities are activated, next
 	// reminder in X" screen — a read-only view, no confirm step needed.
 	TrackCBTimerStatus = "track:timer:status"
+
+	// TrackCBReminderRemove carries the activity id: "<TrackCBReminderRemove><id>".
+	TrackCBReminderRemove = "track:reminder:remove:"
 )
 
 // most button/label text lives in internal/i18n (i18n.KeyTrack*); only non-translatable constants remain here

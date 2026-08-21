@@ -199,6 +199,15 @@ func (f *fakeTrackSvc) DeleteSelectedActivities(context.Context, int64) (int64, 
 func (f *fakeTrackSvc) ListSelectedActivities(context.Context, int64) ([]models.TrackActivityItem, error) {
 	panic("not used")
 }
+func (f *fakeTrackSvc) ListReminderActivities(context.Context, int64) ([]models.TrackActivityItem, error) {
+	panic("not used")
+}
+func (f *fakeTrackSvc) AddSelectedToReminders(context.Context, int64) (int, error) {
+	panic("web: the dashboard is read-only")
+}
+func (f *fakeTrackSvc) RemoveFromReminders(context.Context, int64, int64) error {
+	panic("web: the dashboard is read-only")
+}
 func (f *fakeTrackSvc) ArchiveSelectedActivities(context.Context, int64) (int64, error) {
 	panic("web: the dashboard is read-only")
 }

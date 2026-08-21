@@ -450,6 +450,16 @@ func (m *Module) ShowTrackingMenu(ctx *tgctx.MsgContext) {
 // ShowTrackTimerStatus renders which activities are currently activated for
 // reminders and how long until the next one — a read-only view reached
 // from the Track main screen's 🔔 button.
+// RemoveActivityFromReminders takes one activity out of the reminder set —
+// the only way to shrink it now that checking/unchecking on the
+// Select-Activity screen no longer doubles as live reminder membership.
+func (m *Module) RemoveActivityFromReminders(ctx *tgctx.MsgContext, activityID int64) {
+	if err := m.tracksvc.RemoveFromReminders(ctx.Ctx, ctx.DBUserID, activityID); err != nil && !errors.Is(err, models.ErrActivityNotFound) {
+		log.Error().Err(err).Msg("remove from reminders failed")
+	}
+	m.ShowTrackTimerStatus(ctx)
+}
+
 func (m *Module) ShowTrackTimerStatus(ctx *tgctx.MsgContext) {
 	intervalMin, nextPingAt, enabled, err := m.timersvc.GetSettings(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
@@ -457,7 +467,7 @@ func (m *Module) ShowTrackTimerStatus(ctx *tgctx.MsgContext) {
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStatusLoadFailed)))
 		return
 	}
-	selected, err := m.tracksvc.ListSelectedActivities(ctx.Ctx, ctx.DBUserID)
+	selected, err := m.tracksvc.ListReminderActivities(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
 		log.Error().Err(err).Msg("list selected activities failed")
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerStatusLoadFailed)))
@@ -465,7 +475,7 @@ func (m *Module) ShowTrackTimerStatus(ctx *tgctx.MsgContext) {
 	}
 
 	text := track.TrackTimerStatusText(ctx.Language, enabled, intervalMin, nextPingAt, time.Now().UTC(), selected)
-	menu := track.TrackTimerStatusInlineMenu(ctx.Language)
+	menu := track.TrackTimerStatusInlineMenu(ctx.Language, selected)
 
 	if ctx.MessageID > 0 {
 		edit := tgbotapi.NewEditMessageTextAndMarkup(ctx.ChatID, ctx.MessageID, text, menu)
@@ -1287,10 +1297,22 @@ func (m *Module) DeleteCustomTimer(ctx *tgctx.MsgContext, intervalMin int) {
 	m.ShowTrackTimerMenu(ctx)
 }
 
+// ActivateTrackTimer adds whatever is currently checked on the
+// Select-Activity screen to the (persistent, additive) reminder set —
+// existing members are untouched, not replaced — then starts/updates the
+// schedule. See TrackerService.AddSelectedToReminders for why this doesn't
+// just reuse the checkboxes as live reminder truth.
 func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
-	items, err := m.tracksvc.ListSelectedActivities(ctx.Ctx, ctx.DBUserID)
+	added, err := m.tracksvc.AddSelectedToReminders(ctx.Ctx, ctx.DBUserID)
 	if err != nil {
-		log.Error().Err(err).Msg("load selected activities failed")
+		log.Error().Err(err).Msg("add selected to reminders failed")
+		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerLoadSelectedFailed)))
+		return
+	}
+
+	items, err := m.tracksvc.ListReminderActivities(ctx.Ctx, ctx.DBUserID)
+	if err != nil {
+		log.Error().Err(err).Msg("list reminder activities failed")
 		_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerLoadSelectedFailed)))
 		return
 	}
@@ -1305,7 +1327,11 @@ func (m *Module) ActivateTrackTimer(ctx *tgctx.MsgContext, intervalMin int) {
 		return
 	}
 
-	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, i18n.T(ctx.Language, i18n.KeyTrackTimerActivated, intervalMin)))
+	text := i18n.T(ctx.Language, i18n.KeyTrackTimerActivated, intervalMin)
+	if added > 0 {
+		text = i18n.T(ctx.Language, i18n.KeyTrackTimerActivatedAddedFmt, added, intervalMin)
+	}
+	_, _ = m.bot.Send(tgbotapi.NewMessage(ctx.ChatID, text))
 	hide := tgbotapi.NewMessage(ctx.ChatID, " ")
 	hide.ReplyMarkup = tgbotapi.NewRemoveKeyboard(true)
 	_, _ = m.bot.Send(hide)
@@ -1361,7 +1387,7 @@ func (m *Module) CancelStopTrackTimer(ctx *tgctx.MsgContext) {
 
 // dueAt is embedded in the buttons so a late answer still credits the originally scheduled window.
 func (m *Module) SendPromptMessage(ctx context.Context, chatID int64, userID int64, intervalMin int, dueAt time.Time) error {
-	items, err := m.tracksvc.ListSelectedActivities(ctx, userID)
+	items, err := m.tracksvc.ListReminderActivities(ctx, userID)
 	if err != nil {
 		return err
 	}

@@ -33,10 +33,19 @@ func TrackEntryInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
 
 // TrackTimerStatusInlineMenu is the read-only status screen's only action —
 // back to the Track main screen.
-func TrackTimerStatusInlineMenu(lang i18n.Lang) tgbotapi.InlineKeyboardMarkup {
-	return buttonbuilder.IK(
-		buttonbuilder.IR(buttonbuilder.IB(i18n.T(lang, i18n.KeyCommonBack), "back_to_main")),
-	)
+func TrackTimerStatusInlineMenu(lang i18n.Lang, items []models.TrackActivityItem) tgbotapi.InlineKeyboardMarkup {
+	rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(items)+1)
+	for _, item := range items {
+		name := item.Name
+		if item.Emoji != "" {
+			name = item.Emoji + " " + item.Name
+		}
+		label := i18n.T(lang, i18n.KeyTrackTimerRemoveButtonFmt, name)
+		cb := fmt.Sprintf("%s%d", TrackCBReminderRemove, item.ID)
+		rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(label, cb)))
+	}
+	rows = append(rows, tgbotapi.NewInlineKeyboardRow(tgbotapi.NewInlineKeyboardButtonData(i18n.T(lang, i18n.KeyCommonBack), "back_to_main")))
+	return tgbotapi.NewInlineKeyboardMarkup(rows...)
 }
 
 // Activate and Delete both act on the same 🟢/⚪ selection from
