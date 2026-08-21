@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, StaleLaunchError } from '@/lib/api'
 import type { OverviewResponse } from '@/lib/api-types'
@@ -42,6 +43,18 @@ export default function OverviewPage() {
             <SectionHeader title='На что ушло время' hint='сегодня' />
             <RankedBars items={overview.data.today.top_activities} total={overview.data.today.total_seconds} />
           </Card>
+
+          {/* The one way into the section, so the overview stays a hub rather
+              than growing a tab bar for a single destination. */}
+          <Link
+            href='/track'
+            className='flex items-center justify-between rounded-card border border-line bg-surface p-4 text-body text-ink'
+          >
+            <span>Время: периоды, часы, календарь</span>
+            <span aria-hidden='true' className='text-ink-3'>
+              →
+            </span>
+          </Link>
 
           <div className='flex justify-center pb-2'>
             <button

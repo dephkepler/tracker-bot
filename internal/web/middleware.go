@@ -81,7 +81,11 @@ func withLogging(next http.Handler) http.Handler {
 			Str("path", r.URL.Path).
 			Int("status", status).
 			Int("bytes", rec.bytes).
-			Dur("latency", time.Since(started)).
+			// Named with its unit and logged as an integer. zerolog's Dur writes
+			// a bare float in milliseconds by default, and "latency: 6.04" was
+			// read once as six seconds — a performance problem that did not
+			// exist.
+			Int64("latency_ms", time.Since(started).Milliseconds()).
 			Msg("web request")
 	})
 }

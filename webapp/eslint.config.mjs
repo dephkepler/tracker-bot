@@ -1,7 +1,10 @@
-import { dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { FlatCompat } from '@eslint/eslintrc'
+import coreWebVitals from 'eslint-config-next/core-web-vitals'
+import typescript from 'eslint-config-next/typescript'
 
-const compat = new FlatCompat({ baseDirectory: dirname(fileURLToPath(import.meta.url)) })
+// eslint-config-next 16 ships flat configs, so they are imported directly.
+// Going through @eslint/eslintrc's FlatCompat instead — the shape most guides
+// still show — fails here with a circular-structure error while validating the
+// legacy schema.
+const config = [...coreWebVitals, ...typescript, { ignores: ['.next/**', 'out/**', 'node_modules/**'] }]
 
-export default [...compat.extends('next/core-web-vitals', 'next/typescript')]
+export default config

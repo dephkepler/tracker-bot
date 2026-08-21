@@ -3,6 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 import { QueryProvider } from '@/providers/query-provider'
 import { TelegramProvider } from '@/providers/telegram-provider'
+import { BackButtonSync } from '@/components/layout/back-button-sync'
 
 export const metadata: Metadata = {
   title: 'Трекер — панель',
@@ -29,7 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <QueryProvider>
-          <TelegramProvider>{children}</TelegramProvider>
+          <TelegramProvider>
+            <BackButtonSync />
+            {children}
+          </TelegramProvider>
         </QueryProvider>
       </body>
     </html>

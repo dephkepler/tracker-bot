@@ -11,6 +11,13 @@
 export interface Meta {
   timezone: string
   generated_at: string
+  /** The window the server actually used, inclusive, as bare dates. */
+  from?: string
+  to?: string
+  /** Resolved, never "auto". */
+  granularity?: string
+  /** The activity set actually queried — the expansion of an omitted filter. */
+  activity_ids?: number[]
 }
 
 export interface Activity {
@@ -66,4 +73,62 @@ export interface MeResponse {
   utc_offset_minutes: number
   language: string
   now: string
+}
+
+export interface MonthTotal {
+  month: string
+  seconds: number
+}
+
+export interface BreakdownResponse {
+  total_seconds: number
+  total_sessions: number
+  activities: ActivityTotal[]
+  monthly: MonthTotal[]
+  meta: Meta
+}
+
+export interface SeriesPart {
+  name: string
+  emoji: string
+  seconds: number
+}
+
+/**
+ * One point of a series. `start` is a bare "YYYY-MM-DD" for day and month
+ * granularity and a naive local "YYYY-MM-DDTHH:mm" for hour — read it as a
+ * string, never through new Date(), which would reinterpret it in the viewer's
+ * zone rather than the one the server bucketed by.
+ */
+export interface SeriesBucket {
+  start: string
+  seconds: number
+  parts?: SeriesPart[]
+}
+
+export interface SeriesResponse {
+  by: 'total' | 'activity'
+  buckets: SeriesBucket[]
+  meta: Meta
+}
+
+export interface HeatDay {
+  date: string
+  seconds: number
+}
+
+export interface HeatmapResponse {
+  days: HeatDay[]
+  /** The busiest day in the window, for scaling the colour ramp. */
+  max_seconds: number
+  meta: Meta
+}
+
+export interface DayResponse {
+  date: string
+  total_seconds: number
+  total_sessions: number
+  activities: ActivityTotal[]
+  hours: SeriesBucket[]
+  meta: Meta
 }
