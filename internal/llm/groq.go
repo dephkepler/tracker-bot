@@ -238,7 +238,10 @@ func logCall(provider, model string, u Usage, latency time.Duration) {
 	}
 	ev.Str("provider", provider).
 		Str("model", model).
-		Dur("latency", latency).
+		// Named with its unit and logged as an integer: zerolog's Dur writes a
+		// bare float in milliseconds, and such a field was once read as seconds,
+		// producing a performance problem that did not exist.
+		Int64("latency_ms", latency.Milliseconds()).
 		Int("input_tokens", u.InputTokens).
 		Int("output_tokens", u.OutputTokens).
 		Msg("llm call done")
