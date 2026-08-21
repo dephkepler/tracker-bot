@@ -15,7 +15,10 @@ services:
       POSTGRES_DB: tracker
       POSTGRES_USER: tracker
       POSTGRES_PASSWORD: tracker
-    ports: ["5438:5432"]   
+    # Bound to loopback: the credentials for this database are in a public
+    # repository, so an internet-reachable port meant anyone who read the repo
+    # could connect. Reach it from a laptop over an SSH tunnel instead.
+    ports: ["127.0.0.1:5438:5432"]
     volumes: ["db_data:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tracker -d tracker"]
