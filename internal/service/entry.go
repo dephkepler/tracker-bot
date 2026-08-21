@@ -12,6 +12,11 @@ import (
 type EntryService interface {
 	// isNew decides welcome message vs plain "back home" for the caller.
 	EnsureUser(ctx context.Context, user *models.UserInput) (dbID int64, isNew bool, err error)
+	// GetDBIDByTgUserID translates a Telegram user id into users.id. The two
+	// are different columns and most of the codebase takes users.id, so
+	// anything entering from outside the bot (the dashboard API) has to
+	// translate first.
+	GetDBIDByTgUserID(ctx context.Context, tgUserID int64) (int64, error)
 	CountUsers(ctx context.Context) (int, error)
 	ListUsersPage(ctx context.Context, limit, offset int) ([]models.AdminUserRow, error)
 	ListAllTelegramIDs(ctx context.Context) ([]int64, error)
@@ -59,6 +64,13 @@ func (s *entryService) EnsureUser(ctx context.Context, user *models.UserInput) (
 	}
 
 	return dbID, true, nil
+}
+
+func (s *entryService) GetDBIDByTgUserID(ctx context.Context, tgUserID int64) (int64, error) {
+	if tgUserID <= 0 {
+		return 0, models.ErrUserNotFound
+	}
+	return s.repo.GetDBIDByTgUserID(ctx, tgUserID)
 }
 
 func (s *entryService) CountUsers(ctx context.Context) (int, error) {

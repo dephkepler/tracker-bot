@@ -20,6 +20,8 @@ import (
 	"github.com/rs/zerolog/log"
 
 	"tracker-bot/internal/config"
+	"tracker-bot/internal/service"
+	"tracker-bot/internal/web/tgauth"
 )
 
 type Server struct {
@@ -28,18 +30,55 @@ type Server struct {
 	// ctx is the application context, captured at construction like the
 	// schedulers do; Run stops when it is cancelled.
 	ctx context.Context
+
+	// verifier is nil only in dev-bypass mode, where nothing is verified.
+	verifier *tgauth.Verifier
+	identity *Identity
+	tracksvc service.TrackerService
 }
 
 // NewServer builds the listener but does not start it.
-func NewServer(ctx context.Context, cfg config.Web) (*Server, error) {
+//
+// botToken signs nothing here — it is the key init data is verified against, so
+// the dashboard authenticates against the same bot the user is talking to.
+func NewServer(
+	ctx context.Context,
+	cfg config.Web,
+	botToken string,
+	entrysvc service.EntryService,
+	profilesvc service.ProfileService,
+	tracksvc service.TrackerService,
+) (*Server, error) {
 	if ctx == nil {
 		return nil, errors.New("web: nil context")
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	if entrysvc == nil || profilesvc == nil || tracksvc == nil {
+		return nil, errors.New("web: entry, profile and tracker services are required")
+	}
 
-	srv := &Server{cfg: cfg, ctx: ctx}
+	srv := &Server{
+		cfg:      cfg,
+		ctx:      ctx,
+		identity: NewIdentity(entrysvc, profilesvc),
+		tracksvc: tracksvc,
+	}
+
+	if cfg.DevTgUserID != 0 {
+		// Loud on every start: this is the setting that turns authentication
+		// off, and it should never be a surprise in a log.
+		log.Warn().
+			Int64("tg_user_id", cfg.DevTgUserID).
+			Msg("dashboard auth is BYPASSED — every request is served as this user")
+	} else {
+		verifier, err := tgauth.NewVerifier(botToken, cfg.InitDataMaxAge)
+		if err != nil {
+			return nil, err
+		}
+		srv.verifier = verifier
+	}
 	srv.http = &http.Server{
 		Addr:    cfg.Addr,
 		Handler: srv.routes(),
@@ -62,6 +101,12 @@ func (s *Server) routes() http.Handler {
 	// curls, and it must answer before any Telegram credential exists.
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 
+	// Everything under /api needs a verified launch. Registered through one
+	// api() wrapper so a new endpoint cannot accidentally be added unprotected.
+	mux.Handle("GET /api/v1/me", s.api(s.handleMe))
+	mux.Handle("GET /api/v1/track/overview", s.api(s.handleTrackOverview))
+	mux.Handle("GET /api/v1/track/activities", s.api(s.handleTrackActivities))
+
 	// Anything unrouted answers JSON rather than net/http's text 404, so the
 	// frontend's error path never has to parse two shapes.
 	mux.HandleFunc("/", s.handleNotFound)
@@ -75,6 +120,11 @@ func (s *Server) routes() http.Handler {
 	h = withLogging(h)
 	h = withRequestID(h)
 	return h
+}
+
+// api wraps a handler in authentication. Every /api route goes through it.
+func (s *Server) api(h http.HandlerFunc) http.Handler {
+	return s.withAuth(h)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

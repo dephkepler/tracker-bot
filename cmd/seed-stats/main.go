@@ -83,7 +83,13 @@ func main() {
 
 	r := rand.New(rand.NewSource(42))
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-	end := time.Now().UTC().AddDate(0, 0, 1)
+	// Exclusive upper bound, aligned to midnight so the last day generated is
+	// today. Using now().AddDate(0,0,1) instead put tomorrow's midnight inside
+	// the loop, so the seeder produced sessions dated tomorrow while printing a
+	// range that ended today — enough to make "last tracked activity" resolve to
+	// a future session with no time today, which looks like a dashboard bug.
+	now := time.Now().UTC()
+	end := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC).AddDate(0, 0, 1)
 
 	insQ := `
 	INSERT INTO activity_sessions (user_id, activity_id, start_at, end_at, planned_min, source)

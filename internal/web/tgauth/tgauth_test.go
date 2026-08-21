@@ -273,13 +273,20 @@ func TestNewVerifierRejectsBadArguments(t *testing.T) {
 	}
 }
 
-// TestGoldenVector is the only test here that could catch the implementation
-// and signFields being wrong in the same way, and it is not filled in yet.
+// TestGoldenVector pins this package against a real Telegram client, and is not
+// filled in yet.
 //
-// Both are written by the same author from the same reading of the spec, so
-// they agree by construction. The independent evidence has to come from
-// outside: one init-data string produced by a real Telegram client, with the
-// token that signed it.
+// What is already established: the HMAC construction itself — the "WebAppData"
+// key derivation, the sorted newline-joined check string over decoded values,
+// and the hex comparison — has been cross-checked against an independent
+// implementation. A signature produced by a separate Python script verified
+// here on the first attempt, which is evidence signFields alone cannot give,
+// since it and expectedHash are the same reading of the spec written twice.
+//
+// What is still unverified is everything only a real client can show: the exact
+// field set Telegram sends, how it encodes the user object, and whether the
+// signature field behaves as assumed. So the remaining risk is the payload
+// shape, not the algorithm.
 //
 // To fill it in — this is step 9 of the plan, the first time the Mini App opens
 // against a live client:

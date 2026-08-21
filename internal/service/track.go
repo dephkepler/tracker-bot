@@ -81,18 +81,17 @@ func (srv *trackerService) GetMainStats(ctx context.Context, userID int64, loc *
 		return models.MainStats{}, err
 	}
 
-	streak := calcStreakDays(days, apptime.NowIn(loc), loc)
-	currentName := last.Name
-	if strings.TrimSpace(last.Emoji) != "" {
-		currentName = last.Emoji + " " + last.Name
-	}
-
+	// Raw parts, not a joined label: this is also read by the dashboard API,
+	// where an emoji glued to the name is not something a client can undo.
+	// The Telegram screen joins them itself, in track.TrackingMenuText.
 	return models.MainStats{
-		CurrentActivityName: currentName,
-		TodayTracked:        total,
-		TodaySessions:       todayTrackedActivities,
-		StreakDays:          streak,
-		TargetMinutes:       last.TargetMinutes,
+		CurrentActivityID:    last.ID,
+		CurrentActivityName:  last.Name,
+		CurrentActivityEmoji: last.Emoji,
+		TodayTracked:         total,
+		TodaySessions:        todayTrackedActivities,
+		StreakDays:           calcStreakDays(days, apptime.NowIn(loc), loc),
+		TargetMinutes:        last.TargetMinutes,
 	}, nil
 }
 

@@ -14,6 +14,21 @@ const (
 	codeInternal = "internal"
 	codeBusy     = "busy"
 	codeNotFound = "not_found"
+
+	// codeMissingCredentials means no Authorization header at all — the page
+	// was loaded outside Telegram, or before the WebApp script was ready.
+	codeMissingCredentials = "missing_credentials"
+	// codeUnauthorized means the init data did not verify. Deliberately says
+	// nothing about which check failed; the request id ties it to the log line
+	// that does.
+	codeUnauthorized = "unauthorized"
+	// codeInitDataExpired is split out from codeUnauthorized because the client
+	// can act on it: reopening the Mini App mints fresh init data, whereas a bad
+	// signature is not something a retry fixes.
+	codeInitDataExpired = "initdata_expired"
+	// codeUserNotFound means the Telegram credential is genuine but nobody has
+	// pressed /start — the dashboard tells them to open the bot first.
+	codeUserNotFound = "user_not_found"
 )
 
 type errorBody struct {

@@ -20,13 +20,26 @@ type ProfileStats struct {
 	TimeZone    *string
 }
 
+// MainStats is the Track main screen's summary. Everything here except
+// TodaySessions describes the *last tracked activity*, not the whole day —
+// the field names say so explicitly because they used not to, and reading
+// TodayTracked as "time tracked today" is wrong by a factor of however many
+// activities the user has.
 type MainStats struct {
-	CurrentActivityName string
-	TodayTracked        time.Duration
-	TodaySessions       int
-	StreakDays          int
-	// TargetMinutes is the current activity's own configured daily target;
-	// nil when it hasn't been set (callers fall back to a default).
+	// The last tracked non-archived activity, raw. Emoji is separate so
+	// presentation decides how to join them; a zero ID means nothing has ever
+	// been tracked and the rest of this struct is zero too.
+	CurrentActivityID    int64
+	CurrentActivityName  string
+	CurrentActivityEmoji string
+	// TodayTracked is that activity's time today, not the day's total.
+	TodayTracked time.Duration
+	// TodaySessions counts distinct activities tracked today, not sessions.
+	TodaySessions int
+	// StreakDays is that activity's own unbroken run, not an overall streak.
+	StreakDays int
+	// TargetMinutes is that activity's configured daily target; nil when it
+	// hasn't been set (callers fall back to a default).
 	TargetMinutes *int
 }
 

@@ -32,12 +32,22 @@ func TrackingMenuText(lang i18n.Lang, stats models.MainStats) string {
 	return fmt.Sprintf(
 		"%s\n\n%s *%s*\n%s *%s*\n`%s`\n%s *%d*\n%s *%d*\n",
 		i18n.T(lang, i18n.KeyTrackMainTitle),
-		i18n.T(lang, i18n.KeyTrackMainCurrentActivity), safeText(stats.CurrentActivityName),
+		i18n.T(lang, i18n.KeyTrackMainCurrentActivity), safeText(currentActivityLabel(stats)),
 		i18n.T(lang, i18n.KeyTrackMainTodayTime), formatDuration(stats.TodayTracked),
 		progress,
 		i18n.T(lang, i18n.KeyTrackMainStreak), stats.StreakDays,
 		i18n.T(lang, i18n.KeyTrackMainTodayCount), stats.TodaySessions,
 	)
+}
+
+// currentActivityLabel joins the emoji and name the service now returns
+// separately. The join lives here because it is presentation: the dashboard API
+// reads the same MainStats and needs the two apart.
+func currentActivityLabel(stats models.MainStats) string {
+	if strings.TrimSpace(stats.CurrentActivityEmoji) == "" {
+		return stats.CurrentActivityName
+	}
+	return stats.CurrentActivityEmoji + " " + stats.CurrentActivityName
 }
 
 // TrackActivityTargetPromptText asks for a daily minutes target for one

@@ -56,7 +56,13 @@ func (repo *profileRepository) GetByID(ctx context.Context, id int64) (*models.P
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, err
+			// Translated here rather than leaked as pgx.ErrNoRows, matching
+			// entryRepository.GetByID: "no such user" is a fact about the
+			// domain, and callers outside this package should not have to know
+			// which driver produced it. Both branches used to return err, so
+			// the dashboard answered 500 instead of 404 for anyone who opened
+			// the Mini App link without ever pressing /start.
+			return nil, models.ErrUserNotFound
 		}
 		return nil, err
 	}

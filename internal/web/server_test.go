@@ -27,7 +27,8 @@ func testWebConfig() config.Web {
 
 func newTestServer(t *testing.T, cfg config.Web) *Server {
 	t.Helper()
-	srv, err := NewServer(context.Background(), cfg)
+	entrysvc, profilesvc := newFakes()
+	srv, err := NewServer(context.Background(), cfg, testBotToken, entrysvc, profilesvc, newFakeTrackSvc())
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
@@ -37,16 +38,40 @@ func newTestServer(t *testing.T, cfg config.Web) *Server {
 func TestNewServerRejectsInvalidConfig(t *testing.T) {
 	cfg := testWebConfig()
 	cfg.MaxInflight = 0
+	entrysvc, profilesvc := newFakes()
 
-	if _, err := NewServer(context.Background(), cfg); err == nil {
+	if _, err := NewServer(context.Background(), cfg, testBotToken, entrysvc, profilesvc, newFakeTrackSvc()); err == nil {
 		t.Fatal("NewServer accepted an invalid config")
 	}
 }
 
 func TestNewServerRejectsNilContext(t *testing.T) {
+	entrysvc, profilesvc := newFakes()
 	//nolint:staticcheck // passing nil is the thing under test
-	if _, err := NewServer(nil, testWebConfig()); err == nil {
+	if _, err := NewServer(nil, testWebConfig(), testBotToken, entrysvc, profilesvc, newFakeTrackSvc()); err == nil {
 		t.Fatal("NewServer accepted a nil context")
+	}
+}
+
+// Without a bot token there is nothing to verify launches against, so starting
+// would mean serving an endpoint that can only ever 401.
+func TestNewServerRequiresABotTokenUnlessBypassed(t *testing.T) {
+	entrysvc, profilesvc := newFakes()
+	if _, err := NewServer(context.Background(), testWebConfig(), "", entrysvc, profilesvc, newFakeTrackSvc()); err == nil {
+		t.Fatal("NewServer accepted an empty bot token")
+	}
+
+	// Except in dev-bypass mode, where nothing is verified at all.
+	cfg := testWebConfig()
+	cfg.DevTgUserID = knownTgUserID
+	if _, err := NewServer(context.Background(), cfg, "", entrysvc, profilesvc, newFakeTrackSvc()); err != nil {
+		t.Fatalf("dev bypass should not need a token: %v", err)
+	}
+}
+
+func TestNewServerRequiresServices(t *testing.T) {
+	if _, err := NewServer(context.Background(), testWebConfig(), testBotToken, nil, nil, nil); err == nil {
+		t.Fatal("NewServer accepted nil services")
 	}
 }
 
@@ -210,8 +235,9 @@ func TestConcurrencyLimitRejectsOverflow(t *testing.T) {
 func TestRunStopsWhenContextIsCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := testWebConfig()
+	entrysvc, profilesvc := newFakes()
 
-	srv, err := NewServer(ctx, cfg)
+	srv, err := NewServer(ctx, cfg, testBotToken, entrysvc, profilesvc, newFakeTrackSvc())
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
