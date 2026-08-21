@@ -391,10 +391,129 @@ func testDeps() Deps {
 		Tracker:   newFakeTrackSvc(),
 		Roadmap:   newFakeRoadmapSvc(),
 		RoadmapAI: newFakeRoadmapAISvc(),
+		Learning:  newFakeLearningSvc(),
+		Challenge: newFakeChallengeSvc(),
 	}
 }
 
 var (
 	_ service.RoadmapService   = (*fakeRoadmapSvc)(nil)
 	_ service.RoadmapAIService = (*fakeRoadmapAISvc)(nil)
+)
+
+// Both fakes below embed their interface, so a method the dashboard has no
+// business calling panics on the nil embedded value instead of needing a stub.
+
+type fakeLearningSvc struct {
+	service.LearningService
+
+	detail  models.LearningStatsDetail
+	reviews []models.LearningReviewEntry
+	err     error
+
+	gotFrom, gotTo time.Time
+	gotLoc         *time.Location
+}
+
+func newFakeLearningSvc() *fakeLearningSvc {
+	// Two reviews on one local day and one on another, with a gap between, so a
+	// test can check the gap comes back as a zero rather than being closed up.
+	loc := time.FixedZone("test", -4*3600)
+	return &fakeLearningSvc{
+		detail: models.LearningStatsDetail{
+			Overall: models.LearningStats{
+				TotalWords: 120, DueTodayWords: 12, LearnedWords: 40, StreakDays: 5,
+				TimerActive: true, TimerInterval: 60,
+				// A pre-formatted string the API must never pass through.
+				NextPushIn: "17 min",
+			},
+			Collections: []models.LearningCollectionStat{
+				{Name: "Verbs", TotalWords: 80, DueWords: 8, LearnedWords: 30},
+				{Name: "Nouns", TotalWords: 40, DueWords: 4, LearnedWords: 10},
+			},
+			ReviewsTotal: 300, ReviewsCorrect: 261,
+		},
+		reviews: []models.LearningReviewEntry{
+			{Term: "go", Correct: true, ReviewedAt: time.Date(2026, time.August, 19, 14, 0, 0, 0, loc)},
+			{Term: "run", Correct: false, ReviewedAt: time.Date(2026, time.August, 19, 15, 0, 0, 0, loc)},
+			{Term: "walk", Correct: true, ReviewedAt: time.Date(2026, time.August, 21, 9, 0, 0, 0, loc)},
+		},
+	}
+}
+
+func (f *fakeLearningSvc) GetStatsDetail(_ context.Context, _ int64, loc *time.Location) (models.LearningStatsDetail, error) {
+	f.gotLoc = loc
+	return f.detail, f.err
+}
+
+func (f *fakeLearningSvc) ListReviewsOnDay(_ context.Context, _ int64, from, to time.Time) ([]models.LearningReviewEntry, error) {
+	f.gotFrom, f.gotTo = from, to
+	return f.reviews, f.err
+}
+
+type fakeChallengeSvc struct {
+	service.ChallengeService
+
+	items  []models.ChallengeItem
+	days   map[int64][]models.ChallengeDay
+	detail models.ChallengeDayDetail
+	err    error
+
+	marked []dayWrite
+}
+
+type dayWrite struct {
+	challengeID int64
+	day         string
+	done        bool
+}
+
+func newFakeChallengeSvc() *fakeChallengeSvc {
+	day := func(d int) time.Time { return time.Date(2026, time.August, d, 0, 0, 0, 0, time.UTC) }
+	return &fakeChallengeSvc{
+		items: []models.ChallengeItem{{
+			ID: 5, Name: "100 дней кода",
+			StartDate: day(19), EndDate: day(22),
+			TotalDays: 4, DoneDays: 2, SkippedDays: 1,
+		}},
+		days: map[int64][]models.ChallengeDay{
+			5: {
+				{Date: day(19), Status: models.ChallengeDayDone},
+				{Date: day(20), Status: models.ChallengeDaySkipped},
+				{Date: day(21), Status: models.ChallengeDayDone},
+				{Date: day(22), Status: models.ChallengeDayPending},
+			},
+		},
+		detail: models.ChallengeDayDetail{CurrentStreak: 1, BestStreak: 2},
+	}
+}
+
+func (f *fakeChallengeSvc) ListChallenges(context.Context, int64) ([]models.ChallengeItem, error) {
+	return f.items, f.err
+}
+
+func (f *fakeChallengeSvc) ListDays(_ context.Context, _, challengeID int64) ([]models.ChallengeDay, error) {
+	return f.days[challengeID], f.err
+}
+
+func (f *fakeChallengeSvc) GetDayDetail(context.Context, int64, int64, time.Time, time.Time) (models.ChallengeDayDetail, error) {
+	return f.detail, f.err
+}
+
+func (f *fakeChallengeSvc) MarkDay(_ context.Context, _, challengeID int64, day time.Time, done bool) error {
+	if f.err != nil {
+		return f.err
+	}
+	if day.Format("2006-01-02") == "2026-09-01" {
+		// Outside the challenge, which the repository reports the same way as
+		// someone else's challenge.
+		return models.ErrChallengeDayNotFound
+	}
+	f.marked = append(f.marked, dayWrite{challengeID: challengeID, day: day.Format("2006-01-02"), done: done})
+	return nil
+}
+
+var (
+	_ service.LearningService  = (*fakeLearningSvc)(nil)
+	_ service.ChallengeService = (*fakeChallengeSvc)(nil)
 )

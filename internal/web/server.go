@@ -37,6 +37,8 @@ type Server struct {
 	tracksvc     service.TrackerService
 	roadmapsvc   service.RoadmapService
 	roadmapaisvc service.RoadmapAIService
+	learningsvc  service.LearningService
+	challengesvc service.ChallengeService
 	// jobs holds AI calls in flight: they outlast the request that started
 	// them, because a phone will not hold a connection open for a minute.
 	jobs *jobs
@@ -58,6 +60,8 @@ type Deps struct {
 	Tracker   service.TrackerService
 	Roadmap   service.RoadmapService
 	RoadmapAI service.RoadmapAIService
+	Learning  service.LearningService
+	Challenge service.ChallengeService
 }
 
 func (d Deps) validate() error {
@@ -72,6 +76,10 @@ func (d Deps) validate() error {
 		return errors.New("web: roadmap service is required")
 	case d.RoadmapAI == nil:
 		return errors.New("web: roadmap ai service is required")
+	case d.Learning == nil:
+		return errors.New("web: learning service is required")
+	case d.Challenge == nil:
+		return errors.New("web: challenge service is required")
 	}
 	return nil
 }
@@ -95,6 +103,8 @@ func NewServer(ctx context.Context, cfg config.Web, deps Deps) (*Server, error) 
 		tracksvc:     deps.Tracker,
 		roadmapsvc:   deps.Roadmap,
 		roadmapaisvc: deps.RoadmapAI,
+		learningsvc:  deps.Learning,
+		challengesvc: deps.Challenge,
 		jobs:         newJobs(ctx),
 	}
 
@@ -150,6 +160,11 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /api/v1/roadmap/technologies/{id}/plan", s.api(s.handleRoadmapPlan))
 	mux.Handle("POST /api/v1/roadmap/cards/{id}/quiz", s.api(s.handleRoadmapQuiz))
 	mux.Handle("POST /api/v1/roadmap/cards/{id}/quiz/grade", s.api(s.handleRoadmapQuizGrade))
+	mux.Handle("GET /api/v1/learning", s.api(s.handleLearning))
+
+	mux.Handle("GET /api/v1/challenges", s.api(s.handleChallenges))
+	mux.Handle("PUT /api/v1/challenges/{id}/days/{date}", s.api(s.handleChallengeDay))
+
 	mux.Handle("GET /api/v1/ai/jobs/{id}", s.api(s.handleAIJob))
 
 	// Anything unrouted answers JSON rather than net/http's text 404, so the

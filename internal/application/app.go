@@ -108,6 +108,8 @@ func (app *Application) Build(ctx context.Context) error {
 			Tracker:   tracksvc,
 			Roadmap:   roadmapsvc,
 			RoadmapAI: roadmapaisvc,
+			Learning:  learningsvc,
+			Challenge: challengesvc,
 		})
 		if err != nil {
 			return fmt.Errorf("init web server: %w", err)
