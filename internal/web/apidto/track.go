@@ -6,6 +6,16 @@ package apidto
 type Meta struct {
 	Timezone    string  `json:"timezone"`
 	GeneratedAt Instant `json:"generated_at"`
+	// The window the server actually used, inclusive on both ends. Echoed back
+	// because the client may have asked for "week" and needs to know which
+	// seven days that turned out to be.
+	From Date `json:"from,omitempty"`
+	To   Date `json:"to,omitempty"`
+	// Granularity is resolved, never "auto".
+	Granularity string `json:"granularity,omitempty"`
+	// ActivityIDs is the set actually queried — the expansion of an omitted
+	// filter, so the client can tell what "everything" meant.
+	ActivityIDs []int64 `json:"activity_ids,omitempty"`
 }
 
 // Activity is one of the user's activities.
@@ -71,4 +81,74 @@ type OverviewResponse struct {
 	// for an activity that does not exist.
 	Current *CurrentActivity `json:"current_activity"`
 	Meta    Meta             `json:"meta"`
+}
+
+// MonthTotal is one month of a period. Month is the first day of that month in
+// the user's zone.
+type MonthTotal struct {
+	Month   Date  `json:"month"`
+	Seconds int64 `json:"seconds"`
+}
+
+type BreakdownResponse struct {
+	TotalSeconds  int64           `json:"total_seconds"`
+	TotalSessions int             `json:"total_sessions"`
+	Activities    []ActivityTotal `json:"activities"`
+	// Monthly is only populated for periods long enough for the service to
+	// bucket by month; it is a convenience, not the series endpoint.
+	Monthly []MonthTotal `json:"monthly"`
+	Meta    Meta         `json:"meta"`
+}
+
+// SeriesPart is one activity's slice of a bucket.
+//
+// No activity id: repo.GetHourlyBucketsByActivity selects only the name and
+// emoji. Adding the id means touching that query and
+// models.HourActivityDuration, which is a change worth making deliberately
+// rather than in passing.
+type SeriesPart struct {
+	Name    string `json:"name"`
+	Emoji   string `json:"emoji"`
+	Seconds int64  `json:"seconds"`
+}
+
+// SeriesBucket is one point of the series. Start is a Date for day and month
+// granularity and a LocalTime for hour, which is why it is a plain string.
+type SeriesBucket struct {
+	Start   string       `json:"start"`
+	Seconds int64        `json:"seconds"`
+	Parts   []SeriesPart `json:"parts,omitempty"`
+}
+
+type SeriesResponse struct {
+	// By is "total" or "activity".
+	By      string         `json:"by"`
+	Buckets []SeriesBucket `json:"buckets"`
+	Meta    Meta           `json:"meta"`
+}
+
+// HeatDay is one day of the calendar heatmap. Only days with tracked time are
+// sent; the client fills the grid from Meta.From and Meta.To.
+type HeatDay struct {
+	Date    Date  `json:"date"`
+	Seconds int64 `json:"seconds"`
+}
+
+type HeatmapResponse struct {
+	Days []HeatDay `json:"days"`
+	// MaxSeconds is the busiest day in the window, so the client can scale the
+	// colour ramp without a second pass over the data.
+	MaxSeconds int64 `json:"max_seconds"`
+	Meta       Meta  `json:"meta"`
+}
+
+type DayResponse struct {
+	Date          Date            `json:"date"`
+	TotalSeconds  int64           `json:"total_seconds"`
+	TotalSessions int             `json:"total_sessions"`
+	Activities    []ActivityTotal `json:"activities"`
+	// Hours is the same shape as a series bucketed by hour, with each bucket's
+	// activities as parts.
+	Hours []SeriesBucket `json:"hours"`
+	Meta  Meta           `json:"meta"`
 }

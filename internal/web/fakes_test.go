@@ -102,6 +102,15 @@ type fakeTrackSvc struct {
 	// gotLoc records the timezone the handler threaded down, which is the one
 	// thing about these calls worth asserting.
 	gotLoc *time.Location
+	// The range calls record what they were asked for, so a test can assert the
+	// window and the expanded activity filter rather than just the response.
+	gotFrom, gotTo  time.Time
+	gotActivityIDs  []int64
+	gotGranularity  string
+	period          models.ReportPeriodStats
+	buckets         []time.Time
+	bucketDurations []time.Duration
+	hourly          []models.HourActivityDuration
 }
 
 func newFakeTrackSvc() *fakeTrackSvc {
@@ -129,6 +138,34 @@ func newFakeTrackSvc() *fakeTrackSvc {
 			{ID: 6, Name: "Sport"},
 		},
 		archived: []models.TrackActivityItem{{ID: 9, Name: "Old habit"}},
+		period: models.ReportPeriodStats{
+			TotalTracked:  4 * time.Hour,
+			TotalSessions: 9,
+			Activities: []models.ActivityDurationStat{
+				{ActivityID: 5, Name: "Go", Emoji: "🐹", Duration: 3 * time.Hour, Sessions: 6},
+				{ActivityID: 6, Name: "Sport", Duration: time.Hour, Sessions: 3},
+			},
+			Monthly: []models.MonthDurationStat{
+				// Naive values, exactly as a date_trunc column arrives: UTC
+				// attached, local wall clock inside.
+				{Month: time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC), Duration: time.Hour},
+				{Month: time.Date(2026, time.August, 1, 0, 0, 0, 0, time.UTC), Duration: 3 * time.Hour},
+			},
+		},
+		// Three days summing to the same four hours as the period above, which
+		// is what lets a test assert the two agree.
+		buckets: []time.Time{
+			time.Date(2026, time.August, 19, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, time.August, 20, 0, 0, 0, 0, time.UTC),
+			time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		},
+		bucketDurations: []time.Duration{90 * time.Minute, time.Hour, 90 * time.Minute},
+		hourly: []models.HourActivityDuration{
+			// Ordered by bucket then duration desc, as the repository returns.
+			{BucketStart: time.Date(2026, time.August, 21, 9, 0, 0, 0, time.UTC), Name: "Go", Emoji: "🐹", Duration: 45 * time.Minute},
+			{BucketStart: time.Date(2026, time.August, 21, 9, 0, 0, 0, time.UTC), Name: "Sport", Duration: 15 * time.Minute},
+			{BucketStart: time.Date(2026, time.August, 21, 14, 0, 0, 0, time.UTC), Name: "Go", Emoji: "🐹", Duration: 30 * time.Minute},
+		},
 	}
 }
 
@@ -177,17 +214,20 @@ func (f *fakeTrackSvc) SetActivityTarget(context.Context, int64, int64, int) err
 func (f *fakeTrackSvc) GetTodayReportBySelected(context.Context, int64, *time.Location) (models.ReportTodayStats, error) {
 	panic("not used")
 }
-func (f *fakeTrackSvc) GetPeriodReport(context.Context, int64, time.Time, time.Time, []int64, *time.Location) (models.ReportPeriodStats, error) {
-	panic("not used yet")
+func (f *fakeTrackSvc) GetPeriodReport(_ context.Context, _ int64, from, to time.Time, ids []int64, loc *time.Location) (models.ReportPeriodStats, error) {
+	f.gotFrom, f.gotTo, f.gotActivityIDs, f.gotLoc = from, to, ids, loc
+	return f.period, f.err
 }
 func (f *fakeTrackSvc) GetMonthDailyTotals(context.Context, int64, time.Time, []int64, *time.Location) (map[int]time.Duration, error) {
 	panic("not used yet")
 }
-func (f *fakeTrackSvc) GetPeriodBuckets(context.Context, int64, time.Time, time.Time, []int64, string, *time.Location) ([]time.Time, []time.Duration, error) {
-	panic("not used yet")
+func (f *fakeTrackSvc) GetPeriodBuckets(_ context.Context, _ int64, from, to time.Time, ids []int64, granularity string, loc *time.Location) ([]time.Time, []time.Duration, error) {
+	f.gotFrom, f.gotTo, f.gotActivityIDs, f.gotGranularity, f.gotLoc = from, to, ids, granularity, loc
+	return f.buckets, f.bucketDurations, f.err
 }
-func (f *fakeTrackSvc) GetHourlyBucketsByActivity(context.Context, int64, time.Time, time.Time, []int64, *time.Location) ([]models.HourActivityDuration, error) {
-	panic("not used yet")
+func (f *fakeTrackSvc) GetHourlyBucketsByActivity(_ context.Context, _ int64, from, to time.Time, ids []int64, loc *time.Location) ([]models.HourActivityDuration, error) {
+	f.gotFrom, f.gotTo, f.gotActivityIDs, f.gotLoc = from, to, ids, loc
+	return f.hourly, f.err
 }
 func (f *fakeTrackSvc) GetTrackedDaysInRange(context.Context, int64, time.Time, time.Time, *time.Location) ([]time.Time, error) {
 	panic("not used yet")

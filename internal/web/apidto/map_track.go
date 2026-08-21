@@ -90,3 +90,83 @@ func FromTodayReport(report models.ReportTodayStats, activitiesCount int) Overvi
 		TopActivities:   FromActivityStats(report.TopActivities, report.TotalTracked),
 	}
 }
+
+func FromPeriodReport(report models.ReportPeriodStats, meta Meta) BreakdownResponse {
+	monthly := make([]MonthTotal, 0, len(report.Monthly))
+	for _, m := range report.Monthly {
+		monthly = append(monthly, MonthTotal{
+			// Naive: formatted, never converted.
+			Month:   DateFromNaive(m.Month),
+			Seconds: Seconds(m.Duration),
+		})
+	}
+	return BreakdownResponse{
+		TotalSeconds:  Seconds(report.TotalTracked),
+		TotalSessions: report.TotalSessions,
+		Activities:    FromActivityStats(report.Activities, report.TotalTracked),
+		Monthly:       monthly,
+		Meta:          meta,
+	}
+}
+
+// FromBuckets maps the total-per-bucket series. granularity decides how the
+// bucket start is rendered: an hour bucket needs the time of day, a day or
+// month bucket must stay a bare calendar date so no client can shift it.
+func FromBuckets(starts []time.Time, durations []time.Duration, granularity string, meta Meta) SeriesResponse {
+	n := min(len(starts), len(durations))
+	buckets := make([]SeriesBucket, 0, n)
+	for i := range n {
+		buckets = append(buckets, SeriesBucket{
+			Start:   formatBucketStart(starts[i], granularity),
+			Seconds: Seconds(durations[i]),
+		})
+	}
+	return SeriesResponse{By: "total", Buckets: buckets, Meta: meta}
+}
+
+// FromHourlyByActivity groups the per-activity rows into hour buckets.
+//
+// The repository already returns them ordered by bucket and then by duration
+// descending, so this only has to notice when the bucket changes — no sorting,
+// and the ranking inside each bucket is preserved.
+func FromHourlyByActivity(rows []models.HourActivityDuration, meta Meta) SeriesResponse {
+	buckets := make([]SeriesBucket, 0, 24)
+	for _, row := range rows {
+		start := formatBucketStart(row.BucketStart, "hour")
+		if len(buckets) == 0 || buckets[len(buckets)-1].Start != start {
+			buckets = append(buckets, SeriesBucket{Start: start})
+		}
+		b := &buckets[len(buckets)-1]
+		b.Seconds += Seconds(row.Duration)
+		b.Parts = append(b.Parts, SeriesPart{
+			Name:    row.Name,
+			Emoji:   row.Emoji,
+			Seconds: Seconds(row.Duration),
+		})
+	}
+	return SeriesResponse{By: "activity", Buckets: buckets, Meta: meta}
+}
+
+func FromDailyBuckets(starts []time.Time, durations []time.Duration, meta Meta) HeatmapResponse {
+	n := min(len(starts), len(durations))
+	days := make([]HeatDay, 0, n)
+	var maxSeconds int64
+	for i := range n {
+		seconds := Seconds(durations[i])
+		if seconds <= 0 {
+			// The query only returns days that have sessions, but a zero-length
+			// day would be noise in a heatmap either way.
+			continue
+		}
+		days = append(days, HeatDay{Date: DateFromNaive(starts[i]), Seconds: seconds})
+		maxSeconds = max(maxSeconds, seconds)
+	}
+	return HeatmapResponse{Days: days, MaxSeconds: maxSeconds, Meta: meta}
+}
+
+func formatBucketStart(t time.Time, granularity string) string {
+	if granularity == "hour" {
+		return string(HourFromNaive(t))
+	}
+	return string(DateFromNaive(t))
+}

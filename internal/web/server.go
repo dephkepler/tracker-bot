@@ -106,6 +106,10 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/me", s.api(s.handleMe))
 	mux.Handle("GET /api/v1/track/overview", s.api(s.handleTrackOverview))
 	mux.Handle("GET /api/v1/track/activities", s.api(s.handleTrackActivities))
+	mux.Handle("GET /api/v1/track/breakdown", s.api(s.handleTrackBreakdown))
+	mux.Handle("GET /api/v1/track/series", s.api(s.handleTrackSeries))
+	mux.Handle("GET /api/v1/track/heatmap", s.api(s.handleTrackHeatmap))
+	mux.Handle("GET /api/v1/track/day", s.api(s.handleTrackDay))
 
 	// Anything unrouted answers JSON rather than net/http's text 404, so the
 	// frontend's error path never has to parse two shapes.

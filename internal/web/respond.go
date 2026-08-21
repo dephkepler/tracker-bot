@@ -29,6 +29,12 @@ const (
 	// codeUserNotFound means the Telegram credential is genuine but nobody has
 	// pressed /start — the dashboard tells them to open the bot first.
 	codeUserNotFound = "user_not_found"
+
+	codeInvalidParameter = "invalid_parameter"
+	codeRangeTooLarge    = "range_too_large"
+	// codeUnsupportedCombination is a request that is individually valid in
+	// every parameter but asks for something the aggregation cannot do yet.
+	codeUnsupportedCombination = "unsupported_combination"
 )
 
 type errorBody struct {
