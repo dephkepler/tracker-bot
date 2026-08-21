@@ -44,13 +44,24 @@ export default function OverviewPage() {
             <RankedBars items={overview.data.today.top_activities} total={overview.data.today.total_seconds} />
           </Card>
 
-          {/* The one way into the section, so the overview stays a hub rather
-              than growing a tab bar for a single destination. */}
+          {/* The ways into the sections. The overview stays a hub rather than
+              growing a tab bar, which would cost 56px of a phone viewport
+              permanently. */}
           <Link
             href='/track'
             className='flex items-center justify-between rounded-card border border-line bg-surface p-4 text-body text-ink'
           >
             <span>Время: периоды, часы, календарь</span>
+            <span aria-hidden='true' className='text-ink-3'>
+              →
+            </span>
+          </Link>
+
+          <Link
+            href='/roadmap'
+            className='flex items-center justify-between rounded-card border border-line bg-surface p-4 text-body text-ink'
+          >
+            <span>Роадмапы: цели, карточки, ИИ</span>
             <span aria-hidden='true' className='text-ink-3'>
               →
             </span>

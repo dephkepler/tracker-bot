@@ -132,3 +132,72 @@ export interface DayResponse {
   hours: SeriesBucket[]
   meta: Meta
 }
+
+export interface RoadmapCard {
+  id: number
+  text: string
+  /** topic | article | book | lecture */
+  kind: string
+  /** 1 easy … 3 hard */
+  difficulty: number
+  done: boolean
+  /** A real instant, null while pending — the only completion timestamp in this domain. */
+  done_at: string | null
+}
+
+export interface RoadmapTechnology {
+  id: number
+  name: string
+  mastery_criteria: string
+  active: boolean
+  total_cards: number
+  done_cards: number
+  cards: RoadmapCard[]
+}
+
+export interface RoadmapGoal {
+  id: number
+  name: string
+  total_cards: number
+  done_cards: number
+  technologies: RoadmapTechnology[]
+}
+
+export interface RoadmapResponse {
+  goals: RoadmapGoal[]
+  orphan_technologies: RoadmapTechnology[]
+  meta: Meta
+}
+
+export interface CardStateResponse {
+  card_id: number
+  roadmap_id: number
+  done: boolean
+}
+
+export interface PlanResult {
+  added: number
+  rejected: number
+}
+
+export interface QuizResult {
+  card_id: number
+  card_text: string
+  question: string
+}
+
+export interface GradeResult {
+  /** correct | partial | wrong */
+  verdict: string
+  feedback: string
+}
+
+/** A background AI call. `result` appears once status is done. */
+export interface JobResponse<T> {
+  id: string
+  kind: string
+  status: 'pending' | 'done' | 'failed'
+  result?: T
+  error_code?: string
+  error_message?: string
+}
