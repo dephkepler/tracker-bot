@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { RoadmapResponse } from '@/lib/api-types'
 import { ChartFrame } from '@/components/charts/chart-frame'
+import { SectionNav } from '@/components/layout/section-nav'
 import { MiniBars } from '@/components/charts/mini-bars'
 import { Card } from '@/components/ui/card'
 import { Meter } from '@/components/ui/meter'
@@ -23,6 +24,7 @@ export default function RoadmapPage() {
   return (
     <main className='tg-shell mx-auto max-w-[680px] px-4 pt-3'>
       <h1 className='mb-3 text-h1 font-semibold text-ink'>Роадмапы</h1>
+      <SectionNav />
 
       {roadmap.isPending && (
         <div className='flex flex-col gap-4' role='status' aria-live='polite'>

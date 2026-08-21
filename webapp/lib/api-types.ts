@@ -201,3 +201,65 @@ export interface JobResponse<T> {
   error_code?: string
   error_message?: string
 }
+
+export interface LearningCollection {
+  name: string
+  total_words: number
+  due_words: number
+  learned_words: number
+}
+
+export interface DayCount {
+  date: string
+  total: number
+  correct: number
+}
+
+export interface LearningResponse {
+  total_words: number
+  due_words: number
+  learned_words: number
+  streak_days: number
+  reviews_total: number
+  reviews_correct: number
+  accuracy_percent: number
+  collections: LearningCollection[]
+  /** A continuous run of days; a day with no reviews is a zero, not a hole. */
+  reviews_by_day: DayCount[]
+  reminder_active: boolean
+  reminder_interval_minutes: number
+  meta: Meta
+}
+
+/** pending | done | skipped */
+export type ChallengeDayStatus = 'pending' | 'done' | 'skipped'
+
+export interface ChallengeDay {
+  date: string
+  status: ChallengeDayStatus
+}
+
+export interface Challenge {
+  id: number
+  name: string
+  start_date: string
+  end_date: string
+  total_days: number
+  done_days: number
+  skipped_days: number
+  pending_days: number
+  current_streak: number
+  best_streak: number
+  days: ChallengeDay[]
+}
+
+export interface ChallengesResponse {
+  challenges: Challenge[]
+  meta: Meta
+}
+
+export interface ChallengeDayStateResponse {
+  challenge_id: number
+  date: string
+  status: ChallengeDayStatus
+}

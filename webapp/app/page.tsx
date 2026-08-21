@@ -8,6 +8,8 @@ import { Card } from '@/components/ui/card'
 import { SectionHeader } from '@/components/ui/section-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RankedBars } from '@/components/charts/ranked-bars'
+import { SectionNav } from '@/components/layout/section-nav'
+import { DomainTiles } from './overview/domain-tiles'
 import { formatTimeOfDay } from '@/lib/format'
 import { closeApp } from '@/lib/telegram'
 import { TodayCard } from './overview/today-card'
@@ -23,6 +25,7 @@ export default function OverviewPage() {
   return (
     <main className='tg-shell mx-auto max-w-[680px] px-4 pt-3'>
       <SectionHeader as='h1' title='Обзор' hint={overview.data ? `обновлено ${formatTimeOfDay(overview.data.meta.generated_at)}` : undefined} />
+      <SectionNav />
 
       {overview.isPending && <LoadingState />}
       {overview.isError && <ErrorState error={overview.error} />}
@@ -44,9 +47,10 @@ export default function OverviewPage() {
             <RankedBars items={overview.data.today.top_activities} total={overview.data.today.total_seconds} />
           </Card>
 
-          {/* The ways into the sections. The overview stays a hub rather than
-              growing a tab bar, which would cost 56px of a phone viewport
-              permanently. */}
+          {/* The overview is the time summary above plus a way into everything
+              else. The other domains get one live number each rather than a
+              whole section, which is what makes this a hub instead of a
+              duplicate of the pages it links to. */}
           <Link
             href='/track'
             className='flex items-center justify-between rounded-card border border-line bg-surface p-4 text-body text-ink'
@@ -57,15 +61,7 @@ export default function OverviewPage() {
             </span>
           </Link>
 
-          <Link
-            href='/roadmap'
-            className='flex items-center justify-between rounded-card border border-line bg-surface p-4 text-body text-ink'
-          >
-            <span>Роадмапы: цели, карточки, ИИ</span>
-            <span aria-hidden='true' className='text-ink-3'>
-              →
-            </span>
-          </Link>
+          <DomainTiles />
 
           <div className='flex items-center justify-center gap-4 pb-2'>
             <button

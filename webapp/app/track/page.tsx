@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import type { BreakdownResponse, DayResponse, HeatmapResponse, SeriesResponse } from '@/lib/api-types'
 import { ChartFrame } from '@/components/charts/chart-frame'
+import { SectionNav } from '@/components/layout/section-nav'
 import { ColumnChart } from '@/components/charts/column-chart'
 import { DayHeatmap } from '@/components/charts/day-heatmap'
 import { LineChart } from '@/components/charts/line-chart'
@@ -51,6 +52,7 @@ export default function TrackPage() {
   return (
     <main className='tg-shell mx-auto max-w-[680px] px-4 pt-3'>
       <h1 className='mb-3 text-h1 font-semibold text-ink'>Время</h1>
+      <SectionNav />
 
       <div className='sticky top-[var(--tg-safe-top,0px)] z-20 -mx-4 mb-4 bg-plane px-4 pb-2 pt-1'>
         <Segmented options={PERIODS} value={period} onChange={setPeriod} label='Период' />
