@@ -64,3 +64,27 @@
 		format console
 	}
 }
+
+# The Abalis client Mini App, from the multiagent-seo project next door.
+#
+# It is served here because this Caddy is the host's front door: it holds port
+# 80, which ACME needs, and 8443, because 443 belongs to an unrelated relay. A
+# second Caddy on this machine could get neither.
+#
+# That project attaches its container to this network under the alias below and
+# keeps all of its own routing — including its /api proxy — inside it, so this
+# block is one line of forwarding with nothing to keep in step.
+abalis-132-243-194-137.sslip.io {
+	# Same reason as the dashboard above: TLS-ALPN would try 443, which is not
+	# ours. HTTP-01 on 80 works, and a certificate is not tied to the port it is
+	# later served on.
+	tls {
+		issuer acme {
+			disable_tlsalpn_challenge
+		}
+	}
+
+	encode zstd gzip
+
+	reverse_proxy abalis-clientapp:3002
+}
